@@ -81,6 +81,32 @@ curl "$BUSABASE_BASE_URL/api/v1/openapi.json"   # machine-readable — large, so
 
 MCP-capable agents can connect to `$BUSABASE_BASE_URL/api/mcp` (Streamable HTTP) instead.
 
+## Starter blueprints — schemas to copy
+
+When the user wants to model something new, start from one of these (or design a custom Base with
+4–6 typed fields the same way). **Always show the planned shape and get a yes before creating**;
+structure (Bases / fields / folders) doesn't need review, but seeding *records* always goes through
+the approval loop. Field types: `text`, `longtext`, `markdown`, `html`, `number`, `date`,
+`checkbox`, `select`, `multiselect`, `url`, `email`, `phone`, `attachment`, `code`, `relation`,
+plus system types (`auto_number`, `created_time`, `ai_summary`, `ai_tags`, …).
+
+- **Content Pipeline** (`content-pipeline`): `title` (text, required), `brief` (markdown),
+  `channel` (select: blog/youtube/social), `status` (select: idea/draft/ready), `seo_title` (text),
+  `asset` (attachment). Pair with a CMS **Pages** base (`pages`): `slug` (required), `title`
+  (required), `meta_description`, `category` (select), `locale` (select: en/zh-CN), `html_body`
+  (html, required), `status` (select: draft/in-review/live).
+- **Compliance Checklists** (`compliance-checklists`): `item` (text, required), `owner` (email),
+  `due_date` (date), `evidence` (attachment), `status` (select: missing/review/complete),
+  `notes` (longtext).
+- **Knowledge Base** (`private-knowledge`): `title` (text, required), `body` (markdown),
+  `source_url` (url), `sensitivity` (select: private/team/public), `tags` (multiselect),
+  `attachments` (attachment).
+- **CRM Contacts** (`crm-contacts`): `name` (text, required), `company` (text), `email` (email),
+  `stage` (select: lead/qualified/customer/churned), `notes` (longtext), `last_touch` (date).
+
+Keep a workspace with **more than one node** (a containing folder, or a second related Base like
+CRM Contacts **+** Companies) so it never opens as an empty screen.
+
 ## The one rule
 
 `list → propose a ChangeRequest → human reviews → merge → read back`. **Never approve or merge your
