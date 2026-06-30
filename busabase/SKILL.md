@@ -41,8 +41,10 @@ set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
 
 ### 1. `busabase-cli` — ergonomic, best for the everyday loop
 
-A typed Node client over the same REST API. It reads `BUSABASE_BASE_URL` / `BUSABASE_API_KEY` from
-the environment, so after the **Connect** step above it just works — no flags needed:
+A typed Node client over the same REST API. It **auto-loads `~/.busabase/.env`** (and respects
+`BUSABASE_BASE_URL` / `BUSABASE_API_KEY` exported in your shell, which override the file), so it just
+works with no setup — you don't even need the `source` from the **Connect** step (that's only for raw
+`curl`):
 
 ```bash
 npx busabase-cli whoami                  # active space + user
