@@ -1,0 +1,19 @@
+{
+  "name": "busabase",
+  "version": "0.1.0",
+  "description": "Approval-first knowledge base for AI — propose ChangeRequests, a human reviews, only approved changes merge.",
+  "author": { "name": "Busabase", "url": "https://busabase.com" },
+  "repository": "https://github.com/busabase/skills",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Busabase",
+    "shortDescription": "Approval-first knowledge base for AI",
+    "developerName": "Busabase",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://busabase.com",
+    "defaultPrompt": ["Show my Busabase change requests awaiting review."],
+    "brandColor": "#10A37F"
+  }
+}

@@ -24,7 +24,7 @@ npx skills add busabase/skills
 
 ```bash
 codex plugin marketplace add busabase/skills
-codex plugin install busabase@busabase
+codex plugin add busabase@busabase
 ```
 
 ### MCP (any MCP-capable agent)
@@ -56,14 +56,21 @@ running one of the install commands above.
 This one repo serves every install path above:
 
 ```
-skills/busabase/SKILL.md     the skill (canonical)  — used by `skills`, Claude Code, Codex
-.claude-plugin/plugin.json   Claude Code plugin manifest
-.claude-plugin/marketplace.json   Claude Code marketplace listing
-.codex-plugin/plugin.json    Codex plugin manifest
-marketplace.json             Codex marketplace listing
-.mcp.json                    bundled MCP server (Streamable HTTP)
-server.json                  official MCP Registry entry (remote → busabase.com/api/mcp)
+skills/busabase/SKILL.md              the skill (canonical) — used by `skills`, Claude Code, Buda
+.claude-plugin/plugin.json            Claude Code plugin manifest (auto-discovers ./skills/)
+.claude-plugin/marketplace.json       Claude Code marketplace listing
+.agents/plugins/marketplace.json      Codex marketplace listing
+plugins/busabase/.codex-plugin/plugin.json   Codex plugin manifest
+plugins/busabase/skills/busabase/SKILL.md    Codex needs the skill INSIDE the plugin dir
+                                             (a copy of the canonical one — keep in sync)
+.mcp.json                             bundled MCP server (Streamable HTTP)
+server.json                           official MCP Registry entry (remote → busabase.com/api/mcp)
 ```
+
+> **Why the Codex copy?** Codex only resolves a plugin from a `plugins/<name>/` subdir and bundles
+> only files *inside* that dir on install (symlinks and `../` paths are dropped). So the Codex plugin
+> carries its own copy of the skill under `plugins/busabase/skills/`. Re-copy `skills/busabase/` there
+> whenever the canonical skill changes.
 
 ## Publish to the official MCP Registry
 

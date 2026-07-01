@@ -1,0 +1,7 @@
+{
+  "name": "busabase",
+  "interface": { "displayName": "Busabase" },
+  "plugins": [
+    { "name": "busabase", "source": { "source": "local", "path": "./plugins/busabase" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Productivity" }
+  ]
+}
