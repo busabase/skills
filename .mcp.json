@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "busabase": {
+      "type": "http",
+      "url": "http://localhost:15419/api/mcp"
+    }
+  }
+}

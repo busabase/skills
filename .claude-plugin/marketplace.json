@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "busabase",
+  "owner": { "name": "Busabase", "url": "https://busabase.com" },
+  "plugins": [
+    {
+      "name": "busabase",
+      "source": "./",
+      "description": "Drive a Busabase workspace: list Bases/records, propose ChangeRequests, and merge approved ones — approval-first, human stays in control.",
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.busabase/busabase",
+  "description": "Approval-first knowledge base for AI — propose ChangeRequests, a human reviews, only approved changes merge.",
+  "version": "0.1.0",
+  "repository": { "url": "https://github.com/busabase/skills", "source": "github" },
+  "websiteUrl": "https://busabase.com",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://busabase.com/api/mcp" }
+  ]
+}
