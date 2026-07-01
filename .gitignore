@@ -1,0 +1,17 @@
+node_modules/
+.DS_Store
+*.log
+
+# Runtime / private state — never publish.
+# Unanchored so both the canonical skills/ and the Codex plugins/ mirror are covered.
+**/.data/
+**/.cache/
+**/exports/
+**/.env
+**/.env.*
+**/config.local*
+**/*.local.json
+**/*.local.yml
+
+# Local editor / agent run config (machine-specific)
+.claude/launch.json
