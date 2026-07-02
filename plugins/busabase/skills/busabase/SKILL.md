@@ -1,6 +1,6 @@
 ---
 name: busabase
-description: Drive any Busabase workspace as an approval-first knowledge base — propose changes as ChangeRequests, wait for human review, then merge. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL and API key from ~/.busabase/.env.
+description: Drive any Busabase workspace as an approval-first knowledge base — propose changes as ChangeRequests, wait for human review, then merge. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL, API key, and target space from ~/.busabase/.env.
 ---
 
 # Busabase
@@ -17,7 +17,7 @@ Busabase (approval-first)
    AI ──proposes──► ChangeRequest ──review──► human approves ──merge──► canonical data   ✓
 ```
 
-**Why it matters:** a wrong edit stays a harmless draft until a human says yes — so a person can let
+**Why it matters:** a wrong edit stays a harmless proposal until a human says yes — so a person can let
 an agent do high-volume work without losing control of what becomes true.
 
 **Common things people manage with it:** a content pipeline (blog / social / landing-page drafts
@@ -37,6 +37,33 @@ set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
 - **Cloud** needs a Bearer token, `BUSABASE_API_KEY` (already in `~/.busabase/.env`). Both the CLI
   and raw curl read it automatically once the config is loaded.
 
+### Cloud: confirm the target space before you write
+
+A Cloud API key belongs to the **user**, not to a space — it works across **every space the
+user is a member of**. Each request targets one space via the `x-busabase-space` header;
+**without the header, writes silently land in the user's default space**, which may not be
+the one the user means. So before the first write of a session:
+
+```bash
+curl "$BUSABASE_BASE_URL/api/v1/auth" -H "Authorization: Bearer $BUSABASE_API_KEY"
+```
+
+`spaces` in the response is every space the user belongs to; `space` is the default.
+
+- **Exactly one space** → use its `id` — don't ask.
+- **Multiple spaces** → if `BUSABASE_SPACE_ID` is already set (from `~/.busabase/.env`), use
+  it. Otherwise **ask the user which space** — list the spaces by name and let them pick;
+  never guess, and never assume the default is the one they mean. Persist the answer so
+  future sessions don't re-ask:
+
+```bash
+echo "BUSABASE_SPACE_ID=<chosen space id>" >> ~/.busabase/.env
+```
+
+Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
+not a member of returns 403. (The CLI and MCP currently target the default space only — when
+writing into any other space, use curl with the header.)
+
 ## Three ways to talk to it — pick per task
 
 ### 1. `busabase-cli` — ergonomic, best for the everyday loop
@@ -50,14 +77,22 @@ works with no setup — you don't even need the `source` from the **Connect** st
 npx busabase-cli whoami                  # active space + user
 npx busabase-cli bases list              # the tables
 npx busabase-cli records list --limit 20
-npx busabase-cli drafts list             # the review queue (ChangeRequests)
+npx busabase-cli change-requests list    # the review queue
 
 # propose → (human reviews) → merge:
-npx busabase-cli bases create-draft --base-id <id> \
+npx busabase-cli bases create-change-request --base-id <id> \
   --fields-json '{"title":"…","body":"…"}' \
   --message "Add Acme Corp — qualified lead from the June webinar"
-npx busabase-cli drafts review --draft-id <id> --verdict approved   # the human's decision
-npx busabase-cli drafts merge  --draft-id <id>
+npx busabase-cli change-requests review --change-request-id <id> --verdict approved   # human decision
+npx busabase-cli change-requests merge  --change-request-id <id>
+
+# structure edits use Node ChangeRequests too:
+npx busabase-cli nodes create-change-request --type folder \
+  --name "客户关系管理 CRM" \
+  --message "Create CRM folder"
+
+# clean up a bad proposal without merging:
+npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong folder"
 ```
 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
@@ -70,7 +105,8 @@ curl "$BUSABASE_BASE_URL/api/v1/change-requests"  # the review queue
 curl "$BUSABASE_BASE_URL/api/v1/records"          # merged canonical records
 ```
 
-On Cloud, add `-H "Authorization: Bearer $BUSABASE_API_KEY"` to every call.
+On Cloud, add `-H "Authorization: Bearer $BUSABASE_API_KEY"` and
+`-H "x-busabase-space: $BUSABASE_SPACE_ID"` (see **Cloud: confirm the target space**) to every call.
 
 ### 3. OpenAPI / MCP — the complete, current surface
 
@@ -88,8 +124,8 @@ MCP-capable agents can connect to `$BUSABASE_BASE_URL/api/mcp` (Streamable HTTP)
 
 When the user wants to model something new, start from one of these (or design a custom Base with
 4–6 typed fields the same way). **Always show the planned shape and get a yes before creating**;
-structure (Bases / fields / folders) doesn't need review, but seeding *records* always goes through
-the approval loop. Field types: `text`, `longtext`, `markdown`, `html`, `number`, `date`,
+base creation itself can be direct, but folder / node-tree edits use Node ChangeRequests, and
+seeding *records* always goes through the approval loop. Field types: `text`, `longtext`, `markdown`, `html`, `number`, `date`,
 `checkbox`, `select`, `multiselect`, `url`, `email`, `phone`, `attachment`, `code`, `relation`,
 plus system types (`auto_number`, `created_time`, `ai_summary`, `ai_tags`, …).
 
