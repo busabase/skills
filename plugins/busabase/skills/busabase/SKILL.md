@@ -1,6 +1,6 @@
 ---
 name: busabase
-description: Drive any Busabase workspace as an approval-first knowledge base — propose changes as ChangeRequests, wait for human review, then merge. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL and API key from ~/.busabase/.env.
+description: Drive any Busabase workspace as an approval-first knowledge base — propose changes as ChangeRequests, wait for human review, then merge. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL, API key, and target space from ~/.busabase/.env.
 ---
 
 # Busabase
@@ -36,6 +36,33 @@ set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
 - **Desktop / local** runs with no auth.
 - **Cloud** needs a Bearer token, `BUSABASE_API_KEY` (already in `~/.busabase/.env`). Both the CLI
   and raw curl read it automatically once the config is loaded.
+
+### Cloud: confirm the target space before you write
+
+A Cloud API key belongs to the **user**, not to a space — it works across **every space the
+user is a member of**. Each request targets one space via the `x-busabase-space` header;
+**without the header, writes silently land in the user's default space**, which may not be
+the one the user means. So before the first write of a session:
+
+```bash
+curl "$BUSABASE_BASE_URL/api/v1/auth" -H "Authorization: Bearer $BUSABASE_API_KEY"
+```
+
+`spaces` in the response is every space the user belongs to; `space` is the default.
+
+- **Exactly one space** → use its `id` — don't ask.
+- **Multiple spaces** → if `BUSABASE_SPACE_ID` is already set (from `~/.busabase/.env`), use
+  it. Otherwise **ask the user which space** — list the spaces by name and let them pick;
+  never guess, and never assume the default is the one they mean. Persist the answer so
+  future sessions don't re-ask:
+
+```bash
+echo "BUSABASE_SPACE_ID=<chosen space id>" >> ~/.busabase/.env
+```
+
+Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
+not a member of returns 403. (The CLI and MCP currently target the default space only — when
+writing into any other space, use curl with the header.)
 
 ## Three ways to talk to it — pick per task
 
@@ -78,7 +105,8 @@ curl "$BUSABASE_BASE_URL/api/v1/change-requests"  # the review queue
 curl "$BUSABASE_BASE_URL/api/v1/records"          # merged canonical records
 ```
 
-On Cloud, add `-H "Authorization: Bearer $BUSABASE_API_KEY"` to every call.
+On Cloud, add `-H "Authorization: Bearer $BUSABASE_API_KEY"` and
+`-H "x-busabase-space: $BUSABASE_SPACE_ID"` (see **Cloud: confirm the target space**) to every call.
 
 ### 3. OpenAPI / MCP — the complete, current surface
 
