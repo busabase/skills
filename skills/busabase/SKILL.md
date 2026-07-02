@@ -17,7 +17,7 @@ Busabase (approval-first)
    AI ──proposes──► ChangeRequest ──review──► human approves ──merge──► canonical data   ✓
 ```
 
-**Why it matters:** a wrong edit stays a harmless draft until a human says yes — so a person can let
+**Why it matters:** a wrong edit stays a harmless proposal until a human says yes — so a person can let
 an agent do high-volume work without losing control of what becomes true.
 
 **Common things people manage with it:** a content pipeline (blog / social / landing-page drafts
@@ -50,14 +50,22 @@ works with no setup — you don't even need the `source` from the **Connect** st
 npx busabase-cli whoami                  # active space + user
 npx busabase-cli bases list              # the tables
 npx busabase-cli records list --limit 20
-npx busabase-cli drafts list             # the review queue (ChangeRequests)
+npx busabase-cli change-requests list    # the review queue
 
 # propose → (human reviews) → merge:
-npx busabase-cli bases create-draft --base-id <id> \
+npx busabase-cli bases create-change-request --base-id <id> \
   --fields-json '{"title":"…","body":"…"}' \
   --message "Add Acme Corp — qualified lead from the June webinar"
-npx busabase-cli drafts review --draft-id <id> --verdict approved   # the human's decision
-npx busabase-cli drafts merge  --draft-id <id>
+npx busabase-cli change-requests review --change-request-id <id> --verdict approved   # human decision
+npx busabase-cli change-requests merge  --change-request-id <id>
+
+# structure edits use Node ChangeRequests too:
+npx busabase-cli nodes create-change-request --type folder \
+  --name "客户关系管理 CRM" \
+  --message "Create CRM folder"
+
+# clean up a bad proposal without merging:
+npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong folder"
 ```
 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
@@ -88,8 +96,8 @@ MCP-capable agents can connect to `$BUSABASE_BASE_URL/api/mcp` (Streamable HTTP)
 
 When the user wants to model something new, start from one of these (or design a custom Base with
 4–6 typed fields the same way). **Always show the planned shape and get a yes before creating**;
-structure (Bases / fields / folders) doesn't need review, but seeding *records* always goes through
-the approval loop. Field types: `text`, `longtext`, `markdown`, `html`, `number`, `date`,
+base creation itself can be direct, but folder / node-tree edits use Node ChangeRequests, and
+seeding *records* always goes through the approval loop. Field types: `text`, `longtext`, `markdown`, `html`, `number`, `date`,
 `checkbox`, `select`, `multiselect`, `url`, `email`, `phone`, `attachment`, `code`, `relation`,
 plus system types (`auto_number`, `created_time`, `ai_summary`, `ai_tags`, …).
 
