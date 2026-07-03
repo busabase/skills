@@ -76,7 +76,7 @@ works with no setup — you don't even need the `source` from the **Connect** st
 ```bash
 npx busabase-cli whoami                  # active space + user
 npx busabase-cli bases list              # the tables
-npx busabase-cli records list --limit 20
+npx busabase-cli records list --base-id <base-id> --limit 20 --output json
 npx busabase-cli change-requests list    # the review queue
 
 # propose → (human reviews) → merge:
@@ -91,18 +91,33 @@ npx busabase-cli nodes create-change-request --type folder \
   --name "客户关系管理 CRM" \
   --message "Create CRM folder"
 
+# attachment fields:
+npx busabase-cli bases create-field --base-id <base-id> \
+  --slug cover_image \
+  --name "封面 Cover Image" \
+  --field-type attachment \
+  --max-files 1 \
+  --allowed-mime image/png \
+  --allowed-mime image/svg+xml
+
+npx busabase-cli attachments upload --file ./cover.svg --context record-field --output json
+# Put the JSON output directly into an attachment field array:
+# {"cover_image":[{"id":"...","url":"...","fileName":"cover.svg","mimeType":"image/svg+xml","size":1234}]}
+
 # clean up a bad proposal without merging:
 npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong folder"
 ```
 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
+For record listing, keep `--limit` at `100` or below and use `nextCursor` with `--cursor` for
+additional pages.
 
 ### 2. `curl` — quick, zero install
 
 ```bash
 curl "$BUSABASE_BASE_URL/api/v1/bases"            # tables in this workspace
 curl "$BUSABASE_BASE_URL/api/v1/change-requests"  # the review queue
-curl "$BUSABASE_BASE_URL/api/v1/records"          # merged canonical records
+curl "$BUSABASE_BASE_URL/api/v1/records/paged?baseId=<base-id>&limit=100"  # merged canonical records
 ```
 
 On Cloud, add `-H "Authorization: Bearer $BUSABASE_API_KEY"` and
