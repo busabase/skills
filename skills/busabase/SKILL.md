@@ -40,9 +40,10 @@ set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
 ### Cloud: confirm the target space before you write
 
 A Cloud API key belongs to the **user**, not to a space — it works across **every space the
-user is a member of**. Each request targets one space via the `x-busabase-space` header;
-**without the header, writes silently land in the user's default space**, which may not be
-the one the user means. So before the first write of a session:
+user is a member of**. Each request targets one space via the `x-busabase-space` header.
+**If the user belongs to more than one space, a write without the header is rejected with
+`400`** (the server refuses to guess and lists the candidate spaces); with exactly one space
+the header is optional. Either way, confirm the target before the first write of a session:
 
 ```bash
 curl "$BUSABASE_BASE_URL/api/v1/auth" -H "Authorization: Bearer $BUSABASE_API_KEY"
@@ -61,8 +62,9 @@ echo "BUSABASE_SPACE_ID=<chosen space id>" >> ~/.busabase/.env
 ```
 
 Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
-not a member of returns 403. (The CLI and MCP currently target the default space only — when
-writing into any other space, use curl with the header.)
+not a member of returns 403; a missing header when the user has multiple spaces returns 400.
+(The CLI and MCP currently target the default space only — when writing into any other space,
+use curl with the header.)
 
 ## Three ways to talk to it — pick per task
 
@@ -90,6 +92,22 @@ npx busabase-cli change-requests merge  --change-request-id <id>
 npx busabase-cli nodes create-change-request --type folder \
   --name "客户关系管理 CRM" \
   --message "Create CRM folder"
+
+# rename / move / delete a node go through the same endpoint. The CLI covers the
+# common cases; for the full operation set use curl with an `operations` array —
+# each op is discriminated on `kind` (create | rename | move | delete | restore):
+#   { "kind": "create", "nodeType": "folder", "slug": "campaigns", "name": "Campaigns" }
+#   { "kind": "rename", "nodeId": "<id>", "name": "Q3 Campaigns", "slug": "q3-campaigns" }
+#   { "kind": "move",   "nodeId": "<id>", "parentNodeId": "<folder-node-id>" }
+#   { "kind": "delete", "nodeId": "<id>" }
+curl -X POST "$BUSABASE_BASE_URL/api/v1/nodes/change-requests" \
+  -H "Authorization: Bearer $BUSABASE_API_KEY" -H "x-busabase-space: $BUSABASE_SPACE_ID" \
+  -H 'content-type: application/json' \
+  --data '{ "message": "Move Blog Posts into Campaigns", "submittedBy": "agent",
+            "operations": [ { "kind": "move", "nodeId": "<id>", "parentNodeId": "<folder-node-id>" } ] }'
+# NOTE: a new folder's nodeId only exists AFTER its create CR is merged — so
+# "create folder + move nodes into it" is two CRs today: create+merge, read back
+# the folder's nodeId, then a second CR that moves nodes under it.
 
 # attachment fields:
 npx busabase-cli bases create-field --base-id <base-id> \
