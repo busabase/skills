@@ -40,9 +40,10 @@ set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
 ### Cloud: confirm the target space before you write
 
 A Cloud API key belongs to the **user**, not to a space — it works across **every space the
-user is a member of**. Each request targets one space via the `x-busabase-space` header;
-**without the header, writes silently land in the user's default space**, which may not be
-the one the user means. So before the first write of a session:
+user is a member of**. Each request targets one space via the `x-busabase-space` header.
+With exactly one space the header is optional; **when the key spans multiple spaces, a write
+with no `x-busabase-space` header is rejected with `400`** (it lists your spaces) rather than
+silently guessing. Always confirm the target before the first write of a session:
 
 ```bash
 curl "$BUSABASE_BASE_URL/api/v1/auth" -H "Authorization: Bearer $BUSABASE_API_KEY"
@@ -61,8 +62,9 @@ echo "BUSABASE_SPACE_ID=<chosen space id>" >> ~/.busabase/.env
 ```
 
 Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
-not a member of returns 403. (The CLI and MCP currently target the default space only — when
-writing into any other space, use curl with the header.)
+not a member of returns 403; a missing header when the user has multiple spaces returns 400.
+(The CLI and MCP currently target the default space only — when writing into any other space,
+use curl with the header.)
 
 ## Three ways to talk to it — pick per task
 
@@ -86,10 +88,26 @@ npx busabase-cli bases create-change-request --base-id <id> \
 npx busabase-cli change-requests review --change-request-id <id> --verdict approved   # human decision
 npx busabase-cli change-requests merge  --change-request-id <id>
 
-# structure edits use Node ChangeRequests too:
+# structure edits use auto-merged Node ChangeRequests too:
 npx busabase-cli nodes create-change-request --type folder \
   --name "客户关系管理 CRM" \
   --message "Create CRM folder"
+
+# Node ChangeRequests are recorded for audit and return `merged` immediately — no
+# separate review/merge step is needed for structure edits. The CLI covers common
+# cases; for multi-operation edits use curl with an `operations` array. Each op is
+# discriminated on `kind` (create | rename | move | delete | restore), and a create
+# op can declare a temporary `ref` that later ops target via `parentNodeRef`.
+curl -X POST "$BUSABASE_BASE_URL/api/v1/nodes/change-requests" \
+  -H "Authorization: Bearer $BUSABASE_API_KEY" -H "x-busabase-space: $BUSABASE_SPACE_ID" \
+  -H 'content-type: application/json' \
+  --data '{ "message": "Set up the Growth workspace", "submittedBy": "agent",
+            "operations": [
+              { "kind": "create", "ref": "growth", "nodeType": "folder", "slug": "growth", "name": "Growth" },
+              { "kind": "create", "parentNodeRef": "growth", "nodeType": "base", "slug": "campaigns", "name": "Campaigns",
+                "fields": [{ "slug": "title", "name": "Title", "type": "text", "required": true }] },
+              { "kind": "move", "nodeId": "<existing-node-id>", "parentNodeRef": "growth" }
+            ] }'
 
 # attachment fields:
 npx busabase-cli bases create-field --base-id <base-id> \
@@ -163,8 +181,10 @@ CRM Contacts **+** Companies) so it never opens as an empty screen.
 
 ## The one rule
 
-`list → propose a ChangeRequest → human reviews → merge → read back`. **Never approve or merge your
-own work unless the user explicitly asks** — approval is the human's decision; never bypass review.
+For records and Skill file edits: `list → propose a ChangeRequest → human reviews → merge → read back`.
+**Never approve or merge your own work unless the user explicitly asks** — approval is the human's
+decision; never bypass review. Node structure edits are the exception: they still create ChangeRequests
+for audit, but they auto-merge immediately.
 
 ## Write for the reviewer
 
