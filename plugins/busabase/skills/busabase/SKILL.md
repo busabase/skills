@@ -109,7 +109,7 @@ curl -X POST "$BUSABASE_BASE_URL/api/v1/nodes/change-requests" \
               { "kind": "move", "nodeId": "<existing-node-id>", "parentNodeRef": "growth" }
             ] }'
 
-# attachment fields:
+# asset-backed attachment fields:
 npx busabase-cli bases create-field --base-id <base-id> \
   --slug cover_image \
   --name "封面 Cover Image" \
@@ -118,9 +118,9 @@ npx busabase-cli bases create-field --base-id <base-id> \
   --allowed-mime image/png \
   --allowed-mime image/svg+xml
 
-npx busabase-cli attachments upload --file ./cover.svg --context record-field --output json
+npx busabase-cli assets upload --file ./cover.svg --context record-field --output json
 # Put the JSON output directly into an attachment field array:
-# {"cover_image":[{"id":"...","url":"...","fileName":"cover.svg","mimeType":"image/svg+xml","size":1234}]}
+# {"cover_image":[{"id":"...","assetId":"...","attachmentId":"...","url":"...","fileName":"cover.svg","mimeType":"image/svg+xml","size":1234}]}
 
 # clean up a bad proposal without merging:
 npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong folder"
