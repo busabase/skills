@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEO"
+  short_description: "Run SEO audits, clusters, briefs, and reports"
+  default_prompt: "Use $seo to create an SEO cluster plan from the current /kit/gtm ICP data."

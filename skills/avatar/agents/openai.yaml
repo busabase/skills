@@ -1,0 +1,8 @@
+interface:
+  display_name: "Avatar"
+  short_description: "Generate talking-avatar videos from image and audio."
+  brand_color: "#111827"
+  default_prompt: "Use $avatar to generate a LongCat Avatar video from this portrait image URL and narration audio URL."
+
+policy:
+  allow_implicit_invocation: true

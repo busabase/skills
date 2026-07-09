@@ -1,0 +1,4 @@
+interface:
+  display_name: "CMO"
+  short_description: "Chief marketing officer workspace"
+  default_prompt: "Use $cmo to review paid media state, launch the CMO console, or plan the next growth action."

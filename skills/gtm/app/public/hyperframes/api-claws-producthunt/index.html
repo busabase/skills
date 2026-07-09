@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Fraunces"; font-weight: 500; font-style: normal; font-display: block; src: url("fonts/fraunces-500.woff2") format("woff2"); }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #11100E; }
+      body { font-family: sans-serif; color: #F7F1E8; -webkit-font-smoothing: antialiased; }
+      .serif { font-family: "Fraunces", serif; }
+      .mono { font-family: "JetBrains Mono", monospace; font-variant-ligatures: none; }
+
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #11100E; }
+      .scene { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; background: #11100E; }
+      #s1 { z-index: 1; }
+      #s2 { z-index: 2; opacity: 0; }
+      #s3 { z-index: 3; opacity: 0; }
+      #s4 { z-index: 4; opacity: 0; }
+      #s5 { z-index: 5; opacity: 0; }
+      .content { position: relative; z-index: 3; width: 100%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+      .grid { position: absolute; inset: 0; background-image: linear-gradient(#1C1813 1px, rgba(17,16,14,0) 1px), linear-gradient(90deg, #1C1813 1px, rgba(17,16,14,0) 1px); background-size: 80px 80px; opacity: 0.62; z-index: 0; }
+      .glow { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.5; z-index: 1; pointer-events: none; }
+      .ghost { position: absolute; font-family: "JetBrains Mono", monospace; font-weight: 700; color: #F7F1E8; opacity: 0.035; z-index: 1; white-space: nowrap; pointer-events: none; letter-spacing: -0.04em; }
+      .regmark { position: absolute; top: 68px; left: 128px; z-index: 4; font-family: "JetBrains Mono", monospace; font-size: 18px; letter-spacing: 0.14em; color: #B8AA99; }
+      .eyebrow { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: #B8AA99; }
+      .tick { color: #62D083; }
+      .orange { color: #FF6154; }
+      .panel { background: #1A1713; border: 1px solid #3A3127; border-radius: 18px; box-shadow: 0 34px 90px rgba(0,0,0,0.48); }
+      .chip { display: inline-flex; align-items: center; gap: 10px; border: 1px solid #3A3127; background: #1A1713; color: #F7F1E8; border-radius: 999px; padding: 12px 18px; font-family: "JetBrains Mono", monospace; font-size: 21px; }
+      .chip b { color: #FF6154; font-weight: 700; }
+
+      #s1 .content { padding: 0 128px; justify-content: center; gap: 34px; }
+      #s1 h1 { max-width: 1080px; font-size: 112px; line-height: 0.98; font-weight: 500; letter-spacing: -0.035em; }
+      #s1 .sub { max-width: 960px; font-size: 38px; line-height: 1.32; color: #B8AA99; font-weight: 350; }
+      #s1 .chips { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+      #s1 .api-stack { position: absolute; right: 86px; top: 230px; width: 560px; z-index: 3; display: flex; flex-direction: column; gap: 16px; }
+      .route { display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: #1A1713; border: 1px solid #3A3127; border-radius: 14px; font-family: "JetBrains Mono", monospace; font-size: 24px; box-shadow: 0 18px 45px rgba(0,0,0,0.28); }
+      .method { color: #FFB2AB; background: #3B211D; border: 1px solid #7A332B; border-radius: 8px; padding: 6px 10px; font-size: 17px; font-weight: 800; }
+      .method.get { color: #A8F0BD; background: #1E3324; border-color: #386846; }
+      .method.put { color: #F1D391; background: #342817; border-color: #6B5228; }
+      .path { color: #F7F1E8; }
+
+      #s2 .content, #s3 .content, #s4 .content { padding: 92px 128px; gap: 30px; justify-content: center; }
+      #s2 h2, #s3 h2, #s4 h2 { font-size: 72px; line-height: 1.05; font-weight: 500; letter-spacing: -0.025em; max-width: 1120px; }
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 1500px; }
+      .compare-card { padding: 32px; min-height: 430px; }
+      .compare-card h3 { font-size: 34px; font-weight: 600; margin-bottom: 20px; }
+      .row { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-top: 1px solid #302921; font-size: 26px; color: #B8AA99; }
+      .row:first-of-type { border-top: 0; }
+      .mark { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; font-size: 18px; font-weight: 900; }
+      .bad { background: rgba(255,97,84,0.16); color: #FF6154; }
+      .good { background: rgba(98,208,131,0.16); color: #62D083; }
+
+      .flow { width: 1520px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; align-items: stretch; }
+      .step { position: relative; min-height: 265px; padding: 26px; background: #1A1713; border: 1px solid #3A3127; border-radius: 18px; }
+      .step::after { content: ""; position: absolute; right: -18px; top: 50%; width: 18px; height: 2px; background: #B8944D; opacity: 0.7; }
+      .step:last-child::after { display: none; }
+      .num { font-family: "JetBrains Mono", monospace; font-size: 18px; color: #FF6154; letter-spacing: 0.12em; }
+      .step h3 { margin-top: 28px; font-size: 32px; line-height: 1.05; }
+      .step p { margin-top: 16px; font-size: 21px; line-height: 1.35; color: #B8AA99; }
+      .code-card { width: 1520px; padding: 28px 32px; font-family: "JetBrains Mono", monospace; font-size: 25px; line-height: 1.55; color: #B8AA99; }
+      .code-line { display: flex; gap: 18px; align-items: baseline; padding: 6px 0; }
+      .cmd { color: #F7F1E8; width: 72px; flex: none; }
+      .ok { color: #62D083; }
+
+      .dashboard { width: 1520px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 26px; align-items: stretch; }
+      .resource-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      .resource { padding: 26px; min-height: 172px; }
+      .resource .count { font-family: "JetBrains Mono", monospace; font-size: 58px; line-height: 1; color: #F7F1E8; }
+      .resource .label { margin-top: 18px; font-size: 25px; font-weight: 650; }
+      .resource .desc { margin-top: 8px; font-size: 18px; line-height: 1.35; color: #B8AA99; }
+      .terminal { font-family: "JetBrains Mono", monospace; font-size: 23px; line-height: 1.55; min-height: 368px; overflow: hidden; }
+      .bar { display: flex; align-items: center; gap: 9px; padding: 15px 20px; border-bottom: 1px solid #3A3127; background: #15130F; }
+      .dot { width: 12px; height: 12px; border-radius: 50%; background: #3A3127; }
+      .url { margin-left: 14px; font-size: 18px; color: #B8AA99; }
+      .status { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; color: #62D083; font-size: 17px; }
+      .status i { width: 9px; height: 9px; border-radius: 50%; background: #62D083; display: block; }
+      .term-body { padding: 26px 30px; display: flex; flex-direction: column; gap: 12px; }
+      .muted { color: #B8AA99; }
+      .route-line { color: #F7F1E8; }
+      .success { color: #62D083; }
+
+      #s5 .content { padding: 0 128px; justify-content: center; align-items: center; gap: 30px; text-align: center; }
+      #s5 .lead { font-size: 34px; color: #B8AA99; }
+      #s5 .wordmark { font-size: 124px; line-height: 0.9; font-weight: 500; letter-spacing: -0.04em; }
+      #s5 .slogan { max-width: 1180px; font-size: 58px; line-height: 1.12; color: #F7F1E8; }
+      #s5 .cta { margin-top: 10px; display: inline-flex; align-items: center; gap: 12px; border: 1px solid #4D3C21; background: #241F19; color: #F7F1E8; border-radius: 999px; padding: 16px 24px; font-family: "JetBrains Mono", monospace; font-size: 23px; }
+      #blackout { position: absolute; inset: 0; z-index: 20; background: #11100E; opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="36" data-width="1920" data-height="1080">
+      <div id="s1" class="scene">
+        <div class="grid"></div>
+        <div id="g1" class="glow" data-layout-allow-overflow style="width: 780px; height: 780px; background: #4D3222; right: -180px; top: 70px;"></div>
+        <div class="ghost" style="font-size: 260px; bottom: -40px; left: -30px;">/api/v1</div>
+        <div class="regmark">BUDA · API CLAWS · PRODUCT HUNT</div>
+        <div class="content">
+          <div id="s1eb" class="eyebrow"><span class="tick">●</span> Managed Agent API</div>
+          <h1 id="s1h" class="serif">Give your product a cloud AI agent.</h1>
+          <p id="s1sub" class="sub">API Claws turns Buda into an API layer for developers building apps, devices, widgets, and vertical SaaS with persistent agents.</p>
+          <div id="s1chips" class="chips">
+            <span class="chip"><b>POST</b> /api/v1/api-agents</span>
+            <span class="chip">Drive memory</span>
+            <span class="chip">Sessions</span>
+          </div>
+        </div>
+        <div id="s1routes" class="api-stack">
+          <div class="route"><span class="method">POST</span><span class="path">/api/v1/api-agents</span></div>
+          <div class="route"><span class="method put">PUT</span><span class="path">/{agentId}/drive/files</span></div>
+          <div class="route"><span class="method get">GET</span><span class="path">/{agentId}/sessions</span></div>
+        </div>
+      </div>
+
+      <div id="s2" class="scene">
+        <div class="grid"></div>
+        <div id="g2" class="glow" data-layout-allow-overflow style="width: 900px; height: 760px; background: #2D251A; left: -240px; bottom: -160px;"></div>
+        <div class="ghost" style="font-size: 250px; top: 50px; right: -40px;">agent layer</div>
+        <div class="regmark">NOT A RAW MODEL API</div>
+        <div class="content">
+          <div id="s2eb" class="eyebrow"><span class="orange">●</span> The difference</div>
+          <h2 id="s2h" class="serif">Raw model calls give text. API Claws gives an operating agent.</h2>
+          <div id="s2cmp" class="compare">
+            <div class="compare-card panel">
+              <h3>Raw LLM API</h3>
+              <div class="row"><span class="mark bad">x</span> You manage sessions</div>
+              <div class="row"><span class="mark bad">x</span> You build retrieval</div>
+              <div class="row"><span class="mark bad">x</span> You orchestrate runtime</div>
+              <div class="row"><span class="mark bad">x</span> You design tenant isolation</div>
+            </div>
+            <div class="compare-card panel">
+              <h3>API Claws</h3>
+              <div class="row"><span class="mark good">✓</span> Built-in chat sessions</div>
+              <div class="row"><span class="mark good">✓</span> Drive-based knowledge</div>
+              <div class="row"><span class="mark good">✓</span> Managed agent runtime</div>
+              <div class="row"><span class="mark good">✓</span> Space-based isolation</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s3" class="scene">
+        <div class="grid"></div>
+        <div id="g3" class="glow" data-layout-allow-overflow style="width: 900px; height: 800px; background: #352417; right: -240px; bottom: -170px;"></div>
+        <div class="ghost" style="font-size: 250px; bottom: -35px; right: -20px;">space agent drive</div>
+        <div class="regmark">HOW IT WORKS</div>
+        <div class="content">
+          <div id="s3eb" class="eyebrow"><span class="tick">●</span> Product infrastructure in five APIs</div>
+          <h2 id="s3h" class="serif">Provision, seed, run, read, and learn.</h2>
+          <div id="s3flow" class="flow">
+            <div class="step"><div class="num">01</div><h3>Space</h3><p>Tenant, customer, device fleet, or paid account boundary.</p></div>
+            <div class="step"><div class="num">02</div><h3>API Agent</h3><p>Role, instructions, runtime identity, and hosted capability.</p></div>
+            <div class="step"><div class="num">03</div><h3>Drive</h3><p>Manuals, policy, state snapshots, and durable knowledge.</p></div>
+            <div class="step"><div class="num">04</div><h3>Session</h3><p>User conversations, async runs, status, and messages.</p></div>
+            <div class="step"><div class="num">05</div><h3>Embed</h3><p>Frontend-safe chat access with short-lived tokens.</p></div>
+          </div>
+          <div id="s3code" class="code-card panel">
+            <div class="code-line"><span class="cmd">POST</span><span>/api/v1/api-agents</span><span class="ok">agentId + driveId</span></div>
+            <div class="code-line"><span class="cmd">PUT</span><span>/api/v1/api-agents/{agentId}/drive/files</span><span class="ok">persistent memory</span></div>
+            <div class="code-line"><span class="cmd">POST</span><span>/api/v1/api-agents/{agentId}/sessions</span><span class="ok">cloud agent run</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4" class="scene">
+        <div class="grid"></div>
+        <div id="g4" class="glow" data-layout-allow-overflow style="width: 860px; height: 780px; background: #23301F; left: -180px; top: 120px;"></div>
+        <div class="ghost" style="font-size: 255px; top: 20px; right: -60px;">developer</div>
+        <div class="regmark">DEVELOPER PORTAL</div>
+        <div class="content">
+          <div id="s4eb" class="eyebrow"><span class="tick">●</span> See what your API creates</div>
+          <h2 id="s4h" class="serif">Agents, sessions, computers, and drives stay visible.</h2>
+          <div id="s4dash" class="dashboard">
+            <div class="resource-grid">
+              <div class="resource panel"><div class="count">12</div><div class="label">Agents</div><div class="desc">Hosted API Claw agents for developer spaces.</div></div>
+              <div class="resource panel"><div class="count">84</div><div class="label">Sessions</div><div class="desc">Runs and conversations started through the API.</div></div>
+              <div class="resource panel"><div class="count">07</div><div class="label">Computers</div><div class="desc">Sandbox computers for browser, shell, and tool work.</div></div>
+              <div class="resource panel"><div class="count">19</div><div class="label">Drives</div><div class="desc">Durable volumes and Drive links for agent memory.</div></div>
+            </div>
+            <div class="terminal panel">
+              <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">Buda Developer · API Claws</span><span class="status"><i></i>enabled</span></div>
+              <div class="term-body">
+                <div><span class="muted">$ curl -H "Authorization: Bearer sk_..."</span></div>
+                <div><span class="route-line">GET /api/v1/api-agents</span></div>
+                <div><span class="success">200 OK</span> <span class="muted">{ "apiAgents": [...], "total": 12 }</span></div>
+                <div><span class="route-line">Developer Space: API Claws</span></div>
+                <div><span class="success">isolated billing · isolated resources</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s5" class="scene">
+        <div class="grid"></div>
+        <div id="g5" class="glow" data-layout-allow-overflow style="width: 980px; height: 980px; background: #4D3222; bottom: -300px; right: -220px;"></div>
+        <div class="ghost" style="font-size: 300px; top: 38px; left: -40px;">API Claws</div>
+        <div class="regmark">BUDA.IM · LAUNCH KIT</div>
+        <div class="content">
+          <div id="s5lead" class="lead">For smart hardware, SaaS copilots, widgets, and vertical apps.</div>
+          <div id="s5word" class="wordmark serif">API Claws</div>
+          <div id="s5slogan" class="slogan serif">Cloud AI agents with Drive memory, sessions, and runtime already handled.</div>
+          <div id="s5cta" class="cta"><span class="tick">●</span> /api/v1/api-agents</div>
+        </div>
+      </div>
+
+      <div id="blackout"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var D = 36;
+      var rep = function (cycle) { return Math.ceil(D / cycle) - 1; };
+      ["#g1", "#g2", "#g3", "#g4", "#g5"].forEach(function (g, i) {
+        var c = 4.2 + i * 0.35;
+        tl.to(g, { scale: 1.08, duration: c, ease: "sine.inOut", repeat: rep(c), yoyo: true }, 0);
+      });
+
+      var b1 = 0, b2 = 7, b3 = 14, b4 = 22, b5 = 29;
+      tl.from("#s1eb", { y: -20, opacity: 0, duration: 0.45, ease: "power2.out" }, b1 + 0.2);
+      tl.from("#s1h", { y: 56, opacity: 0, duration: 0.8, ease: "power4.out" }, b1 + 0.45);
+      tl.from("#s1sub", { y: 34, opacity: 0, duration: 0.58, ease: "power3.out" }, b1 + 1.05);
+      tl.from("#s1chips .chip", { y: 22, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.45)" }, b1 + 1.55);
+      tl.from("#s1routes .route", { x: 46, opacity: 0, duration: 0.52, stagger: 0.14, ease: "expo.out" }, b1 + 0.8);
+      tl.to("#s1routes .method", { scale: 1.08, duration: 0.28, yoyo: true, repeat: 3, ease: "sine.inOut", stagger: 0.12 }, b1 + 2.4);
+
+      tl.to("#s1", { filter: "blur(12px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 6.7);
+      tl.fromTo("#s2", { filter: "blur(12px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 6.8);
+      tl.from("#s2eb", { y: -20, opacity: 0, duration: 0.45, ease: "power2.out" }, b2 + 0.25);
+      tl.from("#s2h", { y: 42, opacity: 0, duration: 0.66, ease: "power3.out" }, b2 + 0.5);
+      tl.from("#s2cmp .compare-card", { y: 38, opacity: 0, scale: 0.98, duration: 0.62, stagger: 0.14, ease: "expo.out" }, b2 + 1.0);
+      tl.from("#s2cmp .row", { x: -20, opacity: 0, duration: 0.36, stagger: 0.055, ease: "power2.out" }, b2 + 1.55);
+
+      tl.to("#s2", { filter: "blur(12px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 13.7);
+      tl.fromTo("#s3", { filter: "blur(12px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 13.8);
+      tl.from("#s3eb", { y: -20, opacity: 0, duration: 0.45, ease: "power2.out" }, b3 + 0.25);
+      tl.from("#s3h", { y: 42, opacity: 0, duration: 0.66, ease: "power3.out" }, b3 + 0.52);
+      tl.from("#s3flow .step", { y: 44, opacity: 0, duration: 0.56, stagger: 0.09, ease: "back.out(1.35)" }, b3 + 1.0);
+      tl.from("#s3code", { y: 32, opacity: 0, scale: 0.98, duration: 0.56, ease: "expo.out" }, b3 + 2.2);
+
+      tl.to("#s3", { filter: "blur(12px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 21.7);
+      tl.fromTo("#s4", { filter: "blur(12px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 21.8);
+      tl.from("#s4eb", { y: -20, opacity: 0, duration: 0.45, ease: "power2.out" }, b4 + 0.25);
+      tl.from("#s4h", { y: 42, opacity: 0, duration: 0.66, ease: "power3.out" }, b4 + 0.52);
+      tl.from("#s4dash .resource", { y: 38, opacity: 0, duration: 0.5, stagger: 0.08, ease: "back.out(1.4)" }, b4 + 1.05);
+      tl.from("#s4dash .terminal", { x: 42, opacity: 0, scale: 0.98, duration: 0.64, ease: "expo.out" }, b4 + 1.28);
+      tl.to(".status i", { opacity: 0.25, duration: 0.42, repeat: 10, yoyo: true, ease: "sine.inOut" }, b4 + 2.0);
+
+      tl.to("#s4", { filter: "blur(14px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 28.7);
+      tl.fromTo("#s5", { filter: "blur(14px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.65, ease: "power2.inOut" }, 28.8);
+      tl.from("#s5lead", { y: -20, opacity: 0, duration: 0.48, ease: "power2.out" }, b5 + 0.25);
+      tl.from("#s5word", { y: 56, opacity: 0, duration: 0.82, ease: "power4.out" }, b5 + 0.55);
+      tl.from("#s5slogan", { y: 34, opacity: 0, duration: 0.64, ease: "power3.out" }, b5 + 1.25);
+      tl.from("#s5cta", { y: 22, opacity: 0, duration: 0.5, ease: "back.out(1.45)" }, b5 + 1.9);
+      tl.to("#blackout", { opacity: 1, duration: 1.1, ease: "power2.in" }, 34.7);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+interface:
+  display_name: "YouTube Shorts Letterbox"
+  short_description: "Pad videos to 9:16 Shorts MP4 with optional cover frames"
+  default_prompt: "Use $youtube-shorts-letterbox to convert this horizontal video into a 9:16 YouTube Shorts MP4 with black bars. If I provide a cover image, prepend it as the first video frames so YouTube Shorts can use it as the cover."
+policy:
+  allow_implicit_invocation: true

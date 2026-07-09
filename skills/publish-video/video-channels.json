@@ -1,0 +1,78 @@
+{
+  "_comment": "YouTube channel classification config. 4 playlists by topic, all languages mixed. Fill in 'id' fields with real YouTube playlist IDs from YouTube Studio.",
+  "playlists": {
+    "onboarding": {
+      "id": "PLuHcfaOt6gxsrosq_4mDZv1kWmfm3eREZ",
+      "title": "Getting Started with Buda",
+      "description": "Onboarding guides, reward codes, WeChat setup — for new Buda users across all languages"
+    },
+    "product-intro": {
+      "id": "PLuHcfaOt6gxt3jBbVHC9CZ-Q-PUmwKyZo",
+      "title": "What is Buda?",
+      "description": "What Buda can do — general intros, sales demos, and feature walkthroughs"
+    },
+    "use-cases": {
+      "id": "PLuHcfaOt6gxtxVn8H59QkUJJzYiy3m_0w",
+      "title": "Buda in Action",
+      "description": "Real-world Buda workflows by industry: e-commerce, finance, creator, SEO"
+    },
+    "launch": {
+      "id": "PLuHcfaOt6gxs4QEeATZeJs9izjrUhwn6T",
+      "title": "Launch & Announcements",
+      "description": "Product launches, major updates, and announcements from Buda."
+    }
+  },
+  "compositions": {
+    "buda-onboarding": "onboarding",
+    "buda-onboarding-zh-CN": "onboarding",
+    "buda-onboarding-wechat": "onboarding",
+    "buda-onboarding-wechat-zh-CN": "onboarding",
+    "buda-onboarding-wechat-zh-TW": "onboarding",
+    "buda-reward": "onboarding",
+    "buda-reward-zh-CN": "onboarding",
+    "buda-intro-general": "product-intro",
+    "buda-intro-general-zh-CN": "product-intro",
+    "buda-intro-general-zh-TW": "product-intro",
+    "buda-intro-general-ja": "product-intro",
+    "buda-intro-general-pt": "product-intro",
+    "buda-intro-kelly": "product-intro",
+    "buda-intro-kelly-en": "product-intro",
+    "buda-sales": "product-intro",
+    "buda-sales-zh-CN": "product-intro",
+    "buda-sales-ja": "product-intro",
+    "buda-sales-old": "product-intro",
+    "buda-bp": "product-intro",
+    "buda-bp-zh-CN": "product-intro",
+    "buda-intro-ecommerce": "use-cases",
+    "buda-intro-ecommerce-zh-CN": "use-cases",
+    "buda-intro-ecommerce-zh-TW": "use-cases",
+    "buda-intro-ecommerce-ja": "use-cases",
+    "buda-intro-ecommerce-pt": "use-cases",
+    "buda-intro-finance-investment": "use-cases",
+    "buda-intro-finance-investment-zh-CN": "use-cases",
+    "buda-intro-finance-investment-zh-TW": "use-cases",
+    "buda-intro-finance-investment-ja": "use-cases",
+    "buda-intro-creator": "use-cases",
+    "buda-intro-creator-zh-CN": "use-cases",
+    "buda-intro-creator-zh-TW": "use-cases",
+    "buda-intro-creator-ja": "use-cases",
+    "buda-intro-creator-pt": "use-cases",
+    "buda-intro-seo": "use-cases",
+    "buda-producthunt": "launch",
+    "buda-producthunt-zh-CN": "launch",
+    "influencer-thread-02-zh-CN": "product-intro",
+    "influencer-thread-02-en": "product-intro",
+    "influencer-thread-03-zh-CN": "product-intro",
+    "influencer-thread-03-en": "product-intro",
+    "influencer-thread-04-zh-CN": "product-intro",
+    "influencer-thread-04-en": "product-intro",
+    "influencer-thread-05-zh-CN": "product-intro",
+    "influencer-thread-05-en": "product-intro",
+    "influencer-thread-06-zh-CN": "product-intro",
+    "influencer-thread-06-en": "product-intro",
+    "influencer-thread-07-zh-CN": "product-intro",
+    "influencer-thread-07-en": "product-intro",
+    "influencer-thread-08-zh-CN": "product-intro",
+    "influencer-thread-08-en": "product-intro"
+  }
+}

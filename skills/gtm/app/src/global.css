@@ -1,0 +1,194 @@
+@import "tailwindcss";
+@import "../../../../../packages/kui/src/styles.css";
+
+@source "../../../../../packages/kui/src";
+@source "./components";
+@source ".";
+
+@layer components {
+  .gtm-sidebar {
+    --sidebar-width: 17rem;
+    --sidebar-width-icon: 3.25rem;
+  }
+
+  .gtm-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    min-height: 2.25rem;
+  }
+
+  .gtm-brand-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.3125rem;
+    background: hsl(var(--background));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.5rem;
+    font-weight: 760;
+    line-height: 1;
+  }
+
+  .gtm-sidebar-trigger,
+  .gtm-mobile-trigger {
+    border-color: transparent;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    box-shadow: none;
+  }
+
+  .gtm-sidebar-trigger:hover,
+  .gtm-sidebar-trigger:focus-visible,
+  .gtm-mobile-trigger:hover,
+  .gtm-mobile-trigger:focus-visible {
+    border-color: transparent;
+    background: hsl(var(--muted) / 0.4);
+    color: hsl(var(--foreground));
+    box-shadow: none;
+  }
+
+  .gtm-human-work {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.25rem 0.5rem 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--background));
+  }
+
+  .gtm-human-work > span,
+  .gtm-human-work small {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .gtm-human-work strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+  }
+
+  .gtm-human-work button {
+    height: auto;
+    min-height: 2.5rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-content: start;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.4375rem;
+    background: hsl(var(--muted) / 0.24);
+    color: hsl(var(--foreground));
+    text-align: left;
+  }
+
+  .gtm-human-work button b {
+    font-size: 1.125rem;
+  }
+
+  .gtm-human-work > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4375rem;
+  }
+
+  .gtm-human-work > div > span {
+    min-width: 0;
+    padding: 0.5rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.4375rem;
+    background: hsl(var(--muted) / 0.18);
+  }
+
+  .gtm-human-work b,
+  .gtm-human-work small {
+    display: block;
+  }
+
+  .gtm-nav-active {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  }
+
+  .gtm-sidebar-footer {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0 0.5rem 0.5rem;
+  }
+
+  .gtm-help-button {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding-inline: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+
+  .gtm-help-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.625rem;
+  }
+
+  .gtm-help-grid span {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.625rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--muted) / 0.18);
+  }
+
+  .gtm-help-grid small {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .gtm-help-grid b {
+    overflow-wrap: anywhere;
+  }
+
+  .gtm-topbar {
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--background) / 0.96);
+    backdrop-filter: blur(12px);
+  }
+
+  @media (max-width: 767px) {
+    .gtm-topbar {
+      height: 3.25rem;
+      padding: 0 0.625rem;
+    }
+
+    .gtm-topbar > span,
+    .gtm-topbar > button:not(.gtm-mobile-trigger) {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .gtm-help-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}

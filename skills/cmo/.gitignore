@@ -1,0 +1,21 @@
+app/dist/
+app/node_modules/
+app/tsconfig.tsbuildinfo
+.cache/
+
+# NOTE — deliberate divergence from the generic App-in-Skill spec:
+# the CMO console INTENTIONALLY commits its config.local.json and the
+# app/.data/*.json handoff files (platform_snapshot / current_batch / decisions /
+# execution_report) as shared seed/demo data copied from the Ads skill, so a fresh
+# checkout opens with a populated console. That is why app/.data/ is NOT ignored
+# here and config.local.json is un-ignored below.
+#
+# Hard rule: keep ACTUAL secrets out of these committed files. OAuth tokens,
+# client secrets, and access tokens are referenced by *_env names only and their
+# values live in the environment / ~/.config, never in JSON. Account ids and
+# campaign metadata in the snapshot are considered shareable, not secret.
+*.local.json
+!config.local.json
+.env
+.env.local
+*.log

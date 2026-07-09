@@ -1,0 +1,4 @@
+interface:
+  display_name: "Listing"
+  short_description: "Prepare marketplace product listings from /kit/gtm"
+  default_prompt: "Use $listing to prepare a Taobao listing draft from the current /kit/gtm ChannelListing data."

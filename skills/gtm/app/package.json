@@ -1,0 +1,33 @@
+{
+  "name": "@kapps/gtm-skill-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "gtm-data": "workspace:*",
+    "kui": "workspace:*",
+    "share-domains": "workspace:*",
+    "lucide-react": "^1.7.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "wouter": "^3.9.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@xyflow/react": "^12.10.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "data_provider": "platform",
+  "operator_profile": {
+    "role": "chief marketing officer",
+    "timezone": "Asia/Hong_Kong"
+  },
+  "brand": {
+    "name": "CMO workspace",
+    "homepage": "",
+    "positioning": "Aggregate platform data, plan proposed growth changes, and sync approved diffs back to marketing platforms."
+  },
+  "accounts": [
+    {
+      "platform": "google",
+      "key": "google-main",
+      "account_id": "",
+      "display_name": "Google Ads main",
+      "customer_id_env": "GOOGLE_ADS_CUSTOMER_ID",
+      "developer_token_env": "GOOGLE_ADS_DEVELOPER_TOKEN",
+      "status": "needs_config"
+    },
+    {
+      "platform": "reddit",
+      "key": "reddit-main",
+      "account_id": "",
+      "display_name": "Reddit Ads main",
+      "account_id_env": "REDDIT_ADS_ACCOUNT_ID",
+      "access_token_env": "REDDIT_ADS_ACCESS_TOKEN",
+      "status": "needs_config"
+    }
+  ],
+  "account_notes": "Add only the accounts this CMO console should read. One platform can have multiple accounts; unconfigured accounts are coverage gaps, not blockers for connected accounts.",
+  "google_ads": {
+    "repo_root_env": "ADS_GOOGLE_REPO_ROOT",
+    "default_repo_root": "/Users/kelly/Documents/kapps",
+    "client_secret_path": "~/.config/google-ads/client_secret.json",
+    "token_path": "~/.config/google-ads/token.json",
+    "customer_id_env": "GOOGLE_ADS_CUSTOMER_ID",
+    "developer_token_env": "GOOGLE_ADS_DEVELOPER_TOKEN"
+  },
+  "reddit_ads": {
+    "official_api_docs": "https://ads-api.reddit.com/docs/v3/",
+    "official_postman_workspace": "https://www.postman.com/reddit-ads-api/reddit-ads-api-v3/overview",
+    "account_id": "",
+    "account_id_env": "REDDIT_ADS_ACCOUNT_ID",
+    "access_token_env": "REDDIT_ADS_ACCESS_TOKEN",
+    "default_launch_status": "paused"
+  },
+  "geoly": {
+    "note": "Optional GEOly cache settings. The dashboard reads app/.data/geo_snapshot.json; refresh it with scripts/sync_geoly.mjs. Keep tokens in GEOly OAuth/GEOLY_TOKEN, never in this file.",
+    "brand_id": "",
+    "org_id": "",
+    "default_prompt_limit": 40,
+    "default_source_limit": 80
+  },
+  "safety_policy": {
+    "require_confirmation_for_write_api": true,
+    "require_confirmation_for_budget_change": true,
+    "require_pixel_check_for_conversion_campaign": true
+  },
+  "busabase": {
+    "note": "Optional. Set CMO_DATA_PROVIDER=busabase to back proposals/decisions/agent-tasks with a Busabase instance (local `busabase server` :15419, or cloud). Marketing + platform snapshot stay local. Secrets live in env only.",
+    "base_url_env": "BUSABASE_BASE_URL",
+    "api_key_env": "BUSABASE_API_KEY",
+    "space_id_env": "BUSABASE_SPACE_ID",
+    "proposals_base_id_env": "BUSABASE_CMO_BASE_ID",
+    "default_base_url": "http://localhost:15419"
+  }
+}

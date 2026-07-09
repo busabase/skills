@@ -1,0 +1,29 @@
+{
+  "name": "@kapps/cmo-skill-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3000",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 3000",
+    "serve": "node server/index.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "@vitejs/plugin-react": "^4.7.0",
+    "hono": "^4.12.25",
+    "lucide-react": "^1.7.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "share-domains": "workspace:*",
+    "vite": "^7.1.9",
+    "wouter": "^3.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
+  }
+}

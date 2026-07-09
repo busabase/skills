@@ -1,0 +1,3 @@
+display_name: TTS
+short_description: Generate per-line narration audio and manifests for video workflows.
+default_prompt: Generate separate TTS audio files from segmented narration text and write a manifest without merging audio or changing video timing.

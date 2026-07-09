@@ -1,0 +1,4 @@
+interface:
+  display_name: "Buda Transition Covers"
+  short_description: "Make bilingual Buda transition covers."
+  default_prompt: "Use $buda-transition-covers to create English and Simplified Chinese Buda Transition-Covers from this voiceover script."

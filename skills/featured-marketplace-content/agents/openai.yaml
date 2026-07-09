@@ -1,0 +1,4 @@
+interface:
+  display_name: "Featured Marketplace Content"
+  short_description: "Create featured agent and skill SEO pages"
+  default_prompt: "Use $featured-marketplace-content to draft featured marketplace configs from this URL, either as repo files or a partner zip package."
