@@ -46,5 +46,14 @@ API key, read `~/.busabase/.env`, or use curl as a substitute for the bundled MC
 
 ## Connection recovery
 
-If the Busabase tools are unavailable or authentication expires, tell the user the plugin needs to
-be connected again. Do not request or expose credentials in the conversation.
+Plugin installation and MCP authorization are separate states. If the Busabase tools are
+unavailable or authentication expires:
+
+1. Ask the user to check `codex mcp list`. The `busabase` row must show `Auth` as `OAuth`.
+2. If it shows `Not logged in`, ask the user to run `codex mcp login busabase` and complete the
+   newly opened browser tab while that command is still running.
+3. After the browser says `Authentication complete` and the command reports a successful login,
+   ask the user to start a new Codex task so it loads the authenticated tool catalog.
+
+Do not request or expose credentials in the conversation, and do not replace this flow with an API
+key or curl command.
