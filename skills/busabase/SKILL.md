@@ -63,8 +63,7 @@ echo "BUSABASE_SPACE_ID=<chosen space id>" >> ~/.busabase/.env
 
 Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
 not a member of returns 403; a missing header when the user has multiple spaces returns 400.
-(The CLI and MCP currently target the default space only — when writing into any other space,
-use curl with the header.)
+(The CLI and MCP support explicit space targeting; for raw curl, pass the header shown above.)
 
 ## Three ways to talk to it — pick per task
 
