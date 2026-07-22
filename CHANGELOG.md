@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-07-22
+
+- Document the explicit `codex mcp login busabase` step after plugin installation.
+- Add recovery checks for the `Not logged in` state and stale task tool catalogs.
+
 ## 0.2.0 - 2026-07-22
 
 - Bundle the hosted Busabase MCP profile in the Codex plugin.

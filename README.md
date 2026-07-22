@@ -25,10 +25,23 @@ npx skills add busabase/skills
 ```bash
 codex plugin marketplace add busabase/skills
 codex plugin add busabase@busabase
+codex mcp login busabase
 ```
 
 The Codex plugin connects to `https://busabase.com/api/mcp/plugin`, opens the standard browser OAuth
 flow, and exposes a focused 22-tool catalog. No API key setup is required.
+
+Plugin installation and MCP authorization are separate states. After the browser says
+`Authentication complete`, verify the saved connection before starting a Busabase task:
+
+```bash
+codex mcp list
+```
+
+The `busabase` row should show `Auth` as `OAuth`. If it still shows `Not logged in`, run
+`codex mcp login busabase` again and complete the newly opened browser tab while that command is
+still running. Start a new Codex task after a successful login so the task loads the authenticated
+tool catalog.
 
 ### MCP (any MCP-capable agent)
 
