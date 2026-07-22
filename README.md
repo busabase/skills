@@ -25,7 +25,23 @@ npx skills add busabase/skills
 ```bash
 codex plugin marketplace add busabase/skills
 codex plugin add busabase@busabase
+codex mcp login busabase
 ```
+
+The Codex plugin connects to `https://busabase.com/api/mcp/plugin`, opens the standard browser OAuth
+flow, and exposes a focused 22-tool catalog. No API key setup is required.
+
+Plugin installation and MCP authorization are separate states. After the browser says
+`Authentication complete`, verify the saved connection before starting a Busabase task:
+
+```bash
+codex mcp list
+```
+
+The `busabase` row should show `Auth` as `OAuth`. If it still shows `Not logged in`, run
+`codex mcp login busabase` again and complete the newly opened browser tab while that command is
+still running. Start a new Codex task after a successful login so the task loads the authenticated
+tool catalog.
 
 ### MCP (any MCP-capable agent)
 
@@ -34,12 +50,20 @@ Point your agent at your workspace's Streamable-HTTP endpoint:
 - Desktop / local: `http://localhost:15419/api/mcp` (no auth)
 - Cloud: `https://busabase.com/api/mcp` (send `Authorization: Bearer $BUSABASE_API_KEY`)
 
-The bundled [`.mcp.json`](./.mcp.json) wires the local endpoint by default; edit the `url` (and add
-an auth header) for Cloud.
+Codex can use the full Cloud MCP surface directly with standard OAuth:
 
-All of these install the same **busabase** skill. It is small and evergreen: it reads your workspace
-base URL (and API key, on Cloud) from `~/.busabase/.env`, and points at your workspace's live
-`/api/v1/openapi.json` for the full API.
+```bash
+codex mcp add busabase --url https://busabase.com/api/mcp
+codex mcp login busabase
+```
+
+The root [`.mcp.json`](./.mcp.json) wires the local endpoint for general MCP clients. The Codex
+plugin has its own remote [MCP configuration](./plugins/busabase/.mcp.json), which is bundled because
+it lives inside the plugin directory.
+
+The root **busabase** skill remains the full CLI/curl guide for local and general-purpose agent
+installs. The Codex-bundled skill is intentionally MCP-first: it relies on OAuth and the curated tool
+catalog instead of reading `~/.busabase/.env`.
 
 To set up a workspace from scratch first, paste the onboarding prompt from your Busabase dashboard
 (**Agent Skills** button) — it walks your agent through connecting, seeding a first Base, and then
@@ -61,16 +85,24 @@ skills/busabase/SKILL.md              the skill (canonical) — used by `skills`
 .claude-plugin/marketplace.json       Claude Code marketplace listing
 .agents/plugins/marketplace.json      Codex marketplace listing
 plugins/busabase/.codex-plugin/plugin.json   Codex plugin manifest
+plugins/busabase/.mcp.json                   hosted OAuth MCP profile for Codex
 plugins/busabase/skills/busabase/SKILL.md    Codex needs the skill INSIDE the plugin dir
-                                             (a copy of the canonical one — keep in sync)
+                                             (MCP-first guidance for the curated profile)
+plugins/busabase/assets/                     icons and light/dark logos bundled with Codex
 .mcp.json                             bundled MCP server (Streamable HTTP)
 server.json                           official MCP Registry entry (remote → busabase.com/api/mcp)
 ```
 
-> **Why the Codex copy?** Codex only resolves a plugin from a `plugins/<name>/` subdir and bundles
-> only files *inside* that dir on install (symlinks and `../` paths are dropped). So the Codex plugin
-> carries its own copy of the skill under `plugins/busabase/skills/`. Re-copy `skills/busabase/` there
-> whenever the canonical skill changes.
+> **Why a Codex-specific skill?** Codex only bundles files inside `plugins/<name>/`. The bundled
+> skill also has a different connection contract: hosted OAuth and MCP tools instead of local shell
+> configuration. Keep the approval and prompt-injection rules aligned across both skills, but do not
+> copy CLI/API-key setup into the Codex plugin.
+
+## Publish to the OpenAI Plugin Directory
+
+The OpenAI Plugin Directory and the MCP Registry are separate release channels. Use
+[`docs/openai-plugin-submission.md`](./docs/openai-plugin-submission.md) for the Platform submission,
+domain verification, reviewer access, test prompts, and production smoke checks.
 
 ## Publish to the official MCP Registry
 
@@ -80,4 +112,5 @@ mcp-publisher login dns --domain busabase.com --private-key <KEY>   # verifies t
 mcp-publisher publish                            # publishes server.json — live immediately, no review
 ```
 
-Bump `version` in `server.json` (and the plugin manifests) to ship an update.
+Bump `version` in `server.json` only when publishing an MCP Registry update. Bump the Codex plugin
+manifest independently for GitHub marketplace releases.

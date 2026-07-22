@@ -1,19 +1,31 @@
 {
   "name": "busabase",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Approval-first knowledge base for AI — propose ChangeRequests, a human reviews, only approved changes merge.",
   "author": { "name": "Busabase", "url": "https://busabase.com" },
+  "homepage": "https://busabase.com/support",
   "repository": "https://github.com/busabase/skills",
   "license": "MIT",
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Busabase",
-    "shortDescription": "Approval-first knowledge base for AI",
+    "shortDescription": "Approval-first AI knowledge",
+    "longDescription": "Connect Codex to Busabase with browser-based OAuth. Search trusted workspace knowledge, propose reviewable changes, and act on ChangeRequests while preserving explicit human approval boundaries.",
     "developerName": "Busabase",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
     "websiteURL": "https://busabase.com",
-    "defaultPrompt": ["Show my Busabase change requests awaiting review."],
-    "brandColor": "#10A37F"
+    "privacyPolicyURL": "https://busabase.com/privacy-policy",
+    "termsOfServiceURL": "https://busabase.com/terms-of-service",
+    "defaultPrompt": [
+      "Find the most relevant Busabase knowledge about this topic.",
+      "Propose a reviewed change to a Busabase record.",
+      "Show Busabase change requests awaiting my review."
+    ],
+    "brandColor": "#10A37F",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo-dark.png"
   }
 }
