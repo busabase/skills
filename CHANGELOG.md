@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-07-27
+
+- Add the public `busabase-app-creator` skill for guided workspace and AirApp creation.
+- Bundle app creator in the Codex plugin beside its MCP-first `busabase` dependency.
+- Document native Busabase resources, bounded reads, Vault requirements, and trusted execution boundaries.
+- Refresh the public `busabase` skill from the kapps source of truth.
+
 ## 0.2.1 - 2026-07-22
 
 - Document the explicit `codex mcp login busabase` step after plugin installation.

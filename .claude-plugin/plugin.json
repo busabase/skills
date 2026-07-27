@@ -1,7 +1,7 @@
 {
   "name": "busabase",
-  "version": "0.1.0",
-  "description": "Approval-first knowledge base for AI — propose changes as ChangeRequests, a human reviews, only approved changes merge. Bundles the busabase skill and connects to a workspace's MCP endpoint.",
+  "version": "0.2.0",
+  "description": "Approval-first Busabase knowledge workflows and guided workspace app creation. Bundles both public skills and connects to a workspace's MCP endpoint.",
   "author": { "name": "Busabase", "url": "https://busabase.com" },
   "homepage": "https://busabase.com",
   "repository": "https://github.com/busabase/skills",

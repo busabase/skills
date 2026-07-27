@@ -1,7 +1,7 @@
 {
   "name": "busabase",
-  "version": "0.2.1",
-  "description": "Approval-first knowledge base for AI — propose ChangeRequests, a human reviews, only approved changes merge.",
+  "version": "0.3.0",
+  "description": "Approval-first Busabase knowledge workflows and guided workspace app creation.",
   "author": { "name": "Busabase", "url": "https://busabase.com" },
   "homepage": "https://busabase.com/support",
   "repository": "https://github.com/busabase/skills",
@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "Busabase",
     "shortDescription": "Approval-first AI knowledge",
-    "longDescription": "Connect Codex to Busabase with browser-based OAuth. Search trusted workspace knowledge, propose reviewable changes, and act on ChangeRequests while preserving explicit human approval boundaries.",
+    "longDescription": "Connect Codex to Busabase with browser-based OAuth. Search trusted workspace knowledge, propose reviewable changes, and create complete workspace apps while preserving explicit human approval boundaries.",
     "developerName": "Busabase",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
@@ -21,7 +21,8 @@
     "defaultPrompt": [
       "Find the most relevant Busabase knowledge about this topic.",
       "Propose a reviewed change to a Busabase record.",
-      "Show Busabase change requests awaiting my review."
+      "Show Busabase change requests awaiting my review.",
+      "Create a new Busabase workspace app from this product idea."
     ],
     "brandColor": "#10A37F",
     "composerIcon": "./assets/icon.png",

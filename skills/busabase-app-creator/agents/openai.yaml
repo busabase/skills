@@ -1,0 +1,4 @@
+interface:
+  display_name: "Busabase App Creator"
+  short_description: "Design and deploy complete Busabase workspace apps"
+  default_prompt: "Use $busabase-app-creator with $busabase to guide me one choice at a time and deploy a complete Busabase workspace app."

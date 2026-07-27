@@ -3,7 +3,7 @@
 Agent Skills + plugins for [Busabase](https://busabase.com) — the approval-first knowledge base
 where AI proposes changes, a human reviews them, and only approved changes get merged.
 
-One skill, four ways to install it — pick whatever your agent supports.
+Two skills, four ways to install them — pick whatever your agent supports.
 
 ## Install
 
@@ -74,6 +74,7 @@ running one of the install commands above.
 | Skill | What it does |
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | Drive a Busabase workspace over HTTP: list Bases/records, propose ChangeRequests, and merge approved ones. |
+| [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | Turn a product idea into a complete Busabase workspace app with native resources, bounded data access, and a reviewable AirApp. |
 
 ## Repo layout
 
@@ -81,6 +82,7 @@ This one repo serves every install path above:
 
 ```
 skills/busabase/SKILL.md              the skill (canonical) — used by `skills`, Claude Code, Buda
+skills/busabase-app-creator/SKILL.md  guided Busabase workspace and AirApp creator
 .claude-plugin/plugin.json            Claude Code plugin manifest (auto-discovers ./skills/)
 .claude-plugin/marketplace.json       Claude Code marketplace listing
 .agents/plugins/marketplace.json      Codex marketplace listing
@@ -88,15 +90,17 @@ plugins/busabase/.codex-plugin/plugin.json   Codex plugin manifest
 plugins/busabase/.mcp.json                   hosted OAuth MCP profile for Codex
 plugins/busabase/skills/busabase/SKILL.md    Codex needs the skill INSIDE the plugin dir
                                              (MCP-first guidance for the curated profile)
+plugins/busabase/skills/busabase-app-creator/SKILL.md
+                                             app creator bundled beside its Busabase dependency
 plugins/busabase/assets/                     icons and light/dark logos bundled with Codex
 .mcp.json                             bundled MCP server (Streamable HTTP)
 server.json                           official MCP Registry entry (remote → busabase.com/api/mcp)
 ```
 
-> **Why a Codex-specific skill?** Codex only bundles files inside `plugins/<name>/`. The bundled
-> skill also has a different connection contract: hosted OAuth and MCP tools instead of local shell
-> configuration. Keep the approval and prompt-injection rules aligned across both skills, but do not
-> copy CLI/API-key setup into the Codex plugin.
+> **Why a Codex-specific Busabase skill?** Codex only bundles files inside `plugins/<name>/`. The
+> bundled `busabase` skill has a different connection contract: hosted OAuth and MCP tools instead
+> of local shell configuration. `busabase-app-creator` is bundled unchanged beside it and delegates
+> connection, API, and ChangeRequest behavior to that MCP-first dependency.
 
 ## Publish to the OpenAI Plugin Directory
 

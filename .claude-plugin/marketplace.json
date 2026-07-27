@@ -6,7 +6,7 @@
     {
       "name": "busabase",
       "source": "./",
-      "description": "Drive a Busabase workspace: list Bases/records, propose ChangeRequests, and merge approved ones — approval-first, human stays in control.",
+      "description": "Drive a Busabase workspace and create complete workspace apps — approval-first, human stays in control.",
       "category": "Productivity"
     }
   ]
