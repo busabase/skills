@@ -1,0 +1,119 @@
+# Busabase 技能与插件
+
+[English](./README.md) | **简体中文** | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md)
+
+适用于 [Busabase](https://busabase.com) 的智能体技能和插件。Busabase 是一个审批优先的知识库：
+AI 提出变更，由人工审核，只有获批的变更才会被合并。
+
+两个技能，四种安装方式，请选择你的智能体支持的方式。
+
+## 安装
+
+### `skills`（Claude Code、Cursor、Codex 等，持续更新）
+
+```bash
+npx skills add busabase/skills
+```
+
+### Claude Code 插件
+
+```bash
+/plugin marketplace add busabase/skills
+/plugin install busabase@busabase
+```
+
+### Codex 插件
+
+```bash
+codex plugin marketplace add busabase/skills
+codex plugin add busabase@busabase
+codex mcp login busabase
+```
+
+Codex 插件会连接到 `https://busabase.com/api/mcp`，打开标准的浏览器 OAuth
+流程，并提供一个包含 22 个工具的精简目录。无需配置 API 密钥。
+
+插件安装与 MCP 授权是两个独立的状态。浏览器显示 `Authentication complete` 后，
+请先验证已保存的连接，再开始 Busabase 任务：
+
+```bash
+codex mcp list
+```
+
+`busabase` 所在行的 `Auth` 应显示为 `OAuth`。如果仍显示 `Not logged in`，请再次运行
+`codex mcp login busabase`，并在该命令仍在运行时，在新打开的浏览器标签页中完成授权。
+登录成功后，请开始一个新的 Codex 任务，以便该任务加载已经过身份验证的工具目录。
+
+### MCP（任何支持 MCP 的智能体）
+
+将智能体指向你的工作区的 Streamable HTTP 端点：
+
+- 桌面端/本地：`http://localhost:15419/api/mcp`（无需身份验证）
+- 云端：`https://busabase.com/api/mcp`（发送 `Authorization: Bearer $BUSABASE_API_KEY`）
+
+Codex 可以通过标准 OAuth 直接使用完整的云端 MCP 功能：
+
+```bash
+codex mcp add busabase --url https://busabase.com/api/mcp
+codex mcp login busabase
+```
+
+根目录下的 [`.mcp.json`](./.mcp.json) 为通用 MCP 客户端配置本地端点。Codex 插件拥有
+独立的远程 [MCP 配置](./plugins/busabase/.mcp.json)；该文件位于插件目录中，因此会随插件一起打包。
+
+根目录下的 **busabase** 技能仍然是面向本地及通用智能体安装方式的完整 CLI/curl 指南。
+Codex 内置技能则特意采用 MCP 优先的方式：它依赖 OAuth 和精选工具目录，而不是读取
+`~/.busabase/.env`。
+
+如需从头设置工作区，请先粘贴 Busabase 控制面板中 **Agent Skills** 按钮提供的新手引导提示词。
+它会指导智能体完成连接、为第一个 Base 填充初始数据，然后运行上述任一安装命令。
+
+## 技能
+
+| 技能 | 功能 |
+| --- | --- |
+| [`busabase`](./skills/busabase/SKILL.md) | 通过 HTTP 操作 Busabase 工作区：列出 Base 和记录、提出 ChangeRequest，并合并已获批准的变更。 |
+| [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 将产品构想转化为完整的 Busabase 工作区应用，使用原生资源、受限数据访问和可审核的 AirApp。 |
+
+## 仓库结构
+
+这一个仓库支持上述所有安装方式：
+
+```
+skills/busabase/SKILL.md              技能（规范版本）——供 `skills`、Claude Code 和 Buda 使用
+skills/busabase-app-creator/SKILL.md  Busabase 工作区和 AirApp 创建指南
+.claude-plugin/plugin.json            Claude Code 插件清单（自动发现 ./skills/）
+.claude-plugin/marketplace.json       Claude Code 市场列表
+.agents/plugins/marketplace.json      Codex 市场列表
+plugins/busabase/.codex-plugin/plugin.json   Codex 插件清单
+plugins/busabase/.mcp.json                   Codex 的托管 OAuth MCP 配置
+plugins/busabase/skills/busabase/SKILL.md    Codex 要求技能必须位于插件目录内
+                                             （针对精选配置的 MCP 优先指南）
+plugins/busabase/skills/busabase-app-creator/SKILL.md
+                                             与 Busabase 依赖一起打包的应用创建器
+plugins/busabase/assets/                     Codex 随附的图标及浅色/深色徽标
+.mcp.json                             内置 MCP 服务器（Streamable HTTP）
+server.json                           官方 MCP Registry 条目（远程端点 → busabase.com/api/mcp）
+```
+
+> **为什么需要 Codex 专用 Busabase 技能？** Codex 只会打包 `plugins/<name>/` 中的文件。
+> 内置的 `busabase` 技能使用不同的连接约定：它通过托管 OAuth 和 MCP 工具连接，而不是使用
+> 本地 shell 配置。`busabase-app-creator` 则原样与它一起打包，并将连接、API 和 ChangeRequest
+> 行为委托给这个 MCP 优先的依赖。
+
+## 发布到 OpenAI Plugin Directory
+
+OpenAI Plugin Directory 和 MCP Registry 是两个独立的发布渠道。有关平台提交、域名验证、
+审核人员访问权限、测试提示词和生产环境冒烟测试，请参阅
+[`docs/openai-plugin-submission.md`](./docs/openai-plugin-submission.md)。
+
+## 发布到官方 MCP Registry
+
+```bash
+brew install mcp-publisher                       # 或从 Registry 的 releases 下载二进制文件
+mcp-publisher login dns --domain busabase.com --private-key <KEY>   # 验证 com.busabase/* 命名空间
+mcp-publisher publish                            # 发布 server.json——立即生效，无需审核
+```
+
+仅在发布 MCP Registry 更新时才递增 `server.json` 中的 `version`。GitHub 市场版本发布时，
+请单独递增 Codex 插件清单中的版本号。

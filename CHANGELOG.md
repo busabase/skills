@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-07-27
+
+- Move the bundled Codex MCP profile to the canonical `https://busabase.com/api/mcp` endpoint.
+- Add complete Simplified Chinese, Traditional Chinese, and Japanese installation documentation.
+- Add reciprocal language navigation across all README variants.
+
 ## 0.3.0 - 2026-07-27
 
 - Add the public `busabase-app-creator` skill for guided workspace and AirApp creation.
