@@ -1,5 +1,7 @@
 # Busabase Skills & Plugins
 
+**English** | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md)
+
 Agent Skills + plugins for [Busabase](https://busabase.com) — the approval-first knowledge base
 where AI proposes changes, a human reviews them, and only approved changes get merged.
 
@@ -28,7 +30,7 @@ codex plugin add busabase@busabase
 codex mcp login busabase
 ```
 
-The Codex plugin connects to `https://busabase.com/api/mcp/plugin`, opens the standard browser OAuth
+The Codex plugin connects to `https://busabase.com/api/mcp`, opens the standard browser OAuth
 flow, and exposes a focused 22-tool catalog. No API key setup is required.
 
 Plugin installation and MCP authorization are separate states. After the browser says

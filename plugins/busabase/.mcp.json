@@ -2,7 +2,7 @@
   "mcpServers": {
     "busabase": {
       "type": "http",
-      "url": "https://busabase.com/api/mcp/plugin"
+      "url": "https://busabase.com/api/mcp"
     }
   }
 }

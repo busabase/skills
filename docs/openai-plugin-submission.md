@@ -7,7 +7,7 @@ separate from the GitHub Codex marketplace and the MCP Registry entry.
 
 - Name: `Busabase`
 - Short description: `Approval-first AI knowledge`
-- MCP server: `https://busabase.com/api/mcp/plugin`
+- MCP server: `https://busabase.com/api/mcp`
 - Website: `https://busabase.com`
 - Support: `https://busabase.com/support`
 - Privacy: `https://busabase.com/privacy-policy`
@@ -26,7 +26,7 @@ Starter prompts:
    `OPENAI_APPS_CHALLENGE_TOKEN` for the Busabase Cloud deployment.
 2. Verify the portal can read `https://busabase.com/.well-known/openai-apps-challenge` as plain text.
 3. Invalidate CDN paths for `/.well-known/oauth-authorization-server` and
-   `/.well-known/oauth-protected-resource/api/mcp/plugin`.
+   `/.well-known/oauth-protected-resource/api/mcp`.
 4. Confirm both URLs return current metadata without a cache-busting query parameter.
 5. Scan the MCP server and confirm exactly 22 tools, complete annotations, and OAuth security
    schemes on every tool.
