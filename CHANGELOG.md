@@ -8,6 +8,8 @@
   real-data proxying and continuous AirApp maintenance.
 - Refresh the bundled Codex skill and bump its version so existing `0.3.1`
   caches receive the corrected scaffold.
+- Replace the plugin's raster artwork and green accent with Busabase's canonical
+  light and dark SVG marks.
 
 ## 0.3.1 - 2026-07-27
 

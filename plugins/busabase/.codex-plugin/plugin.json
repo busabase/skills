@@ -24,9 +24,9 @@
       "Show Busabase change requests awaiting my review.",
       "Create a new Busabase workspace app from this product idea."
     ],
-    "brandColor": "#10A37F",
-    "composerIcon": "./assets/icon.png",
-    "logo": "./assets/logo.png",
-    "logoDark": "./assets/logo-dark.png"
+    "brandColor": "#171717",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "logoDark": "./assets/icon-dark.svg"
   }
 }
