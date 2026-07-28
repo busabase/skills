@@ -108,7 +108,8 @@ works with no setup — you don't even need the `source` from the **Connect** st
 npx busabase-cli whoami                  # active space + user
 npx busabase-cli bases list              # the tables
 npx busabase-cli records list --base-id <base-id> --limit 20 --output json
-npx busabase-cli change-requests list    # the review queue
+npx busabase-cli change-requests list \
+  --status-json '["in_review","approved","conflict"]' --limit 20 --output json
 
 # Which account / which space am I on? (offline — reads the stored config, no API call)
 npx busabase-cli auth status             # accounts, grouped by host, * = active
@@ -185,6 +186,12 @@ npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
 For record listing, keep `--limit` at `100` or below and use `nextCursor` with `--cursor` for
 additional pages.
+When checking unfinished CRs, prefer the bounded `change-requests list` form above. If you
+must prove that no CR targets a specific node and the live API has no node filter, follow
+`nextCursor` for at most five 20-item pages and filter locally by exact node id. If another cursor
+remains, report the check as inconclusive instead of assuming absence. A full `change-requests list
+--output json` can return large nested AirApp file trees and should be used only when that complete
+payload is actually required.
 
 ### 2. `curl` — quick, zero install
 
@@ -208,6 +215,40 @@ curl "$BUSABASE_BASE_URL/api/v1/openapi.json"   # machine-readable — large, so
 ```
 
 MCP-capable agents can connect to `$BUSABASE_BASE_URL/api/mcp` (Streamable HTTP) instead.
+
+### Writing code against it, rather than driving it from a shell
+
+The three routes above are for *you*, working a task through curl / CLI / MCP. When the deliverable
+is code that talks to Busabase, hand off:
+
+| You are… | Use |
+| --- | --- |
+| Writing TypeScript/JavaScript against the API | `busabase-sdk` — `createBusabaseClient({ baseUrl, apiKey })`. One client, fully typed against the same contract `/api/v1` serves. It is the only client the SDK ships. |
+| Creating or continuously evolving a Busabase **AirApp** (an app that runs inside a workspace) | the `busabase-app-creator` skill — it owns identity checks, approved resource/schema/UI changes, scaffolding/runtime upgrades, data-access budgets, and the review flow. Don't hand-roll one from here. |
+
+Two auth facts worth knowing before you debug a `401`:
+
+- `/api/v1` accepts an ambient **session cookie** only for *same-origin browser* requests (that is how
+  an AirApp acts as the logged-in user). Your curl calls are neither, so they always need
+  `Authorization: Bearer` — a cookie alone will be rejected, by design.
+- An AirApp reaches the API at plain `/api/v1/…` on its own origin. There is no bridge prefix and no
+  Cloud-vs-Desktop path fork; if you see either in existing AirApp code, it predates this and is wrong.
+
+### Deployed-version and AirApp compatibility preflight
+
+Before diagnosing or changing a deployed AirApp, probe the target deployment rather than assuming a
+merged PR is live:
+
+```bash
+curl -s "$BUSABASE_BASE_URL/api/health"       # inspect buildSha and buildNumber
+curl -s -o /dev/null -w '%{http_code}' "$BUSABASE_BASE_URL/api/v1/health"
+curl -s -o /dev/null -w '%{http_code}' "$BUSABASE_BASE_URL/__busabase_api__/api/health"
+```
+
+`buildSha`/`buildNumber` identify the code actually deployed; a merged PR alone does not. A current
+deployment should return `200` from `/api/v1/health` and `404` from the obsolete
+`/__busabase_api__/...` prefix. If those expectations fail, separate deployment lag from an AirApp
+source problem before proposing a file CR.
 
 ## Starter blueprints — schemas to copy
 
