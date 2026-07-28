@@ -1,5 +1,5 @@
+import { createRuntimeClient } from "../busabase-client.js";
 import { appConfig } from "../config.js";
-import { createRuntimeClient } from "../rpc-client.js";
 
 const allowedReads = new Set(appConfig.permissions.read_procedures);
 
@@ -7,7 +7,6 @@ const requireProcedure = (procedure) => {
   if (!allowedReads.has(procedure)) throw new Error(`PROCEDURE_DENIED: ${procedure}`);
 };
 
-const INITIAL_RECORD_LIMIT = 50;
 const PENDING_CHANGE_REQUEST_LIMIT = 20;
 const PENDING_STATUSES = ["in_review", "changes_requested", "approved", "conflict"];
 
@@ -18,16 +17,18 @@ const normalizeRecords = (records, baseKey) =>
     fields: record.headCommit?.fields || record.fields || {},
   }));
 
-const readPage = async (client, baseId, baseKey, cursor) => {
+const readPage = async (client, base, cursor) => {
   requireProcedure("records.listPaged");
+  const { baseId, key: baseKey } = base;
   const page = await client.records.listPaged({
     baseId,
-    limit: INITIAL_RECORD_LIMIT,
+    limit: base.readLimit,
     ...(cursor ? { cursor } : {}),
   });
   return {
     records: normalizeRecords(page.records, baseKey),
     nextCursor: page.nextCursor || null,
+    limit: base.readLimit,
   };
 };
 
@@ -58,11 +59,11 @@ export const busabaseProvider = {
       throw new Error(`SCHEMA_INCOMPLETE: ${missing.map((base) => base.slug).join(", ")}`);
     }
     runtimeClient = client;
-    runtimeBases = new Map(bases.map((base) => [base.key, base.baseId]));
+    runtimeBases = new Map(bases.map((base) => [base.key, base]));
     const [pages, changeRequestPage] = await Promise.all([
       Promise.all(
         bases.map(async (base) => {
-          return [base.key, await readPage(client, base.baseId, base.key)];
+          return [base.key, await readPage(client, base)];
         }),
       ),
       readChangeRequests(client),
@@ -71,17 +72,14 @@ export const busabaseProvider = {
       provider: {
         ok: true,
         name: "busabase",
-        mode: "busabase_sdk_rpc",
+        mode: "busabase_sdk_openapi",
         deployment: appConfig.deployment,
         readOnly: appConfig.readOnly,
       },
       bases,
       records: pages.flatMap(([, page]) => page.records),
       pageInfo: Object.fromEntries(
-        pages.map(([key, page]) => [
-          key,
-          { nextCursor: page.nextCursor, limit: INITIAL_RECORD_LIMIT },
-        ]),
+        pages.map(([key, page]) => [key, { nextCursor: page.nextCursor, limit: page.limit }]),
       ),
       changeRequests: changeRequestPage.changeRequests,
       changeRequestPageInfo: {
@@ -91,8 +89,8 @@ export const busabaseProvider = {
     };
   },
   async loadMore(baseKey, cursor) {
-    const baseId = runtimeBases.get(baseKey);
-    if (!runtimeClient || !baseId || !cursor) throw new Error(`SCHEMA_INCOMPLETE: ${baseKey}`);
-    return readPage(runtimeClient, baseId, baseKey, cursor);
+    const base = runtimeBases.get(baseKey);
+    if (!runtimeClient || !base || !cursor) throw new Error(`SCHEMA_INCOMPLETE: ${baseKey}`);
+    return readPage(runtimeClient, base, cursor);
   },
 };

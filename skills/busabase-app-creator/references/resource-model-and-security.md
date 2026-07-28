@@ -111,7 +111,7 @@ Rules:
 | Runtime | Read resources | Propose writes | Use Vault values |
 | --- | --- | --- | --- |
 | Creator Agent/CLI with selected Busabase connection | Approved workspace metadata and APIs | Yes, through ChangeRequests and explicit approval | Only when an explicitly supported trusted Agent path provides them; never print or persist them |
-| Authenticated AirApp session | Only declared SDK RPC procedures and exact resource ids | Only declared ChangeRequest-producing actions | No |
+| Authenticated AirApp session | Only declared SDK procedures (`/api/v1` on its own origin) and exact resource ids | Only declared ChangeRequest-producing actions | No |
 | Public embed | Explicit read-only allowlist | No | No |
 | Trusted Busabase Workflow/server context | Resources granted to the workflow | According to the workflow's reviewed contract | Yes, for declared requirements only |
 

@@ -1,6 +1,6 @@
 {
   "name": "busabase",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Approval-first Busabase knowledge workflows and guided workspace app creation.",
   "author": { "name": "Busabase", "url": "https://busabase.com" },
   "homepage": "https://busabase.com/support",
