@@ -142,13 +142,16 @@ function renderDetail() {
 
 function renderSettings() {
   const provider = state.payload?.provider || {};
+  const recordBudgets = appConfig.schema.bases
+    .map((base) => `${base.name}: ${base.readLimit}`)
+    .join("; ");
   const rows = [
     [messages.provider, provider.name || state.provider.name],
     [messages.mode, provider.mode || messages.notSet],
     [messages.deployment, appConfig.deployment],
     [messages.space, appConfig.spaceId || messages.notSet],
     [messages.configuredBases, appConfig.schema.bases.map((base) => base.slug).join(", ")],
-    [messages.initialWindow, "50 records per Base; 20 pending reviews"],
+    [messages.initialWindow, `${recordBudgets}; 20 pending reviews`],
   ];
   byId("settingsGrid").innerHTML = rows
     .map(

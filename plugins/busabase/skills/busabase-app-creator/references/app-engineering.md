@@ -14,7 +14,7 @@ Use these standards after the product blueprint is approved. They are the techni
 ## Data Access
 
 - Each screen declares its data sources, server filters/sorts, initial limit, and continuation behavior.
-- Default to 50 records per Base and 20 relevant pending ChangeRequests. Use smaller limits for compact widgets.
+- Declare each Base's `read_limit` in the blueprint (default 50, allowed 1–50) and consume the emitted `readLimit` for every page. Keep pending ChangeRequests at 20 or fewer. Use smaller Base limits for compact widgets.
 - Run independent bounded reads in parallel. Preserve cursors and fetch one next page per explicit user action.
 - Search uses a server query when available; otherwise label it as filtering loaded rows.
 - Detail opening fetches one known record or bounded related collection. It never triggers a workspace scan.
@@ -75,4 +75,4 @@ Before deployment, verify:
 9. Public embed, when enabled, remains read-only and cannot access Vault or ChangeRequest actions.
 10. Trusted integrations are exercised only after their own approval and readiness checks.
 
-Local Demo acceptance proves the interface, not the Busabase bridge. Real-data verification happens only after the AirApp ChangeRequest is merged and the target Busabase runs merged HEAD.
+Local Demo acceptance proves the interface only. Real data is reachable locally too — point `server.js`'s dev proxy at a Busabase with `BUSABASE_BASE_URL` (see `runtime-and-sdk.md`) and the same source reads real records — but that authenticates with your own key, so per-user permissions and the embed path are still proven only after the AirApp ChangeRequest is merged and the target Busabase runs merged HEAD.

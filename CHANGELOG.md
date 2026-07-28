@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 - 2026-07-28
+
+- Replace the removed `createBusabaseRpcClient` AirApp runtime with
+  `createBusabaseClient` against same-origin `/api/v1`.
+- Sync the public app creator with the canonical kapps skill, including local
+  real-data proxying and continuous AirApp maintenance.
+- Refresh the bundled Codex skill and bump its version so existing `0.3.1`
+  caches receive the corrected scaffold.
+
 ## 0.3.1 - 2026-07-27
 
 - Move the bundled Codex MCP profile to the canonical `https://busabase.com/api/mcp` endpoint.
