@@ -125,6 +125,12 @@ export function validateBlueprint(blueprint) {
     baseSlugs.add(slug);
     resourceSlugs.add(slug);
     if (!String(base.name || "").trim()) error(`${prefix}.name is required.`);
+    if (
+      base.read_limit !== undefined &&
+      (!Number.isInteger(base.read_limit) || base.read_limit < 1 || base.read_limit > 50)
+    ) {
+      error(`${prefix}.read_limit must be an integer from 1 to 50.`);
+    }
     const fields = asArray(base.fields);
     if (fields.length === 0) error(`${prefix}.fields must contain at least one field.`);
     const fieldSlugs = new Set();
@@ -346,7 +352,7 @@ export async function verifyInstalledSdk(projectPath) {
   const probe = [
     'import("busabase-sdk")',
     ".then((sdk) => {",
-    '  if (typeof sdk.createBusabaseRpcClient !== "function") process.exit(2);',
+    '  if (typeof sdk.createBusabaseClient !== "function") process.exit(2);',
     "})",
     ".catch((error) => { console.error(error.message); process.exit(1); });",
   ].join("");
@@ -357,7 +363,7 @@ export async function verifyInstalledSdk(projectPath) {
     });
   } catch (error) {
     if (error?.code === 2)
-      throw new Error("Installed busabase-sdk does not export createBusabaseRpcClient.");
+      throw new Error("Installed busabase-sdk does not export createBusabaseClient.");
     throw new Error(
       `Unable to import installed busabase-sdk: ${error?.stderr || error?.message || error}`,
     );
@@ -404,6 +410,7 @@ const deploymentConfig = (blueprint) => ({
       slug: base.slug,
       nodeId: base.node_id,
       baseId: base.base_id,
+      readLimit: base.read_limit ?? 50,
       description: base.description || "",
       fields: base.fields,
       views: asArray(base.views).map((view) => ({
@@ -524,7 +531,7 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
     "app/styles.css",
     "app/js/app.js",
     "app/js/config.js",
-    "app/js/rpc-client.js",
+    "app/js/busabase-client.js",
     "app/js/providers/busabase-provider.js",
     "app/js/providers/demo-provider.js",
     "scripts/check.mjs",
@@ -568,28 +575,65 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
       "Embedded blueprint must include all materialized Folder/Node/Base/View/resource ids.",
     );
   }
-  const files = [path.join(root, "server.js"), ...(await collectTextFiles(path.join(root, "app")))];
+  // `server.js` is checked separately: it is the one file allowed to mention a
+  // credential, because its dev proxy reads it from the environment.
+  const serverSource = await readFile(path.join(root, "server.js"), "utf8");
+  const configSource = await readFile(path.join(root, "app/js/config.js"), "utf8");
+  const configMatch = configSource.match(/^\s*export const appConfig = ([\s\S]+);\s*$/);
+  if (!configMatch) throw new Error("Generated config must export one JSON appConfig object.");
+  const appConfig = JSON.parse(configMatch[1]);
+  const configuredBases = asArray(appConfig.schema?.bases);
+  for (const [index, base] of configuredBases.entries()) {
+    if (!Number.isInteger(base.readLimit) || base.readLimit < 1 || base.readLimit > 50) {
+      throw new Error(`Configured Base ${base.key || index} has an invalid readLimit.`);
+    }
+    const expected = blueprint.workspace.bases[index]?.read_limit ?? 50;
+    if (base.readLimit !== expected) {
+      throw new Error(`Configured Base ${base.key || index} readLimit does not match blueprint.`);
+    }
+  }
+  const files = await collectTextFiles(path.join(root, "app"));
   const source = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");
-  if (!source.includes("createBusabaseRpcClient"))
-    throw new Error("RPC client integration is missing.");
-  if (!source.includes("const INITIAL_RECORD_LIMIT = 50"))
-    throw new Error("Bounded initial record limit is missing.");
+  if (!source.includes("createBusabaseClient"))
+    throw new Error("SDK client integration is missing.");
+  const providerSource = await readFile(
+    path.join(root, "app/js/providers/busabase-provider.js"),
+    "utf8",
+  );
+  if (!/limit:\s*base\.readLimit/.test(providerSource)) {
+    throw new Error("Busabase provider must consume each configured Base readLimit.");
+  }
   if (/while\s*\(\s*cursor\s*\)/.test(source))
     throw new Error("Automatic cursor exhaustion is forbidden during initial loading.");
   if (/client\.bases\.list\s*\(/.test(source))
     throw new Error("Runtime Base discovery is forbidden; use materialized Base ids.");
-  const expectedPath =
-    blueprint.app.deployment === "cloud"
-      ? "/__busabase_api__/api/rpc/core"
-      : "/__busabase_api__/api/rpc";
-  if (!source.includes(expectedPath)) throw new Error(`Expected RPC path missing: ${expectedPath}`);
+  // The app talks to its own origin in every environment — same-origin inside
+  // Busabase, this project's dev proxy when run standalone. Anything absolute or
+  // prefixed would only work in one of them.
+  if (!source.includes("window.location.origin"))
+    throw new Error("Runtime client must target its own origin.");
+  if (source.includes("__busabase_api__"))
+    throw new Error("Obsolete /__busabase_api__ bridge prefix found.");
+  // Asset references must be RELATIVE. Under the Local Node engine the app is
+  // reverse-proxied onto a sub-path of busabase's origin, so `src="/js/app.js"`
+  // resolves against the origin root (busabase itself) and 404s — the app renders
+  // under Nodepod but not under Local Node. `/api/v1/...` is deliberately absolute
+  // and unaffected: it is an API call, not an asset.
+  const absoluteAssetRef = /(?:src|href)="\/(?!\/)|from\s+["']\/(?!\/)/;
+  if (absoluteAssetRef.test(source))
+    throw new Error(
+      "Absolute asset path found; use relative paths so the Local Node sub-path proxy works.",
+    );
   const forbidden = [
+    [/baseUrl\s*:\s*["'`]https?:\/\//, "hard-coded Busabase URL"],
     [/BUSABASE_API_KEY/i, "API key reference"],
-    [/authorization\s*[:=]\s*["'`]Bearer/i, "Bearer authorization"],
+    [/Bearer/i, "Bearer authorization"],
     [/\b(?:react|vite|jsx)\b/i, "frontend build stack"],
   ];
   for (const [pattern, label] of forbidden)
-    if (pattern.test(source)) throw new Error(`Forbidden ${label} found.`);
+    if (pattern.test(source)) throw new Error(`Forbidden ${label} found in browser source.`);
+  if (/Bearer\s+(?!\$\{)[A-Za-z0-9_-]{8,}/.test(serverSource))
+    throw new Error("Literal Bearer token found in server.js.");
   return {
     ok: true,
     sdkVersion,

@@ -4,7 +4,10 @@ Use this reference after blueprint approval.
 
 ## Connect Safely
 
-Read `../busabase/SKILL.md`. For Cloud, prefer `busabase-cli login`, confirm the selected Space, and sanitize all connection reporting. For Desktop, probe the configured local URL without assuming authentication.
+Read `../busabase/SKILL.md`. For Cloud, use the already-selected `busabase-cli` connection or local
+shell environment, confirm the selected Space, and sanitize all connection reporting. If no
+credential exists, require `busabase-cli login --device-code`; never ask for a key in chat. For
+Desktop, probe the configured local URL without assuming authentication.
 
 Never print `~/.busabase/.env`, API keys, cookies, or authorization headers.
 
@@ -39,13 +42,16 @@ Submit the complete accepted file tree through the AirApp create surface:
   "visibility": "workspace",
   "version": "0.1.0",
   "mergeMode": "replace",
+  "autoMerge": false,
   "files": [
     { "path": "package.json", "content": "..." }
   ]
 }
 ```
 
-Do not pass `autoMerge: true`. The response must be a pending CR/materialized-false result. If live OpenAPI differs, follow it and update the payload without weakening review-first behavior.
+Pass `autoMerge: false` explicitly; omitting it can merge immediately when the selected credential
+has write permission. The response must be a pending CR/materialized-false result. If live OpenAPI
+differs, follow it and update the payload without weakening review-first behavior.
 
 ## CR Review Summary
 
@@ -53,7 +59,7 @@ Report:
 
 - CR id and target AirApp name;
 - number of files and exact SDK version;
-- Cloud/Desktop RPC path;
+- the Space the app targets;
 - configured resource slugs;
 - configured Folder/Node/Base/View/resource ids (sanitized, never secrets);
 - declared Vault requirement names and trusted execution owners, never values;
@@ -92,7 +98,7 @@ After merge:
 2. confirm seed records from canonical record reads;
 3. give the user the target AirApp URL;
 4. Run merged HEAD in Busabase;
-5. verify provider mode, RPC path, Base count, record count, browser console, and responsive layout.
+5. verify provider mode, Base count, record count, browser console, and responsive layout.
 
 If target Run fails, separate:
 
