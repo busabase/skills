@@ -137,6 +137,7 @@ Use JSON, schema version `1`. Keep secrets out.
         "slug": "launches",
         "node_id": "filled-after-structure-creation",
         "base_id": "filled-after-structure-creation",
+        "read_limit": 50,
         "description": "Launches visible to the team.",
         "views": [
           {
@@ -209,6 +210,10 @@ Use JSON, schema version `1`. Keep secrets out.
 
 During approval, materialized ids may be absent or empty because the structure does not exist yet. Immediately after structure creation, read canonical results back and populate every Folder/Node/Base/View/resource id before scaffolding. `scaffold` must reject a blueprint that still lacks them. Include `changeRequests.listPaged` only when the UI actually renders a pending-review summary. See `resource-model-and-security.md` for optional resource and Vault shapes.
 
+Each Base may declare `read_limit`, an integer from 1 through 50. It is the one-page interactive
+budget emitted as `readLimit` in deployment config and consumed by both providers. Omit it to use the
+default of 50; use a smaller value for compact projections such as a 14-report activity window.
+
 ## Field Rules
 
 - Make the first field short, human-readable, and required. It becomes the record label.
@@ -218,6 +223,7 @@ During approval, materialized ids may be absent or empty because the structure d
 - Use kebab-case physical slugs and stable lowercase keys.
 - Store media/files as attachments or Drive references, not large text fields.
 - Keep optional fields optional; do not invent fake required data.
+- Give each Base an explicit `read_limit` when its screen needs less than the default 50.
 - Warn about a large first version, but do not enforce a Base/field count limit after user confirmation.
 
 ## Relation Shape

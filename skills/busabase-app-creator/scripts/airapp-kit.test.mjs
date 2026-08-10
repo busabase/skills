@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   checkGeneratedProject,
@@ -10,6 +12,8 @@ import {
   validateBlueprint,
   verifyInstalledSdk,
 } from "./airapp-kit.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const validBlueprint = () => ({
   schema_version: 1,
@@ -182,13 +186,76 @@ test("scaffolds and checks a project without network access", async () => {
   assert.match(config, /"nodeId": "node-doc-launch-brief"/);
   assert.match(config, /"nodeId": "node-drive-launch-files"/);
   assert.match(config, /"key": "PUBLISH_API_KEY"/);
-  assert.match(provider, /const INITIAL_RECORD_LIMIT = 50/);
+  assert.match(config, /"readLimit": 50/);
+  assert.match(provider, /base\.readLimit/);
+  assert.match(provider, /limit: base\.readLimit/);
   assert.match(provider, /status: PENDING_STATUSES/);
   assert.doesNotMatch(provider, /client\.bases\.list\s*\(/);
   assert.doesNotMatch(provider, /while\s*\(\s*cursor\s*\)/);
   const check = await checkGeneratedProject(outputPath, { requireBundle: false });
   assert.equal(check.ok, true);
   assert.equal(check.deployment, "cloud");
+});
+
+test("emits and consumes custom per-Base read budgets", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-budget-test-"));
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  const outputPath = path.join(temporary, "generated");
+  const blueprint = validBlueprint();
+  blueprint.workspace.bases[0].key = "reports";
+  blueprint.workspace.bases[0].name = "Reports";
+  blueprint.workspace.bases[0].slug = "reports";
+  blueprint.workspace.bases[0].read_limit = 14;
+  blueprint.workspace.bases[0].node_id = "node-base-reports";
+  blueprint.workspace.bases[0].base_id = "base-reports";
+  blueprint.workspace.bases[0].views = [];
+  blueprint.workspace.bases.push({
+    key: "issues",
+    name: "Issues",
+    slug: "issues",
+    read_limit: 50,
+    node_id: "node-base-issues",
+    base_id: "base-issues",
+    fields: [{ slug: "title", name: "Title", type: "text", required: true }],
+    views: [],
+    seed_records: [],
+  });
+  blueprint.ui.primary_base = "reports";
+  blueprint.ui.screens[0].data_sources = ["reports", "issues"];
+  await writeFile(blueprintPath, JSON.stringify(blueprint, null, 2), "utf8");
+  await scaffoldProject({
+    blueprintPath,
+    outputPath,
+    sdkVersion: "0.9.7",
+    skipInstall: true,
+  });
+  const config = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
+  const provider = await readFile(
+    path.join(outputPath, "app/js/providers/busabase-provider.js"),
+    "utf8",
+  );
+  assert.match(config, /"key": "reports"[\s\S]*?"readLimit": 14/);
+  assert.match(config, /"key": "issues"[\s\S]*?"readLimit": 50/);
+  assert.match(provider, /base\.readLimit/);
+  assert.match(provider, /limit: base\.readLimit/);
+  const check = await checkGeneratedProject(outputPath, { requireBundle: false });
+  assert.equal(check.ok, true);
+  const vendorPath = path.join(outputPath, "app/vendor");
+  await mkdir(vendorPath, { recursive: true });
+  await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
+  const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
+    cwd: outputPath,
+  });
+  assert.match(generatedCheck.stdout, /AirApp checks OK/);
+});
+
+test("rejects invalid per-Base read budgets", () => {
+  for (const readLimit of [0, 51, 1.5]) {
+    const blueprint = validBlueprint();
+    blueprint.workspace.bases[0].read_limit = readLimit;
+    const result = validateBlueprint(blueprint);
+    assert.ok(result.errors.some((message) => message.includes("read_limit")));
+  }
 });
 
 test("refuses to scaffold before Busabase ids are materialized", async () => {
@@ -263,7 +330,7 @@ test("rejects invalid native View field configuration", () => {
   );
 });
 
-test("scaffolds the Desktop RPC path without requiring a Space id", async () => {
+test("scaffolds a Desktop app without requiring a Space id", async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-desktop-test-"));
   const blueprintPath = path.join(temporary, "blueprint.json");
   const outputPath = path.join(temporary, "generated");
@@ -277,13 +344,15 @@ test("scaffolds the Desktop RPC path without requiring a Space id", async () => 
     sdkVersion: "0.9.7",
     skipInstall: true,
   });
-  const source = await readFile(path.join(outputPath, "app/js/rpc-client.js"), "utf8");
-  assert.match(source, /\/__busabase_api__\/api\/rpc/);
+  const source = await readFile(path.join(outputPath, "app/js/busabase-client.js"), "utf8");
+  // Same-origin in every environment — no Cloud/Desktop path fork any more.
+  assert.match(source, /window\.location\.origin/);
+  assert.doesNotMatch(source, /__busabase_api__/);
   const check = await checkGeneratedProject(outputPath, { requireBundle: false });
   assert.equal(check.deployment, "desktop");
 });
 
-test("verifies the installed SDK RPC export", async () => {
+test("verifies the installed SDK client export", async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-sdk-test-"));
   const modulePath = path.join(temporary, "node_modules", "busabase-sdk");
   await mkdir(modulePath, { recursive: true });
@@ -294,7 +363,7 @@ test("verifies the installed SDK RPC export", async () => {
   );
   await writeFile(
     path.join(modulePath, "index.js"),
-    "export const createBusabaseRpcClient = () => ({});\n",
+    "export const createBusabaseClient = () => ({});\n",
     "utf8",
   );
   await verifyInstalledSdk(temporary);

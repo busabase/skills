@@ -59,13 +59,13 @@ node --check server.js
 Static checks must verify:
 
 - exact `busabase-sdk` version, no range;
-- `createBusabaseRpcClient` present;
-- correct Cloud/Desktop bridge path;
+- `createBusabaseClient` present and targeting `window.location.origin`;
+- same-origin `/api/v1` client path for Cloud and Desktop, with no obsolete bridge prefix;
 - no API key, Bearer header, React, Vite, or mutation bypass;
 - declared Bases and procedures match blueprint;
 - exact materialized Folder/Node/Base/View/resource ids exist in generated config;
 - only non-secret Vault requirements exist in config; no value or browser secret API exists;
-- every interactive read is bounded, uses server filters/sorts where supported, and contains no automatic cursor-exhaustion or per-record request loop;
+- every Base config has an integer `readLimit` from 1–50 matching blueprint `read_limit` (default 50), providers consume it, and interactive reads contain no automatic cursor-exhaustion or per-record request loop;
 - Demo records exist;
 - required files exist.
 
@@ -97,7 +97,7 @@ Tell the user explicitly: local Demo validates the generated UI and server only.
 After the AirApp CR is merged, Run it inside the selected Busabase deployment and verify:
 
 - dependency install and server ready logs;
-- provider reports `busabase_sdk_rpc`;
+- provider reports `busabase_sdk_openapi`;
 - deployment path is `cloud` or `desktop` as approved;
 - configured Bases resolve;
 - cold load and every subsequent search/filter/refresh/navigation action make only their expected bounded requests and never continue paging in the background;
