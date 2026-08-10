@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 - 2026-08-10
+
+- Split the Claude Code distribution into a dedicated `claude/` plugin package, following the
+  current marketplace package layout used by ChatCut.
+- Connect Claude Code directly to the hosted Busabase MCP endpoint with browser OAuth and the
+  plugin-scoped server id `plugin:busabase:busabase`.
+- Add Claude-specific MCP-first guidance, strict manifest validation, and complete install, login,
+  verification, update, and recovery documentation.
+- Keep the root `.mcp.json` local profile and the Codex plugin package unchanged.
+
 ## 0.3.2 - 2026-07-28
 
 - Replace the removed `createBusabaseRpcClient` AirApp runtime with

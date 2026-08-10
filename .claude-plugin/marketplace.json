@@ -1,13 +1,33 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "busabase",
-  "owner": { "name": "Busabase", "url": "https://busabase.com" },
+  "description": "Official Busabase plugins for Claude Code.",
+  "owner": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
+  "metadata": {
+    "description": "Approval-first Busabase knowledge and workspace app workflows for Claude Code"
+  },
   "plugins": [
     {
       "name": "busabase",
-      "source": "./",
+      "source": "./claude",
       "description": "Drive a Busabase workspace and create complete workspace apps — approval-first, human stays in control.",
-      "category": "Productivity"
+      "category": "productivity",
+      "homepage": "https://busabase.com",
+      "author": {
+        "name": "Busabase",
+        "url": "https://busabase.com"
+      },
+      "license": "MIT",
+      "keywords": [
+        "busabase",
+        "knowledge-base",
+        "change-request",
+        "workspace-app",
+        "mcp"
+      ]
     }
   ]
 }

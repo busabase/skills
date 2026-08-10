@@ -18,9 +18,14 @@ npx skills add busabase/skills
 ### Claude Code 插件
 
 ```bash
-/plugin marketplace add busabase/skills
-/plugin install busabase@busabase
+claude plugin marketplace add https://github.com/busabase/skills.git
+claude plugin install busabase@busabase
+claude mcp login plugin:busabase:busabase
 ```
+
+Claude Code 插件通过浏览器 OAuth 连接 `https://busabase.com/api/mcp`，内置服务器名称为
+`plugin:busabase:busabase`。安装和登录后请开始新会话。完整流程请参阅
+[`docs/claude-code-install.md`](./docs/claude-code-install.md)。
 
 ### Codex 插件
 
@@ -58,11 +63,12 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-根目录下的 [`.mcp.json`](./.mcp.json) 为通用 MCP 客户端配置本地端点。Codex 插件拥有
-独立的远程 [MCP 配置](./plugins/busabase/.mcp.json)；该文件位于插件目录中，因此会随插件一起打包。
+根目录下的 [`.mcp.json`](./.mcp.json) 为通用 MCP 客户端配置本地端点。Claude 包使用独立的
+托管 OAuth [MCP 配置](./claude/.mcp.json)；Codex 插件使用另一份远程
+[MCP 配置](./plugins/busabase/.mcp.json)。
 
 根目录下的 **busabase** 技能仍然是面向本地及通用智能体安装方式的完整 CLI/curl 指南。
-Codex 内置技能则特意采用 MCP 优先的方式：它依赖 OAuth 和精选工具目录，而不是读取
+Claude 和 Codex 内置技能都采用 MCP 优先方式：它们依赖 OAuth 和精选工具目录，而不是读取
 `~/.busabase/.env`。
 
 如需从头设置工作区，请先粘贴 Busabase 控制面板中 **Agent Skills** 按钮提供的新手引导提示词。
@@ -80,10 +86,13 @@ Codex 内置技能则特意采用 MCP 优先的方式：它依赖 OAuth 和精�
 这一个仓库支持上述所有安装方式：
 
 ```
-skills/busabase/SKILL.md              技能（规范版本）——供 `skills`、Claude Code 和 Buda 使用
+skills/busabase/SKILL.md              面向本地及通用智能体的规范技能
 skills/busabase-app-creator/SKILL.md  Busabase 工作区和 AirApp 创建指南
-.claude-plugin/plugin.json            Claude Code 插件清单（自动发现 ./skills/）
 .claude-plugin/marketplace.json       Claude Code 市场列表
+claude/.claude-plugin/plugin.json     Claude Code 插件清单
+claude/.mcp.json                      Claude Code 的托管 OAuth MCP 配置
+claude/skills/busabase/SKILL.md       Claude 专用 MCP 优先连接指南
+claude/skills/busabase-app-creator/   指向共享应用创建器技能的符号链接
 .agents/plugins/marketplace.json      Codex 市场列表
 plugins/busabase/.codex-plugin/plugin.json   Codex 插件清单
 plugins/busabase/.mcp.json                   Codex 的托管 OAuth MCP 配置
@@ -96,10 +105,9 @@ plugins/busabase/assets/                     Codex 随附的图标及浅色/深�
 server.json                           官方 MCP Registry 条目（远程端点 → busabase.com/api/mcp）
 ```
 
-> **为什么需要 Codex 专用 Busabase 技能？** Codex 只会打包 `plugins/<name>/` 中的文件。
-> 内置的 `busabase` 技能使用不同的连接约定：它通过托管 OAuth 和 MCP 工具连接，而不是使用
-> 本地 shell 配置。`busabase-app-creator` 则原样与它一起打包，并将连接、API 和 ChangeRequest
-> 行为委托给这个 MCP 优先的依赖。
+> **为什么需要主机专用技能？** Claude Code 将服务器命名为 `plugin:busabase:busabase`，Codex
+> 使用 `busabase`；两者都使用托管 OAuth，而不是本地 shell 配置。共享应用创建器会把连接行为
+> 委托给对应主机的 MCP 优先技能。
 
 ## 发布到 OpenAI Plugin Directory
 
