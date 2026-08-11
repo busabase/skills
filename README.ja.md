@@ -6,7 +6,7 @@
 優先するナレッジベースで、AI が変更を提案し、人間がレビューし、承認された変更だけが
 マージされます。
 
-2 つのスキルを 4 通りの方法でインストールできます。エージェントが対応する方法を選んでください。
+2 つのスキルを 5 通りの方法でインストールできます。エージェントが対応する方法を選んでください。
 
 ## インストール
 
@@ -15,6 +15,17 @@
 ```bash
 npx skills add busabase/skills
 ```
+
+### Agent Plugins v1（ポータブルパッケージ）
+
+リポジトリのルートは [Agent Plugins Specification v1.0.0](https://agent-plugins.org/) に準拠します。
+`plugin.json` はポータブルマニフェスト、`skills/` は Agent Skills、`mcp.json` はホスト型
+Streamable HTTP MCP サーバーの標準設定です。Agent Plugins 形式をサポートするクライアントは、
+このリポジトリのルートをインストールまたは読み込めます。
+
+Agent Plugins v1 では OAuth と認証情報の管理はクライアント側の責任です。既存の Claude Code と
+Codex パッケージは、それぞれ専用のブラウザー OAuth 動作を維持します。互換性対応表と検証方法は
+[`docs/agent-plugins.md`](./docs/agent-plugins.md) を参照してください。
 
 ### Claude Code プラグイン
 
@@ -67,7 +78,8 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-ルートの [`.mcp.json`](./.mcp.json) は、一般的な MCP クライアント向けにローカル
+ポータブルなルート [`mcp.json`](./mcp.json) は Agent Plugins v1 形式でホスト型エンドポイントを
+宣言します。従来のルート [`.mcp.json`](./.mcp.json) は、一般的な MCP クライアント向けにローカル
 エンドポイントを設定します。Claude パッケージは専用のホスト型 OAuth
 [MCP 設定](./claude/.mcp.json) を使用し、Codex プラグインは別のリモート
 [MCP 設定](./plugins/busabase/.mcp.json) を使用します。
@@ -92,6 +104,8 @@ codex mcp login busabase
 この 1 つのリポジトリが、上記すべてのインストール方法に対応します。
 
 ```
+plugin.json                           Agent Plugins v1 ポータブルマニフェスト
+mcp.json                              Agent Plugins v1 ホスト型 MCP 設定
 skills/busabase/SKILL.md              ローカルおよび一般用途エージェント向けの正規スキル
 skills/busabase-app-creator/SKILL.md  Busabase ワークスペースと AirApp の作成ガイド
 .claude-plugin/marketplace.json       Claude Code マーケットプレイス一覧
@@ -107,8 +121,9 @@ plugins/busabase/skills/busabase/SKILL.md    Codex ではスキルをプラグ�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              Busabase 依存スキルとともに同梱されるアプリ作成スキル
 plugins/busabase/assets/                     Codex に同梱されるアイコンとライト/ダークロゴ
-.mcp.json                             組み込み MCP サーバー（Streamable HTTP）
+.mcp.json                             従来/一般クライアント向けローカル MCP 設定
 server.json                           公式 MCP Registry エントリ（リモート → busabase.com/api/mcp）
+scripts/validate-agent-plugin.mjs     ポータブル形式とクライアントパッケージの互換性検証
 ```
 
 > **ホスト固有スキルが必要な理由：** Claude Code はサーバーを

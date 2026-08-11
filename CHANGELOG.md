@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add an Agent Plugins v1.0.0 portable package at the repository root with canonical
+  `plugin.json`, `mcp.json`, and existing `skills/` discovery.
+- Preserve the dedicated Claude Code, Codex, and general-client MCP configurations unchanged.
+- Add canonical schema, Agent Skill, client-compatibility, CI, and multilingual documentation
+  coverage for the portable package.
+
 ## 0.4.0 - 2026-08-10
 
 - Split the Claude Code distribution into a dedicated `claude/` plugin package, following the

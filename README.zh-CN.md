@@ -5,7 +5,7 @@
 适用于 [Busabase](https://busabase.com) 的智能体技能和插件。Busabase 是一个审批优先的知识库：
 AI 提出变更，由人工审核，只有获批的变更才会被合并。
 
-两个技能，四种安装方式，请选择你的智能体支持的方式。
+两个技能，五种安装方式，请选择你的智能体支持的方式。
 
 ## 安装
 
@@ -14,6 +14,17 @@ AI 提出变更，由人工审核，只有获批的变更才会被合并。
 ```bash
 npx skills add busabase/skills
 ```
+
+### Agent Plugins v1（可移植插件包）
+
+仓库根目录遵循 [Agent Plugins Specification v1.0.0](https://agent-plugins.org/)：
+`plugin.json` 是可移植清单，`skills/` 包含 Agent Skills，`mcp.json` 使用标准格式声明
+托管的 Streamable HTTP MCP 服务。任何支持 Agent Plugins 格式的客户端都可以安装或加载
+此仓库根目录。
+
+Agent Plugins v1 将 OAuth 和凭据管理交给客户端。现有 Claude Code 与 Codex 插件仍保留各自的
+浏览器 OAuth 行为。兼容性映射与验证方式请参阅
+[`docs/agent-plugins.md`](./docs/agent-plugins.md)。
 
 ### Claude Code 插件
 
@@ -63,7 +74,8 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-根目录下的 [`.mcp.json`](./.mcp.json) 为通用 MCP 客户端配置本地端点。Claude 包使用独立的
+可移植根目录 [`mcp.json`](./mcp.json) 使用 Agent Plugins v1 格式声明托管端点。原有根目录
+[`.mcp.json`](./.mcp.json) 继续为通用 MCP 客户端配置本地端点。Claude 包使用独立的
 托管 OAuth [MCP 配置](./claude/.mcp.json)；Codex 插件使用另一份远程
 [MCP 配置](./plugins/busabase/.mcp.json)。
 
@@ -86,6 +98,8 @@ Claude 和 Codex 内置技能都采用 MCP 优先方式：它们依赖 OAuth 和
 这一个仓库支持上述所有安装方式：
 
 ```
+plugin.json                           Agent Plugins v1 可移植清单
+mcp.json                              Agent Plugins v1 托管 MCP 配置
 skills/busabase/SKILL.md              面向本地及通用智能体的规范技能
 skills/busabase-app-creator/SKILL.md  Busabase 工作区和 AirApp 创建指南
 .claude-plugin/marketplace.json       Claude Code 市场列表
@@ -101,8 +115,9 @@ plugins/busabase/skills/busabase/SKILL.md    Codex 要求技能必须位于插�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              与 Busabase 依赖一起打包的应用创建器
 plugins/busabase/assets/                     Codex 随附的图标及浅色/深色徽标
-.mcp.json                             内置 MCP 服务器（Streamable HTTP）
+.mcp.json                             原有/通用客户端本地 MCP 配置
 server.json                           官方 MCP Registry 条目（远程端点 → busabase.com/api/mcp）
+scripts/validate-agent-plugin.mjs     可移植格式与客户端插件兼容性校验
 ```
 
 > **为什么需要主机专用技能？** Claude Code 将服务器命名为 `plugin:busabase:busabase`，Codex

@@ -5,7 +5,7 @@
 Agent Skills + plugins for [Busabase](https://busabase.com) — the approval-first knowledge base
 where AI proposes changes, a human reviews them, and only approved changes get merged.
 
-Two skills, four ways to install them — pick whatever your agent supports.
+Two skills, five ways to install them — pick whatever your agent supports.
 
 ## Install
 
@@ -14,6 +14,17 @@ Two skills, four ways to install them — pick whatever your agent supports.
 ```bash
 npx skills add busabase/skills
 ```
+
+### Agent Plugins v1 (portable package)
+
+The repository root follows the [Agent Plugins Specification v1.0.0](https://agent-plugins.org/):
+`plugin.json` is the portable manifest, `skills/` contains the Agent Skills, and `mcp.json`
+declares the hosted Streamable HTTP MCP server. Install or load this repository root with any
+client that supports the Agent Plugins format.
+
+Agent Plugins v1 leaves OAuth and credentials to the client. Existing Claude Code and Codex
+packages keep their dedicated browser-OAuth behavior. See
+[`docs/agent-plugins.md`](./docs/agent-plugins.md) for the compatibility mapping and validation.
 
 ### Claude Code plugin
 
@@ -70,7 +81,9 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-The root [`.mcp.json`](./.mcp.json) wires the local endpoint for general MCP clients. The Claude
+The portable root [`mcp.json`](./mcp.json) declares the hosted endpoint using the Agent Plugins v1
+format. The legacy root [`.mcp.json`](./.mcp.json) continues to wire the local endpoint for general
+MCP clients. The Claude
 package uses its own hosted OAuth [MCP configuration](./claude/.mcp.json). The Codex plugin has a
 separate remote [MCP configuration](./plugins/busabase/.mcp.json).
 
@@ -94,6 +107,8 @@ running one of the install commands above.
 This one repo serves every install path above:
 
 ```
+plugin.json                           Agent Plugins v1 portable manifest
+mcp.json                              Agent Plugins v1 hosted MCP profile
 skills/busabase/SKILL.md              canonical local/general-purpose skill
 skills/busabase-app-creator/SKILL.md  guided Busabase workspace and AirApp creator
 .claude-plugin/marketplace.json       Claude Code marketplace listing
@@ -109,8 +124,9 @@ plugins/busabase/skills/busabase/SKILL.md    Codex needs the skill INSIDE the pl
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              app creator bundled beside its Busabase dependency
 plugins/busabase/assets/                     icons and light/dark logos bundled with Codex
-.mcp.json                             bundled MCP server (Streamable HTTP)
+.mcp.json                             legacy/general-client local MCP profile
 server.json                           official MCP Registry entry (remote → busabase.com/api/mcp)
+scripts/validate-agent-plugin.mjs     portable and client-package conformance guard
 ```
 
 > **Why host-specific Busabase skills?** The plugin packages use hosted OAuth and MCP tools instead

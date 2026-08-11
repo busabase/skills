@@ -5,7 +5,7 @@
 適用於 [Busabase](https://busabase.com) 的智慧代理技能與外掛。Busabase 是一個審核優先的知識庫：
 AI 提出變更，由人工審核，只有獲准的變更才會合併。
 
-兩個技能、四種安裝方式，請選擇你的智慧代理支援的方式。
+兩個技能、五種安裝方式，請選擇你的智慧代理支援的方式。
 
 ## 安裝
 
@@ -14,6 +14,17 @@ AI 提出變更，由人工審核，只有獲准的變更才會合併。
 ```bash
 npx skills add busabase/skills
 ```
+
+### Agent Plugins v1（可攜式外掛套件）
+
+儲存庫根目錄遵循 [Agent Plugins Specification v1.0.0](https://agent-plugins.org/)：
+`plugin.json` 是可攜式資訊清單，`skills/` 包含 Agent Skills，`mcp.json` 使用標準格式宣告
+託管的 Streamable HTTP MCP 服務。任何支援 Agent Plugins 格式的用戶端都可以安裝或載入
+此儲存庫根目錄。
+
+Agent Plugins v1 將 OAuth 與憑證管理交給用戶端。現有 Claude Code 與 Codex 外掛仍保留各自的
+瀏覽器 OAuth 行為。相容性對照與驗證方式請參閱
+[`docs/agent-plugins.md`](./docs/agent-plugins.md)。
 
 ### Claude Code 外掛
 
@@ -63,7 +74,8 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-根目錄的 [`.mcp.json`](./.mcp.json) 會為一般 MCP 用戶端設定本機端點。Claude 套件使用獨立的
+可攜式根目錄 [`mcp.json`](./mcp.json) 使用 Agent Plugins v1 格式宣告託管端點。原有根目錄
+[`.mcp.json`](./.mcp.json) 繼續為一般 MCP 用戶端設定本機端點。Claude 套件使用獨立的
 託管 OAuth [MCP 設定](./claude/.mcp.json)；Codex 外掛使用另一份遠端
 [MCP 設定](./plugins/busabase/.mcp.json)。
 
@@ -86,6 +98,8 @@ Claude 與 Codex 內建技能都採用 MCP 優先方式：它們依賴 OAuth 與
 這個儲存庫支援上述所有安裝方式：
 
 ```
+plugin.json                           Agent Plugins v1 可攜式資訊清單
+mcp.json                              Agent Plugins v1 託管 MCP 設定
 skills/busabase/SKILL.md              供本機及一般智慧代理使用的標準技能
 skills/busabase-app-creator/SKILL.md  Busabase 工作區和 AirApp 建立指南
 .claude-plugin/marketplace.json       Claude Code 市集清單
@@ -101,8 +115,9 @@ plugins/busabase/skills/busabase/SKILL.md    Codex 要求技能必須位於外�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              與 Busabase 相依技能一起封裝的應用程式建立器
 plugins/busabase/assets/                     Codex 隨附的圖示及淺色/深色標誌
-.mcp.json                             內建 MCP 伺服器（Streamable HTTP）
+.mcp.json                             原有/一般用戶端本機 MCP 設定
 server.json                           官方 MCP Registry 項目（遠端端點 → busabase.com/api/mcp）
+scripts/validate-agent-plugin.mjs     可攜式格式與用戶端外掛相容性驗證
 ```
 
 > **為什麼需要主機專用技能？** Claude Code 將伺服器命名為 `plugin:busabase:busabase`，Codex

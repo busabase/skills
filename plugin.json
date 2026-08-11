@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "busabase",
+  "version": "0.4.0",
+  "description": "Approval-first Busabase knowledge workflows and guided workspace app creation for AI agents.",
+  "author": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
+  "homepage": "https://busabase.com",
+  "repository": "https://github.com/busabase/skills",
+  "license": "MIT",
+  "keywords": [
+    "busabase",
+    "knowledge-base",
+    "change-request",
+    "workspace-app",
+    "agent-skills",
+    "mcp"
+  ]
+}
