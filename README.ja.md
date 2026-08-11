@@ -6,7 +6,7 @@
 優先するナレッジベースで、AI が変更を提案し、人間がレビューし、承認された変更だけが
 マージされます。
 
-2 つのスキルを 4 通りの方法でインストールできます。エージェントが対応する方法を選んでください。
+2 つのスキルを 5 通りの方法でインストールできます。エージェントが対応する方法を選んでください。
 
 ## インストール
 
@@ -16,12 +16,29 @@
 npx skills add busabase/skills
 ```
 
+### Agent Plugins v1（ポータブルパッケージ）
+
+リポジトリのルートは [Agent Plugins Specification v1.0.0](https://agent-plugins.org/) に準拠します。
+`plugin.json` はポータブルマニフェスト、`skills/` は Agent Skills、`mcp.json` はホスト型
+Streamable HTTP MCP サーバーの標準設定です。Agent Plugins 形式をサポートするクライアントは、
+このリポジトリのルートをインストールまたは読み込めます。
+
+Agent Plugins v1 では OAuth と認証情報の管理はクライアント側の責任です。既存の Claude Code と
+Codex パッケージは、それぞれ専用のブラウザー OAuth 動作を維持します。互換性対応表と検証方法は
+[`docs/agent-plugins.md`](./docs/agent-plugins.md) を参照してください。
+
 ### Claude Code プラグイン
 
 ```bash
-/plugin marketplace add busabase/skills
-/plugin install busabase@busabase
+claude plugin marketplace add https://github.com/busabase/skills.git
+claude plugin install busabase@busabase
+claude mcp login plugin:busabase:busabase
 ```
+
+Claude Code プラグインはブラウザー OAuth で `https://busabase.com/api/mcp` に接続し、同梱
+サーバーは `plugin:busabase:busabase` として名前空間化されます。インストールとログイン後は
+新しい会話を開始してください。完全な手順は
+[`docs/claude-code-install.md`](./docs/claude-code-install.md) を参照してください。
 
 ### Codex プラグイン
 
@@ -61,13 +78,14 @@ codex mcp add busabase --url https://busabase.com/api/mcp
 codex mcp login busabase
 ```
 
-ルートの [`.mcp.json`](./.mcp.json) は、一般的な MCP クライアント向けにローカル
-エンドポイントを設定します。Codex プラグインには専用のリモート
-[MCP 設定](./plugins/busabase/.mcp.json) があり、プラグインディレクトリ内にあるため
-プラグインに同梱されます。
+ポータブルなルート [`mcp.json`](./mcp.json) は Agent Plugins v1 形式でホスト型エンドポイントを
+宣言します。従来のルート [`.mcp.json`](./.mcp.json) は、一般的な MCP クライアント向けにローカル
+エンドポイントを設定します。Claude パッケージは専用のホスト型 OAuth
+[MCP 設定](./claude/.mcp.json) を使用し、Codex プラグインは別のリモート
+[MCP 設定](./plugins/busabase/.mcp.json) を使用します。
 
 ルートの **busabase** スキルは、ローカルおよび一般的なエージェントへのインストール向けの
-完全な CLI/curl ガイドです。Codex 同梱スキルは意図的に MCP 優先となっており、
+完全な CLI/curl ガイドです。Claude と Codex の同梱スキルは意図的に MCP 優先となっており、
 `~/.busabase/.env` を読む代わりに OAuth と厳選されたツールカタログを利用します。
 
 ワークスペースを最初から設定する場合は、Busabase ダッシュボードの **Agent Skills**
@@ -86,10 +104,15 @@ codex mcp login busabase
 この 1 つのリポジトリが、上記すべてのインストール方法に対応します。
 
 ```
-skills/busabase/SKILL.md              スキル（正規版）——`skills`、Claude Code、Buda で使用
+plugin.json                           Agent Plugins v1 ポータブルマニフェスト
+mcp.json                              Agent Plugins v1 ホスト型 MCP 設定
+skills/busabase/SKILL.md              ローカルおよび一般用途エージェント向けの正規スキル
 skills/busabase-app-creator/SKILL.md  Busabase ワークスペースと AirApp の作成ガイド
-.claude-plugin/plugin.json            Claude Code プラグインマニフェスト（./skills/ を自動検出）
 .claude-plugin/marketplace.json       Claude Code マーケットプレイス一覧
+claude/.claude-plugin/plugin.json     Claude Code プラグインマニフェスト
+claude/.mcp.json                      Claude Code 用ホスト型 OAuth MCP 設定
+claude/skills/busabase/SKILL.md       Claude 専用 MCP 優先接続ガイド
+claude/skills/busabase-app-creator/   共有アプリ作成スキルへのシンボリックリンク
 .agents/plugins/marketplace.json      Codex マーケットプレイス一覧
 plugins/busabase/.codex-plugin/plugin.json   Codex プラグインマニフェスト
 plugins/busabase/.mcp.json                   Codex 用ホスト型 OAuth MCP 設定
@@ -98,14 +121,15 @@ plugins/busabase/skills/busabase/SKILL.md    Codex ではスキルをプラグ�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              Busabase 依存スキルとともに同梱されるアプリ作成スキル
 plugins/busabase/assets/                     Codex に同梱されるアイコンとライト/ダークロゴ
-.mcp.json                             組み込み MCP サーバー（Streamable HTTP）
+.mcp.json                             従来/一般クライアント向けローカル MCP 設定
 server.json                           公式 MCP Registry エントリ（リモート → busabase.com/api/mcp）
+scripts/validate-agent-plugin.mjs     ポータブル形式とクライアントパッケージの互換性検証
 ```
 
-> **Codex 専用の Busabase スキルが必要な理由：** Codex は `plugins/<name>/` 内のファイルだけを
-> 同梱します。同梱される `busabase` スキルは、ローカルの shell 設定ではなく、ホスト型 OAuth と
-> MCP ツールを使う別の接続方式を採用しています。`busabase-app-creator` は変更せずに同梱され、
-> 接続、API、ChangeRequest の動作を、この MCP 優先の依存スキルに委譲します。
+> **ホスト固有スキルが必要な理由：** Claude Code はサーバーを
+> `plugin:busabase:busabase` として名前空間化し、Codex は `busabase` を使用します。どちらも
+> ローカル shell 設定ではなくホスト型 OAuth を使い、共有アプリ作成スキルは接続動作を各ホストの
+> MCP 優先スキルに委譲します。
 
 ## OpenAI Plugin Directory への公開
 

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "busabase": {
+      "type": "http",
+      "url": "https://busabase.com/api/mcp",
+      "oauth_resource": "https://busabase.com/api/mcp"
+    }
+  }
+}

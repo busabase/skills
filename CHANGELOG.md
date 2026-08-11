@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Add an Agent Plugins v1.0.0 portable package at the repository root with canonical
+  `plugin.json`, `mcp.json`, and existing `skills/` discovery.
+- Preserve the dedicated Claude Code, Codex, and general-client MCP configurations unchanged.
+- Add canonical schema, Agent Skill, client-compatibility, CI, and multilingual documentation
+  coverage for the portable package.
+
+## 0.4.0 - 2026-08-10
+
+- Split the Claude Code distribution into a dedicated `claude/` plugin package, following the
+  current marketplace package layout used by ChatCut.
+- Connect Claude Code directly to the hosted Busabase MCP endpoint with browser OAuth and the
+  plugin-scoped server id `plugin:busabase:busabase`.
+- Add Claude-specific MCP-first guidance, strict manifest validation, and complete install, login,
+  verification, update, and recovery documentation.
+- Keep the root `.mcp.json` local profile and the Codex plugin package unchanged.
+
 ## 0.3.2 - 2026-07-28
 
 - Replace the removed `createBusabaseRpcClient` AirApp runtime with
