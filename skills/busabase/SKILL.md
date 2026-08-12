@@ -69,6 +69,8 @@ curl "$BUSABASE_BASE_URL/api/v1/auth" -H "Authorization: Bearer $BUSABASE_API_KE
 ```
 
 `spaces` in the response is every space the user belongs to; `space` is the default.
+`GET /api/v1/auth` is the one discovery call that intentionally omits
+`x-busabase-space`; after selection, every other request must carry the confirmed id.
 
 - **Exactly one space** → use its `id` — don't ask.
 - **Multiple spaces** → if `BUSABASE_SPACE_ID` is already set (from `~/.busabase/.env`), use
@@ -89,6 +91,8 @@ next time they run `busabase-cli auth switch`. Without the CLI available, `print
 
 Then send `-H "x-busabase-space: $BUSABASE_SPACE_ID"` on **every** curl call. A space you're
 not a member of returns 403; a missing header when the user has multiple spaces returns 400.
+Programmatic clients should branch on `data.reason`: `SPACE_SELECTION_REQUIRED` means show or ask
+for a Space choice; `SPACE_NOT_ALLOWED` means discard the stale/invalid choice and select again.
 (`busabase-cli` already handles this itself — `busabase-cli login` persists the chosen
 `BUSABASE_SPACE_ID` to `~/.busabase/.env`, and every CLI command auto-loads it and sends the
 header, so it isn't limited to the default space. MCP tools can target another authorized Space
@@ -186,7 +190,10 @@ npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
 For record listing, keep `--limit` at `100` or below and use `nextCursor` with `--cursor` for
 additional pages.
-When checking unfinished CRs, prefer the bounded `change-requests list` form above. If you
+When checking unfinished CRs, prefer the bounded `change-requests list --status-json ... --limit`
+form above — `list` is cursor-paginated via `nextCursor`, which is what "follow at most five pages"
+below means. (`change-requests list-page` is a different, numbered-page command for jumping to an
+arbitrary page with a total count — not what this bounded-check pattern uses.) If you
 must prove that no CR targets a specific node and the live API has no node filter, follow
 `nextCursor` for at most five 20-item pages and filter locally by exact node id. If another cursor
 remains, report the check as inconclusive instead of assuming absence. A full `change-requests list
@@ -282,6 +289,33 @@ CRM Contacts **+** Companies) so it never opens as an empty screen.
 records, Skill file edits, and structure (Base / folder / Doc / File) alike. **Never approve or
 merge a still-`in_review` CR yourself unless the user explicitly asks** — approval is the human's
 decision; never bypass review that's actually pending.
+
+### Return a clickable result
+
+After every successful mutation, include a short Markdown link in the chat response that opens the
+exact result in Busabase. A bare id or local filesystem path is not enough when a browser URL can be
+constructed.
+
+- Build root-host links as
+  `${BUSABASE_BASE_URL}/dashboard/${BUSABASE_SPACE_ID}/<target-path>`; URL-encode the Space ID
+  and route segments, and remove any trailing `/api/v1` from `BUSABASE_BASE_URL` first.
+- While a ChangeRequest is awaiting review, link to
+  `/inbox/<change-request-id>`. After it is merged, prefer the canonical result:
+  `/base/<base-slug>`, `/base/<base-slug>/<record-id>`, `/doc/<slug>`,
+  `/folder/<slug>`, `/skill/<slug>`, `/drive/<slug>`, `/file/<slug>`, or
+  `/airapp/<slug>`.
+- For Busabase Desktop, use its confirmed local Space ID in the same
+  `/dashboard/<space-id>/...` shape. For a confirmed workspace-subdomain URL, preserve that
+  origin and use its short `/dashboard/<target-path>` route instead.
+- Prefer an exact URL already returned by the live API or CLI. Otherwise construct the URL only
+  from the confirmed base URL, Space ID, and identifiers read back after the write. Never put API
+  keys, tokens, or other credentials in the URL.
+- If the exact canonical target cannot yet be resolved, link to the ChangeRequest rather than
+  guessing. State whether it is pending review or already merged.
+
+Example final response:
+
+`Created the customer record and submitted it for review: [Open ChangeRequest](https://busabase.com/dashboard/org_123/inbox/cr_123).`
 
 ### Review is permission-aware, not a client-side rule
 

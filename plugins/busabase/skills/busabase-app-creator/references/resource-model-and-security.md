@@ -106,6 +106,12 @@ Rules:
 - Direct users to Busabase Vault settings to satisfy missing requirements. Show key names and readiness only when a supported metadata API exists.
 - A browser AirApp may request or display the result of trusted work, but cannot receive the credential used to perform it.
 
+Local AirApp OAuth identity tokens are connection credentials, not an ordinary blueprint Vault
+requirement. Hono registers the rotating token set through the SDK's Node-only helper under
+`~/.busabase/airapps/<app-id>.json`, with an owner-only directory and file. Do not model it as a
+normal Vault key, expose it through `vault.get` or `reveal`, overwrite the CLI's active profile, or
+make the browser responsible for token refresh.
+
 ## Capability Matrix
 
 | Runtime | Read resources | Propose writes | Use Vault values |

@@ -1,6 +1,8 @@
 # UI And Validation
 
-Use this reference while customizing the scaffold and before deployment.
+Use this reference while customizing the scaffold and before completion. Target-first validation
+defers browser acceptance until merged HEAD runs in Busabase; local-preview validation performs an
+additional standalone pass before deployment.
 
 Read `app-engineering.md` for module boundaries, responsive behavior, required UI states, resource-aware data access, and the full validation matrix.
 
@@ -52,7 +54,7 @@ Production provider failure must never fall back to Demo silently.
 Run generated project checks:
 
 ```bash
-npm run check
+pnpm check
 node --check server.js
 ```
 
@@ -63,13 +65,31 @@ Static checks must verify:
 - same-origin `/api/v1` client path for Cloud and Desktop, with no obsolete bridge prefix;
 - no API key, Bearer header, React, Vite, or mutation bypass;
 - declared Bases and procedures match blueprint;
+- onboarding is a positive-version contract whose fields and completion marker use declared Busabase resources, or is explicitly empty with rationale;
 - exact materialized Folder/Node/Base/View/resource ids exist in generated config;
 - only non-secret Vault requirements exist in config; no value or browser secret API exists;
 - every Base config has an integer `readLimit` from 1–50 matching blueprint `read_limit` (default 50), providers consume it, and interactive reads contain no automatic cursor-exhaustion or per-record request loop;
 - Demo records exist;
 - required files exist.
 
-## Local Preview
+## Validation Modes
+
+For delegated App-in-Skill creation, default to `target-first`. Do not start a local server or report
+a localhost URL unless the user explicitly asked for `pnpm dev`, local preview, or local debugging.
+Standalone AirApp creation keeps `local-preview` as its default unless the user selects
+target-first.
+
+### Target First
+
+Run the Required Checks, submit the canonical source as a pending AirApp CR, and state that visual
+and interactive acceptance is deferred until merged HEAD can Run in Busabase. The blueprint approval
+and selected target-first path authorize creating the reviewable CR, never reviewing or merging it.
+
+After explicit merge authority, perform every Target Verification check, including desktop and
+390px phone workflows. If acceptance finds a defect, update canonical local source and submit a new
+reviewable AirApp CR. Do not patch only the remote copy.
+
+### Explicit Local Preview
 
 Start the server, report the actual `127.0.0.1` URL, and open `?demo=1`.
 
@@ -108,10 +128,13 @@ After the AirApp CR is merged, Run it inside the selected Busabase deployment an
 
 ## Acceptance Gates
 
-There are three separate approvals:
+For local-preview there are three separate gates:
 
 1. Blueprint approval authorizes exact structure autoMerge.
 2. Demo UI acceptance authorizes submitting code for review, not merging it.
 3. Named CR authorization allows the Agent to review/merge only that CR.
 
-Never collapse these gates.
+For target-first, blueprint approval plus the selected AirApp-first delivery path authorizes
+submitting the pending code CR. Named CR authorization permits its merge, and the merged target Run
+is the UI acceptance gate. Never treat CR submission as merge authority or claim UI acceptance from
+static checks alone.

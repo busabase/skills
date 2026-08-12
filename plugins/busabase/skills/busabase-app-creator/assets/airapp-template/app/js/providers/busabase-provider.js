@@ -18,9 +18,9 @@ const normalizeRecords = (records, baseKey) =>
   }));
 
 const readPage = async (client, base, cursor) => {
-  requireProcedure("records.listPaged");
+  requireProcedure("records.list");
   const { baseId, key: baseKey } = base;
-  const page = await client.records.listPaged({
+  const page = await client.records.list({
     baseId,
     limit: base.readLimit,
     ...(cursor ? { cursor } : {}),
@@ -33,10 +33,10 @@ const readPage = async (client, base, cursor) => {
 };
 
 const readChangeRequests = async (client) => {
-  if (!allowedReads.has("changeRequests.listPaged")) {
+  if (!allowedReads.has("changeRequests.list")) {
     return { changeRequests: [], nextCursor: null };
   }
-  const page = await client.changeRequests.listPaged({
+  const page = await client.changeRequests.list({
     limit: PENDING_CHANGE_REQUEST_LIMIT,
     status: PENDING_STATUSES,
   });

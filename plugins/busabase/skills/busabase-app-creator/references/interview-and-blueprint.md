@@ -201,14 +201,26 @@ Use JSON, schema version `1`. Keep secrets out.
     "attention_states": ["blocked", "due_soon"],
     "actions": []
   },
+  "onboarding": {
+    "version": 1,
+    "required_fields": [],
+    "completion_resource": "launches",
+    "rationale": "This read-only tracker has no operator-specific configuration."
+  },
   "permissions": {
-    "read_procedures": ["records.listPaged", "changeRequests.listPaged"],
+    "read_procedures": ["records.list", "changeRequests.list"],
     "change_request_procedures": []
   }
 }
 ```
 
-During approval, materialized ids may be absent or empty because the structure does not exist yet. Immediately after structure creation, read canonical results back and populate every Folder/Node/Base/View/resource id before scaffolding. `scaffold` must reject a blueprint that still lacks them. Include `changeRequests.listPaged` only when the UI actually renders a pending-review summary. See `resource-model-and-security.md` for optional resource and Vault shapes.
+The onboarding contract is mandatory. Each non-empty `required_fields` entry uses a stable
+kebab-case `key`, references a declared workspace `resource`, names its `validation`, and lists the
+capabilities it `unlocks`. An intentionally configuration-free product keeps the array empty and
+supplies a concise `rationale`; omission is never interpreted as "no onboarding." Persist completion
+and version in `completion_resource`, not browser storage.
+
+During approval, materialized ids may be absent or empty because the structure does not exist yet. Immediately after structure creation, read canonical results back and populate every Folder/Node/Base/View/resource id before scaffolding. `scaffold` must reject a blueprint that still lacks them. Include `changeRequests.list` only when the UI actually renders a pending-review summary. See `resource-model-and-security.md` for optional resource and Vault shapes.
 
 Each Base may declare `read_limit`, an integer from 1 through 50. It is the one-page interactive
 budget emitted as `readLimit` in deployment config and consumed by both providers. Omit it to use the

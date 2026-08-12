@@ -62,7 +62,7 @@ Loading copy must not imply a full workspace scan. If a bounded page is being re
 
 ## Validation Matrix
 
-Before deployment, verify:
+Before completion, verify:
 
 1. `validate-blueprint` passes and all resource ids are materialized.
 2. Generated checks pass and no credential/token/Vault value exists in source or bundle.
@@ -75,4 +75,8 @@ Before deployment, verify:
 9. Public embed, when enabled, remains read-only and cannot access Vault or ChangeRequest actions.
 10. Trusted integrations are exercised only after their own approval and readiness checks.
 
-Local Demo acceptance proves the interface only. Real data is reachable locally too — point `server.js`'s dev proxy at a Busabase with `BUSABASE_BASE_URL` (see `runtime-and-sdk.md`) and the same source reads real records — but that authenticates with your own key, so per-user permissions and the embed path are still proven only after the AirApp ChangeRequest is merged and the target Busabase runs merged HEAD.
+In target-first mode, items 1–2 and every source-inspectable budget/security invariant pass before
+the AirApp CR; browser-only items 3–10 are completed against merged HEAD in Busabase. In an
+explicit local-preview mode, local Demo can prove the standalone interface before submission and
+real data is reachable through the local proxy, but local authentication still cannot prove the
+deployed ambient session or embed path. Both modes require target Run before completion.

@@ -133,8 +133,14 @@ const validBlueprint = () => ({
     actions: [],
   },
   permissions: {
-    read_procedures: ["records.listPaged", "changeRequests.listPaged"],
+    read_procedures: ["records.list", "changeRequests.list"],
     change_request_procedures: [],
+  },
+  onboarding: {
+    version: 1,
+    required_fields: [],
+    completion_resource: "launches",
+    rationale: "This read-only tracker has no operator-specific configuration.",
   },
 });
 
@@ -180,18 +186,27 @@ test("scaffolds and checks a project without network access", async () => {
     path.join(outputPath, "app/js/providers/busabase-provider.js"),
     "utf8",
   );
+  const server = await readFile(path.join(outputPath, "server.js"), "utf8");
+  const browser = await readFile(path.join(outputPath, "app/js/app.js"), "utf8");
   assert.match(config, /nodeId:|"nodeId": "node-base-launches"/);
   assert.match(config, /baseId:|"baseId": "base-launches"/);
   assert.match(config, /"viewId": "view-launch-calendar"/);
   assert.match(config, /"nodeId": "node-doc-launch-brief"/);
   assert.match(config, /"nodeId": "node-drive-launch-files"/);
   assert.match(config, /"key": "PUBLISH_API_KEY"/);
+  assert.match(config, /"onboarding"/);
   assert.match(config, /"readLimit": 50/);
   assert.match(provider, /base\.readLimit/);
   assert.match(provider, /limit: base\.readLimit/);
   assert.match(provider, /status: PENDING_STATUSES/);
   assert.doesNotMatch(provider, /client\.bases\.list\s*\(/);
   assert.doesNotMatch(provider, /while\s*\(\s*cursor\s*\)/);
+  assert.match(server, /createBusabaseAirAppLocalGateway/);
+  assert.match(server, /appId: "launch-tracker"/);
+  assert.match(server, /\/auth\/space/);
+  assert.doesNotMatch(server, /context\.req\.header\("x-busabase-space"\)/);
+  assert.match(browser, /readiness !== "ready"/);
+  assert.match(browser, /\/auth\/space/);
   const check = await checkGeneratedProject(outputPath, { requireBundle: false });
   assert.equal(check.ok, true);
   assert.equal(check.deployment, "cloud");
@@ -203,6 +218,7 @@ test("emits and consumes custom per-Base read budgets", async () => {
   const outputPath = path.join(temporary, "generated");
   const blueprint = validBlueprint();
   blueprint.workspace.bases[0].key = "reports";
+  blueprint.onboarding.completion_resource = "reports";
   blueprint.workspace.bases[0].name = "Reports";
   blueprint.workspace.bases[0].slug = "reports";
   blueprint.workspace.bases[0].read_limit = 14;
@@ -313,6 +329,35 @@ test("rejects malformed resource, Drive file, Vault, and integration entries", (
   );
 });
 
+test("requires an explicit versioned product-onboarding contract", () => {
+  const missing = validBlueprint();
+  delete missing.onboarding;
+  assert.ok(validateBlueprint(missing).errors.includes("onboarding contract is required."));
+
+  const configured = validBlueprint();
+  configured.onboarding = {
+    version: 1,
+    required_fields: [
+      {
+        key: "operator-profile",
+        resource: "launches",
+        validation: "non-empty",
+        unlocks: ["review"],
+      },
+    ],
+    completion_resource: "launches",
+  };
+  assert.deepEqual(validateBlueprint(configured).errors, []);
+
+  const emptyWithoutReason = validBlueprint();
+  delete emptyWithoutReason.onboarding.rationale;
+  assert.ok(
+    validateBlueprint(emptyWithoutReason).errors.includes(
+      "onboarding.rationale is required when required_fields is empty.",
+    ),
+  );
+});
+
 test("rejects invalid native View field configuration", () => {
   const blueprint = validBlueprint();
   blueprint.workspace.bases[0].views.push({
@@ -355,16 +400,53 @@ test("scaffolds a Desktop app without requiring a Space id", async () => {
 test("verifies the installed SDK client export", async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-sdk-test-"));
   const modulePath = path.join(temporary, "node_modules", "busabase-sdk");
-  await mkdir(modulePath, { recursive: true });
+  await mkdir(path.join(modulePath, "dist"), { recursive: true });
   await writeFile(
     path.join(modulePath, "package.json"),
-    JSON.stringify({ name: "busabase-sdk", type: "module", exports: "./index.js" }),
+    JSON.stringify({
+      name: "busabase-sdk",
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./airapp-node": "./dist/airapp-node.js",
+      },
+    }),
     "utf8",
   );
   await writeFile(
-    path.join(modulePath, "index.js"),
+    path.join(modulePath, "dist", "index.js"),
     "export const createBusabaseClient = () => ({});\n",
     "utf8",
   );
+  await writeFile(
+    path.join(modulePath, "dist", "airapp-node.js"),
+    "export const createBusabaseAirAppLocalGateway = () => ({});\n",
+    "utf8",
+  );
   await verifyInstalledSdk(temporary);
+});
+
+test("rejects an installed SDK without the local AirApp gateway export", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-sdk-gateway-test-"));
+  const sdkRoot = path.join(temporary, "node_modules", "busabase-sdk");
+  await mkdir(path.join(sdkRoot, "dist"), { recursive: true });
+  await writeFile(
+    path.join(sdkRoot, "package.json"),
+    JSON.stringify({
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./airapp-node": "./dist/airapp-node.js",
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "index.js"),
+    "export const createBusabaseClient = () => ({});\n",
+    "utf8",
+  );
+  await writeFile(path.join(sdkRoot, "dist", "airapp-node.js"), "export {};\n", "utf8");
+
+  await assert.rejects(verifyInstalledSdk(temporary), /required AirApp gateway export/);
 });

@@ -23,7 +23,7 @@ Every run creates an isolated workspace:
 
 ## Structure Gate
 
-The user's explicit approval of the displayed blueprint authorizes only the exact Folder/resource/schema/View structure. It does not authorize AirApp code, content, records, external side effects, reviews, or merges.
+The user's explicit approval of the displayed blueprint authorizes the exact Folder/resource/schema/View structure. In target-first mode, the same approved blueprint and selected AirApp-first delivery path also authorize submitting the generated AirApp code as a pending, reviewable CR so UI acceptance can occur in Busabase. Neither mode authorizes content, records, external side effects, reviews, or merges.
 
 After approval, structure may use `autoMerge: true`. Read every result back; do not assume the server auto-merged because the request included the flag. Write every canonical Folder/Node/Base/View/resource id into the approved blueprint before scaffolding; runtime data access is pinned to these ids.
 
@@ -31,7 +31,9 @@ Prefer the native resources described in `resource-model-and-security.md`. Use r
 
 ## AirApp Create CR
 
-Submit the complete accepted file tree through the AirApp create surface:
+Submit the complete validated file tree through the AirApp create surface. In local-preview mode it
+has local UI acceptance; in target-first mode it has passed deterministic checks and awaits UI
+acceptance from merged HEAD in Busabase:
 
 ```json
 {
@@ -58,6 +60,7 @@ differs, follow it and update the payload without weakening review-first behavio
 Report:
 
 - CR id and target AirApp name;
+- validation mode (`target-first` or `local-preview`) and any acceptance still deferred to target Run;
 - number of files and exact SDK version;
 - the Space the app targets;
 - configured resource slugs;
@@ -123,5 +126,5 @@ Include:
 - exact SDK version;
 - merged/pending CR ids;
 - seed records merged;
-- local Demo and target Run verification results;
+- target Run verification results and local Demo results only when local-preview was explicitly used;
 - any remaining limitation.

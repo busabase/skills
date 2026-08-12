@@ -11,6 +11,34 @@ Use this reference while generating the project and implementing the Busabase pr
 
 AirApp runs inside Nodepod, a browser Worker/Service Worker Node runtime. Pure JavaScript generally works; native binaries and real OS processes do not.
 
+These constraints are authoritative for higher-level App-in-Skill creators too. They may define the
+product workflow and UI requirements, but must not replace this runtime with a conflicting language,
+framework, package, authentication, or deployment model.
+
+## Canonical Local Source
+
+There are two source-ownership modes:
+
+| Caller | Canonical project root | Local command |
+| --- | --- | --- |
+| Standalone AirApp creation | approved temporary or persistent directory | `pnpm dev` |
+| Higher-level App-in-Skill creator | `<skill-root>/app/` | `cd <skill-root>/app && pnpm dev` |
+
+The canonical project root is the complete generated Hono project: `package.json`, `server.js`,
+`scripts/`, `airapp-blueprint.json`, and the browser `app/` subtree. For App-in-Skill packages this
+means `<skill-root>/app/app/` contains browser assets; the repeated directory name is intentional.
+
+AirApp deployment must serialize the same reviewed project tree. Exclude only local-only material
+such as `.env*`, `node_modules/`, logs, and editor files. Do not rewrite the app into a remote-only
+variant, generate a parallel implementation, or treat the merged AirApp as an independent source of
+truth. Maintenance starts by comparing canonical local source with merged AirApp HEAD; any accepted
+remote-only change is back-ported locally and verified before another deployment.
+
+`pnpm` is the canonical local invocation for bundled skill apps. Package scripts stay conventional,
+so AirApp/Nodepod can run `start` without a package-manager-specific application build. Scaffolding
+may install and prebundle dependencies locally, but deployed `start` remains exactly
+`node server.js`.
+
 ## Two Authentication Contexts
 
 Do not conflate deployment actions with runtime data access.
@@ -31,7 +59,7 @@ The SDK ships a single client. The AirApp always calls `/api/v1/…` on its **ow
 | Deployed in Busabase (Nodepod) | Busabase itself; the service worker passes the path through | the viewer's session cookie |
 | Deployed in Busabase (Local Node engine) | Busabase itself, via the same-origin reverse proxy | the viewer's session cookie |
 | Public embed | the embed runtime relays it to a capability-scoped, read-only route | the embed's capability, never the viewer |
-| Local `npm run dev` | this project's own dev proxy in `server.js` | a key from your shell, attached server-side |
+| Local `pnpm dev` | this project's own dev proxy in `server.js` | browser OAuth; owner-only per-AirApp token registration under `~/.busabase/airapps` |
 
 There is no Cloud/Desktop path fork and no bridge prefix. Do not hard-code an absolute Busabase URL, and do not reintroduce `/__busabase_api__/` — that bridge prefix is gone, nothing serves it, and an AirApp that uses it works in none of the rows above.
 
@@ -49,25 +77,128 @@ export function createRuntimeClient() {
 }
 ```
 
-## Local Development Against Real Data
+## Which Runtime Am I? — `BUSABASE_AIRAPP_RUNTIME`
 
-Use the connection already selected by `busabase-cli` or credential variables already present in
-the local shell. Do not print them or ask the user to paste a key into chat. If Cloud authentication
-is absent, require `busabase-cli login --device-code` before continuing.
+**Never classify the runtime from the URL.** Hostname tests fail in both directions:
 
-`server.js` registers a `/api/v1/*` proxy only when `BUSABASE_BASE_URL` is set, so it is inert once deployed:
+- Busabase-hosted AirApps are served from `localhost` / `127.0.0.1` / a `.localhost` host all the
+  time — Desktop and OSS run on `http://localhost:15419`. So "localhost ⇒ standalone" is wrong.
+- A standalone `npm run dev` is routinely reached over a LAN IP or a signed dev tunnel such as
+  `https://3111-t14e66e832aa5e6a.dev.budaapps.com`. So "not localhost ⇒ hosted" is wrong — and this
+  direction is the damaging one. The app skips its own connection gate, calls `/api/v1` with no
+  credential, and shows `Busabase connection required` with no action the user can take.
 
-```bash
-BUSABASE_BASE_URL=http://localhost:15419 npm run dev              # Desktop / OSS: open, no key
-BUSABASE_BASE_URL=https://busabase.com \
-  BUSABASE_API_KEY=… BUSABASE_SPACE_ID=… npm run dev              # Cloud
+Busabase spawns the AirApp's own process in every hosted row, so it simply *tells* the app what it
+is. `packages/busabase-core/src/domains/airapp/utils/airapp-runtime-env.ts` owns the contract; both
+engines inject it (`local-node-runtime.ts` into the spawned process env, `nodepod-runner.ts` into
+`Nodepod.boot` + the `npm run dev` spawn). Only Busabase ever sets it, so **absence is the positive
+fact "standalone"**.
+
+| `BUSABASE_AIRAPP_RUNTIME` | Runtime | `/api/v1` is authenticated by |
+| --- | --- | --- |
+| `nodepod` | in-browser engine, dashboard preview | the viewer's session cookie |
+| `local-node` / `srt` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
+| `embed` | public embed | the embed's capability, never the viewer |
+| *(unset)* | standalone `npm run dev` | this app's own dev proxy / OAuth registration |
+
+`server.js` re-exposes it to the browser, which cannot read env vars, and `app/js/runtime.js` is the
+only module allowed to answer the question. Both ship in the template; keep them.
+
+```js
+// server.js — the app's own boundary is the only thing that knows
+const AIRAPP_HOSTED_RUNTIMES = new Set(["nodepod", "local-node", "srt", "embed"]);
+const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
+app.get("/__airapp/runtime", (context) =>
+  context.json({
+    runtime: airappRuntime || "standalone",
+    hosted: AIRAPP_HOSTED_RUNTIMES.has(airappRuntime),
+    devProxy: Boolean(busabaseBaseUrl),
+  }),
+);
 ```
 
-The key stays in the shell and is attached server-side. It must never appear in a committed file, and the browser must never see one — `npm run check` fails the project if it does.
+The browser probe must use the **relative** path `__airapp/runtime` (no leading slash — under the
+Local Node engine a leading slash resolves against busabase's origin root) and must verify the
+response's `content-type` is JSON: a hosted origin's catch-all route can answer `200` with an HTML
+shell, and `response.ok` alone would read that as a successful probe.
 
-**Asset references must be relative** (`./styles.css`, `./js/app.js`, `../vendor/busabase-sdk.js`). Under the Local Node engine the app is reverse-proxied onto a *sub-path* of busabase's origin, so an absolute `src="/js/app.js"` resolves against the origin root — busabase itself — and 404s. `npm run check` rejects absolute asset references. `/api/v1/…` is exempt: it is an API call, not an asset.
+Resolve **three** states, never two — `hosted`, `standalone`, and `unknown` (the probe did not
+answer). Keep "where am I running" separate from "do I have credentials" (`devProxy`, and the
+`/api/v1` response itself). Collapsing the two axes into one boolean is what produces a UI that
+states a fixed "authenticated" and is wrong the moment it isn't. `scripts/check.mjs` fails the build
+on `location.hostname` use, on loopback-literal comparisons, and on a missing runtime probe.
 
-Without `BUSABASE_BASE_URL` the app still runs; only `?demo=1` has data.
+## Local Development Against Real Data
+
+Interactive apps authenticate through browser OAuth only when running standalone — that is, when
+`BUSABASE_AIRAPP_RUNTIME` is unset, never because of what the hostname looks like. Use the setup UI
+only for an independently opened local `npm run dev` process. That setup offers the canonical
+Busabase Cloud origin and one custom-origin option, then submits to Hono's server-side OAuth start
+route. Do not direct the user to `busabase-cli login`, device-code login, or an API-key field.
+
+The Hono boundary must:
+
+1. create a `busabase-airapp` OAuth request with PKCE S256 through `busabase-sdk`;
+2. keep state and verifier server-side for at most five minutes;
+3. accept only an exact loopback callback, then validate state and `iss` before code exchange;
+3b. refuse to start at all when the request's own origin is not loopback, returning a concrete next
+   step rather than redirecting into a callback that can never be accepted. This is the dev-tunnel
+   case (`https://3111-….dev.budaapps.com`): detection now correctly reports `standalone` and shows
+   the gate, but the flow still cannot complete, so say so — "OAuth callbacks only work on this
+   machine's own address; open `http://localhost:<port>` to connect, or start the app with
+   `BUSABASE_BASE_URL` set";
+4. call `exchangeBusabaseOAuthCode()` on the server;
+5. call the Node-only SDK credential helper to register the rotating token set at
+   `~/.busabase/airapps/<app-id>.json`; the directory must be `0700` and the file `0600`;
+6. keep this per-AirApp registration separate from the CLI's active `~/.busabase/.env` profile;
+7. call `getBusabaseAirAppAccessToken()` server-side when proxying `/api/v1`; it refreshes and
+   persists the token set when needed and never includes a credential in a browser response;
+8. call `revokeBusabaseAirAppOAuthCredential()` on logout, then remove the local registration.
+
+Use `createBusabaseAirAppLocalGateway()` from `busabase-sdk/airapp-node` for this boundary. It owns
+the pending PKCE request, credential rotation, auth verification, validated Space persistence,
+logout, and `/api/v1` proxy. Do not copy those mechanics into each app. The browser may request a
+Space through `/auth/space`, but the gateway validates membership and ignores any browser-provided
+`x-busabase-space` header on proxied requests.
+
+Before redirecting the browser, issue the generated authorization GET from Hono with redirects
+disabled and a short timeout. A redirect or successful response proves that the target recognizes
+the public client; `invalid_request` means the selected server needs the local-app OAuth release.
+Return that as a concise setup-page error. This compatibility probe is local onboarding only and
+must not run inside AirApp.
+
+The local OAuth registration is identity bootstrap, not domain configuration or a blueprint
+`vault_requirement`. It must never be committed, synced into an AirApp, or represented as a normal
+Busabase Vault item. Browser code must never receive access/refresh tokens, the PKCE verifier, or a
+Vault value through JavaScript-visible cookies, storage, application state, logs, or errors.
+
+Validate custom origins before any outbound request: accept HTTPS origins without userinfo, query,
+fragment, or path; permit HTTP only for loopback development. Bind the selected origin, redirect URI,
+resource audience, client id, and verifier to the pending state. Do not turn the local proxy into a
+general URL fetcher.
+
+Environment bootstrap remains supported only for explicit non-interactive CI/operator testing:
+
+```bash
+BUSABASE_BASE_URL=http://localhost:15419 pnpm dev              # Desktop / OSS: open, no key
+BUSABASE_BASE_URL=https://busabase.com \
+  BUSABASE_API_KEY=… BUSABASE_SPACE_ID=… pnpm dev              # Cloud
+```
+
+An environment key stays in the shell and is attached server-side. It must never appear in a
+committed file, and the browser must never see one. It does not replace the OAuth setup flow in an
+interactive generated app.
+
+**Asset references must be relative** (`./styles.css`, `./js/app.js`, `../vendor/busabase-sdk.js`). Under the Local Node engine the app is reverse-proxied onto a *sub-path* of busabase's origin, so an absolute `src="/js/app.js"` resolves against the origin root — busabase itself — and 404s. `pnpm check` rejects absolute asset references. `/api/v1/…` is exempt: it is an API call, not an asset.
+
+Without environment bootstrap the app still runs: standalone production mode shows the OAuth
+connection gate and `?demo=1` renders deterministic Demo data. Once connected, authentication
+readiness and resource readiness are separate states. A Busabase-hosted AirApp — recognized by
+`BUSABASE_AIRAPP_RUNTIME`, never by hostname — never calls `/auth/status` or `/auth/start`,
+skips the local OAuth gate, and constructs
+`createBusabaseClient({ baseUrl: window.location.origin })` without a credential. Cloud's `/api/v1`
+auth layer validates the same-origin browser request, resolves the Better Auth session, and scopes
+the request to the viewer's active Space.
 
 The published `busabase-sdk` ESM file can contain bare imports such as `@orpc/client`; a browser cannot resolve those imports directly. During local scaffolding, exact-pinned `esbuild-wasm` bundles the exact-pinned SDK into `app/vendor/busabase-sdk.js`. Commit that generated file as reviewed AirApp source. `start` only runs `node server.js`, so Nodepod never invokes a build tool, native binary, or subprocess. This is a dependency bridge, not an application framework: the AirApp remains Hono plus vanilla HTML, CSS, and JavaScript. Never expose `node_modules` through a static route or replace this with a third-party CDN.
 
@@ -87,16 +218,36 @@ app/js/config.js
 
 The UI calls only the provider interface. The demo provider is deterministic. The Busabase provider uses only the procedures declared in `blueprint.json` and reads only the exact materialized resource ids written into generated config. Do not list the workspace at runtime to rediscover configured resources by slug.
 
+## Persistent Configuration And Native Nodes
+
+The exact ids in generated config are deployment bootstrap, not a local product-settings database.
+Persistent configuration, workflow state, and domain data live in Busabase and are read through
+`busabase-sdk` from the most appropriate native node:
+
+- Folder and Node identity define the app root, hierarchy, ownership, and resource map.
+- Base and native View hold structured settings, policies, workflow rows, review queues, status, and
+  relations that need filtering or sorting.
+- Doc holds longer durable instructions or narrative configuration; read only the required range.
+- Drive and File hold assets or larger artifacts; list bounded directories and fetch named files on
+  demand.
+- Vault holds secrets, but browser AirApps receive only requirement names/readiness. A trusted
+  Workflow or Agent resolves values and exposes only sanitized results.
+
+Do not persist product configuration in local JSON, SQLite, `app/.data/`, `localStorage`, or Demo
+records. Local shell variables are connection bootstrap only. Demo data is deterministic preview
+state and must never become a fallback after a Busabase provider failure.
+
 Default read surface:
 
 ```text
-records.listPaged
-changeRequests.listPaged  # only when pending review data is rendered
+records.list
+records.count  # only when a screen renders an authoritative total, not a loaded-rows count
+changeRequests.list  # only when pending review data is rendered
 ```
 
 Add narrowly scoped procedures only when a screen consumes them, for example native View metadata, one Doc/range, a bounded Drive directory, or one named file/asset. Vault has no browser procedure and must never be represented in the provider interface.
 
-Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on the verb for safety: keep the explicit procedure allowlist and the static validation in `npm run check`.
+Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on the verb for safety: keep the explicit procedure allowlist and the static validation in `pnpm check`.
 
 ## Data Access Budget And Pagination Contract
 
@@ -104,14 +255,19 @@ Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on
 - Fetch one page per configured Base using its blueprint `read_limit`/config `readLimit` (default 50, integer 1–50), and fetch only one additional page for each continuation action.
 - Fetch at most 20 relevant pending ChangeRequests, using the server-side status filter, and omit this request when the UI does not render it.
 - Start independent Base and ChangeRequest reads together with `Promise.all`.
-- Preserve every `nextCursor`; show a partial-count marker such as `50+` and a Load More control.
-- Push supported filters and sorting into `records.listPaged` instead of fetching a broad page and pretending client-side filtering covers the full Base.
+- Preserve every `nextCursor`; when the screen is a browsable list (a table, a feed, a picker), show a partial-count marker such as `50+` next to the loaded rows and a Load More control — that count is about what's on screen, not the Base.
+- Push supported filters and sorting into `records.list` instead of fetching a broad page and pretending client-side filtering covers the full Base.
 - Debounce replaceable queries such as text search, discard stale responses, and reuse already-loaded pages when inputs have not changed.
 - Avoid per-record follow-up calls. Load related data in bounded parallel batches or from data already present in the record response.
-- Never loop through cursors in an interactive request. Search, aggregates, full exports, and offline research require a separate deliberate design with bounded batches, progress, cancellation/retry behavior, and a clear user action.
+- Never loop through cursors in an interactive request to compute a total. Call `records.count` instead — it is a real, exact server-side count (optionally scoped by `baseId`, a saved `viewId`, and/or ad-hoc `filters`), not an approximation, and it is cheap for the filter shapes an AirApp typically needs (equality/contains text matches, presence checks, checkbox true/false). Full exports and offline research beyond a count still require a separate deliberate design with bounded batches, progress, cancellation/retry behavior, and a clear user action.
 - Do not request procedures or datasets that have no visible consumer.
 
-These limits are page budgets, not claims about total record count. Loading another page must be a visible user action and must merge records without duplicates. A displayed count must say or signal when it covers only loaded rows; never present a partial window as a canonical total.
+These limits are page budgets, not claims about total record count. Loading another page must be a visible user action and must merge records without duplicates.
+
+Two different questions need two different answers — do not conflate them:
+
+- **"How many rows have I loaded so far?"** (a browsable list, a feed, a picker) — this is about the page budget above. A displayed count must say or signal when it covers only loaded rows; show `50+` (or similar), never present a partial window as a canonical total.
+- **"What is the total?"** (a summary/stat tile — "Total PRs: 825", "Open issues: 57") — this is not a loaded-rows question at all. Call `records.count` and render its `total` directly. Never derive a summary-tile number from `records.list` page length, and never label a `50+`-style partial count as if it were this kind of total.
 
 ## Optional Actions
 
@@ -130,10 +286,12 @@ Do not report every provider failure as missing Bases.
 
 | Code | Meaning |
 | --- | --- |
-| `BRIDGE_UNAVAILABLE` | `/api/v1` did not reach Busabase (locally: `BUSABASE_BASE_URL` unset or the dev proxy is down) |
-| `SESSION_REQUIRED` | target browser session is missing/expired |
-| `SPACE_UNAVAILABLE` | selected Space cannot be resolved |
-| `SPACE_HEADER_REJECTED` | the configured Space is not one the current session/key may target |
+| `BRIDGE_UNAVAILABLE` | `/api/v1` did not reach the selected Busabase origin or the Hono proxy is down |
+| `SESSION_REQUIRED` | local AirApp registration or deployed ambient browser session is missing/expired |
+| `OAUTH_CALLBACK_INVALID` | state, issuer, code, redirect, client, or resource binding failed |
+| `LOCAL_CREDENTIAL_REQUIRED` | the local OAuth token set was not registered, is expired, or was revoked |
+| `SPACE_SELECTION_REQUIRED` | no Space is selected, including a multi-Space account awaiting explicit choice |
+| `SPACE_NOT_ALLOWED` | the stored/requested Space is not one the current session/key may target |
 | `SCHEMA_INCOMPLETE` | connection works but configured Base/field is missing |
 | `PROCEDURE_DENIED` | requested procedure is outside the declared allowlist |
 | `SETUP_REQUIRED` | a declared trusted integration is not ready; show requirement names only |
@@ -146,4 +304,7 @@ A deployed AirApp inherits the Run user's Busabase privileges and is not platfor
 
 ## Merged HEAD Limitation
 
-Target Run executes merged HEAD only. A pending AirApp CR cannot be validated in the real session bridge. Local Demo validates UI only; local `BUSABASE_BASE_URL` development validates real reads but authenticates with your key rather than the deployed session. Always perform target Run after merge.
+Target Run executes merged HEAD only. A pending AirApp CR cannot be validated in the real session
+bridge. Local Demo validates UI only; local OAuth validates the delegated API grant and local
+credential proxy, while deployed Run validates the distinct ambient viewer session. Environment-key testing is
+an optional automation path and proves neither user flow. Always perform target Run after merge.

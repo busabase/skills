@@ -1,65 +1,69 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { createBusabaseAirAppLocalGateway } from "busabase-sdk/airapp-node";
 import { Hono } from "hono";
 
 const app = new Hono();
+const gateway = createBusabaseAirAppLocalGateway({
+  appId: "__APP_SLUG__",
+  successPath: "/",
+  errorPath: "/",
+});
 
-app.get("/health", (context) => context.json({ ok: true, app: "busabase-airapp" }));
+app.get("/health", (context) => context.json({ ok: true, app: "__APP_SLUG__" }));
+
+// These routes are used only by a standalone top-level loopback preview. In a
+// Busabase-hosted Run, the browser skips this gate and Busabase owns /api/v1.
+app.get("/auth/status", (context) => gateway.statusResponse(context.req.raw));
+app.post("/auth/start", (context) => gateway.start(context.req.raw));
+app.get("/auth/callback", (context) => gateway.callback(context.req.raw));
+app.post("/auth/space", (context) => gateway.selectSpace(context.req.raw));
+app.post("/auth/logout", (context) => gateway.logout(context.req.raw));
+app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
 
 /**
- * Local development proxy — inert when deployed.
+ * The ONLY sanctioned way for browser code to learn where it is running.
  *
- * Browser code always calls `/api/v1/…` on its own origin. Inside Busabase that
- * origin already serves the real API, so nothing below ever runs there:
- * `BUSABASE_BASE_URL` is a local shell variable, so this route is simply never
- * registered. Running standalone (`npm run dev`) it is what turns that same
- * relative path into a real call against the Busabase you develop against:
+ * Busabase spawns this very process when it hosts the app, and injects
+ * `BUSABASE_AIRAPP_RUNTIME` (`nodepod` | `local-node` | `srt` | `embed`).
+ * Nobody else sets it, so its absence is the positive fact "standalone".
+ * This route re-exposes that to the browser, which cannot read env vars.
  *
- *   BUSABASE_BASE_URL=http://localhost:15419 npm run dev     # Desktop / OSS: open, no key
- *   BUSABASE_BASE_URL=https://busabase.com \
- *   BUSABASE_API_KEY=… BUSABASE_SPACE_ID=… npm run dev       # Cloud
+ * Never classify the environment by hostname. A Busabase-hosted AirApp is
+ * routinely served from `localhost` (Desktop/OSS runs on
+ * `http://localhost:15419`), and a standalone `npm run dev` is routinely
+ * reached over a LAN IP or a signed dev tunnel such as
+ * `https://3111-….dev.budaapps.com`. Either hostname test misfires, and the
+ * "not localhost ⇒ hosted" direction fails the worst: the app hides its own
+ * connection gate, calls `/api/v1` with no credential, and shows the user an
+ * error they have no way to act on.
  *
- * The key is attached here, server-side, and never reaches the browser or any
- * committed file — which is why the app's own source can stay credential-free.
+ * `devProxy` is a separate axis on purpose. "Where am I running" and "do I
+ * have credentials" are two different states, and collapsing them into one
+ * boolean is what produces UI claiming to be connected when it isn't. It
+ * reports only the non-interactive env bootstrap; the interactive answer is
+ * the gateway's own `/auth/status`.
+ *
+ * Browser code must fetch this RELATIVELY (`__airapp/runtime`, no leading
+ * slash). Under the Local Node engine the app is reverse-proxied onto a
+ * sub-path of busabase's origin, so a leading slash resolves against the
+ * origin root — busabase itself — and 404s.
  */
-const busabaseBaseUrl = (process.env.BUSABASE_BASE_URL || "").replace(/\/+$/, "");
-if (busabaseBaseUrl) {
-  app.all("/api/v1/*", async (context) => {
-    const incoming = new URL(context.req.url);
-    const target = new URL(incoming.pathname + incoming.search, busabaseBaseUrl);
-    const headers = new Headers();
-    const contentType = context.req.header("content-type");
-    if (contentType) headers.set("content-type", contentType);
-    const accept = context.req.header("accept");
-    if (accept) headers.set("accept", accept);
-    const space = context.req.header("x-busabase-space") || process.env.BUSABASE_SPACE_ID;
-    if (space) headers.set("x-busabase-space", space);
-    if (process.env.BUSABASE_API_KEY) {
-      headers.set("authorization", `Bearer ${process.env.BUSABASE_API_KEY}`);
-    }
-    const method = context.req.method;
-    const hasBody = method !== "GET" && method !== "HEAD";
-    const upstream = await fetch(target, {
-      method,
-      headers,
-      body: hasBody ? await context.req.arrayBuffer() : undefined,
-      redirect: "manual",
-    });
-    const responseHeaders = new Headers();
-    const upstreamType = upstream.headers.get("content-type");
-    if (upstreamType) responseHeaders.set("content-type", upstreamType);
-    return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
-  });
-  console.log(`Busabase dev proxy: /api/v1/* -> ${busabaseBaseUrl}/api/v1/*`);
-}
+const AIRAPP_HOSTED_RUNTIMES = new Set(["nodepod", "local-node", "srt", "embed"]);
+const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
+app.get("/__airapp/runtime", (context) =>
+  context.json({
+    runtime: airappRuntime || "standalone",
+    hosted: AIRAPP_HOSTED_RUNTIMES.has(airappRuntime),
+    devProxy: Boolean((process.env.BUSABASE_BASE_URL || "").trim()),
+  }),
+);
+console.log(`AirApp runtime: ${airappRuntime || "standalone"}`);
 
 app.use("/*", serveStatic({ root: "./app" }));
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 serve({ fetch: app.fetch, port }, () => {
-  // Wording matters: the Local Node engine discovers which port to reverse-proxy
-  // by matching this line against `READY_PORT_PATTERNS` in busabase-core's
-  // `local-node-runtime.ts`. "ready on port" matches none of them, so the
-  // preview would never load. Keep "listening on port <n>".
+  // Both Busabase runners discover the preview port from this exact phrase.
   console.log(`AirApp listening on port ${port}`);
 });

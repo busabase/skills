@@ -31,21 +31,30 @@ const FIELD_TYPES = new Set([
   "whiteboard",
   "relation",
 ]);
+/**
+ * SDK procedure keys a blueprint's `permissions.read_procedures` may name.
+ *
+ * Reading ONE node of any type is `nodes.get` and listing them is `nodes.list`
+ * — the unified Node surface replaced the per-type `docs.get` / `files.get` /
+ * `folders.get` / `file-tree` gets, so a blueprint that still names those would
+ * be granting itself a route that 404s. (`drives.get` / `drives.listFiles` /
+ * `drives.readFile` were stale even before that: the Drive/Skill/AirApp groups
+ * merged into `fileTrees` some time ago.)
+ */
 const READ_PROCEDURES = new Set([
   "bases.listViews",
-  "records.listPaged",
+  "records.list",
   "records.count",
   "records.get",
   "records.search",
-  "docs.get",
+  "nodes.list",
+  "nodes.get",
   "docs.readLines",
-  "drives.get",
-  "drives.listFiles",
-  "drives.readFile",
-  "files.get",
+  "fileTrees.listFiles",
+  "fileTrees.readFile",
   "assets.get",
   "assets.download",
-  "changeRequests.listPaged",
+  "changeRequests.list",
 ]);
 const VIEW_TYPES = new Set(["table", "gallery", "kanban", "calendar", "gantt"]);
 const RESOURCE_COLLECTIONS = ["docs", "drives", "whiteboards", "forms", "workflows", "html"];
@@ -311,6 +320,43 @@ export function validateBlueprint(blueprint) {
     error("read_only app cannot declare change_request actions.");
   }
 
+  const onboarding = isObject(blueprint.onboarding) ? blueprint.onboarding : null;
+  if (!onboarding) {
+    error("onboarding contract is required.");
+  } else {
+    if (!Number.isInteger(onboarding.version) || onboarding.version < 1) {
+      error("onboarding.version must be a positive integer.");
+    }
+    if (!Array.isArray(onboarding.required_fields)) {
+      error("onboarding.required_fields must be an array.");
+    } else {
+      const onboardingKeys = new Set();
+      for (const [fieldIndex, field] of onboarding.required_fields.entries()) {
+        const prefix = `onboarding.required_fields[${fieldIndex}]`;
+        if (!isObject(field)) {
+          error(`${prefix} must be an object.`);
+          continue;
+        }
+        const key = String(field.key || "");
+        if (!SLUG.test(key)) error(`${prefix}.key must be lowercase kebab-case.`);
+        if (onboardingKeys.has(key)) error(`${prefix}.key duplicates ${key}.`);
+        onboardingKeys.add(key);
+        if (!resourceKeys.has(field.resource)) {
+          error(`${prefix}.resource references unknown resource ${field.resource}.`);
+        }
+        if (!String(field.validation || "").trim()) error(`${prefix}.validation is required.`);
+        if (!asArray(field.unlocks).length)
+          error(`${prefix}.unlocks must name at least one capability.`);
+      }
+      if (onboarding.required_fields.length === 0 && !String(onboarding.rationale || "").trim()) {
+        error("onboarding.rationale is required when required_fields is empty.");
+      }
+    }
+    if (!resourceKeys.has(onboarding.completion_resource)) {
+      error("onboarding.completion_resource must reference a declared workspace resource.");
+    }
+  }
+
   const permissions = isObject(blueprint.permissions) ? blueprint.permissions : {};
   for (const procedure of asArray(permissions.read_procedures)) {
     if (!READ_PROCEDURES.has(procedure)) error(`Unsupported read procedure: ${procedure}.`);
@@ -350,9 +396,10 @@ export async function resolveSdkVersion(requestedVersion) {
 
 export async function verifyInstalledSdk(projectPath) {
   const probe = [
-    'import("busabase-sdk")',
-    ".then((sdk) => {",
+    'Promise.all([import("busabase-sdk"), import("busabase-sdk/airapp-node")])',
+    ".then(([sdk, airapp]) => {",
     '  if (typeof sdk.createBusabaseClient !== "function") process.exit(2);',
+    '  if (typeof airapp.createBusabaseAirAppLocalGateway !== "function") process.exit(3);',
     "})",
     ".catch((error) => { console.error(error.message); process.exit(1); });",
   ].join("");
@@ -364,6 +411,10 @@ export async function verifyInstalledSdk(projectPath) {
   } catch (error) {
     if (error?.code === 2)
       throw new Error("Installed busabase-sdk does not export createBusabaseClient.");
+    if (error?.code === 3)
+      throw new Error(
+        "Installed busabase-sdk does not provide the required AirApp gateway export createBusabaseAirAppLocalGateway.",
+      );
     throw new Error(
       `Unable to import installed busabase-sdk: ${error?.stderr || error?.message || error}`,
     );
@@ -397,6 +448,7 @@ const deploymentConfig = (blueprint) => ({
   deployment: blueprint.app.deployment,
   spaceId: blueprint.app.space_id || "",
   readOnly: blueprint.app.read_only,
+  onboarding: blueprint.onboarding,
   brand: blueprint.app.brand || { mode: "inferred", accent: "#176B5B", logo_path: "" },
   schema: {
     folder: {
@@ -487,6 +539,14 @@ export async function scaffoldProject({
     .replaceAll("__SDK_VERSION__", version);
   await writeFile(path.join(output, "package.json"), packageJson, "utf8");
   await rm(packageTemplate);
+
+  const serverPath = path.join(output, "server.js");
+  const serverTemplate = await readFile(serverPath, "utf8");
+  await writeFile(
+    serverPath,
+    serverTemplate.replaceAll("__APP_SLUG__", blueprint.app.slug),
+    "utf8",
+  );
 
   const configPath = path.join(output, "app", "js", "config.js");
   const configTemplate = await readFile(configPath, "utf8");
@@ -634,6 +694,19 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
     if (pattern.test(source)) throw new Error(`Forbidden ${label} found in browser source.`);
   if (/Bearer\s+(?!\$\{)[A-Za-z0-9_-]{8,}/.test(serverSource))
     throw new Error("Literal Bearer token found in server.js.");
+  if (!serverSource.includes("createBusabaseAirAppLocalGateway"))
+    throw new Error("Server must use the SDK local AirApp OAuth/Space gateway.");
+  for (const route of [
+    "/auth/status",
+    "/auth/start",
+    "/auth/callback",
+    "/auth/space",
+    "/auth/logout",
+  ]) {
+    if (!serverSource.includes(route)) throw new Error(`Server is missing ${route}.`);
+  }
+  if (!source.includes("SPACE_SELECTION_REQUIRED") && !source.includes("/auth/space"))
+    throw new Error("Browser setup must block on explicit multi-Space selection.");
   return {
     ok: true,
     sdkVersion,

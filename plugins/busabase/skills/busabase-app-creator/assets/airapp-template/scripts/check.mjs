@@ -13,6 +13,7 @@ const required = [
   "app/js/config.js",
   "app/js/messages.js",
   "app/js/busabase-client.js",
+  "app/js/runtime.js",
   "app/js/providers/busabase-provider.js",
   "app/js/providers/demo-provider.js",
   "app/vendor/busabase-sdk.js",
@@ -32,13 +33,24 @@ const appConfig = JSON.parse(configMatch[1]);
 const sdkVersion = packageJson.dependencies?.["busabase-sdk"] || "";
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(sdkVersion))
   throw new Error("busabase-sdk must use an exact version.");
-if (packageJson.dependencies?.react || packageJson.dependencies?.vite)
-  throw new Error("Unsupported frontend dependency.");
+// Scan BOTH dependency maps: a bundler declared under devDependencies is just as unable to
+// boot under Nodepod as one under dependencies, and only `dependencies` was being checked.
+const declaredDeps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+const unsupportedDep = ["react", "vite", "webpack", "next", "parcel", "react-scripts"].find(
+  (name) => declaredDeps[name],
+);
+if (unsupportedDep) throw new Error(`Unsupported frontend dependency: ${unsupportedDep}.`);
 if (
   !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.devDependencies?.["esbuild-wasm"] || "")
 ) {
   throw new Error("esbuild-wasm must use an exact version.");
 }
+// `dev` is the script that matters: BOTH AirApp engines run `npm run dev` (nodepod-runner.ts
+// and local-node-runtime.ts). This check only ever asserted `start`, so a project that dropped
+// `dev` — the exact shape a Vite scaffold produces — passed here and then died at run time on
+// `npm error Missing script: "dev"`. `start` is still checked because deployment uses it.
+if (packageJson.scripts?.dev !== "node server.js")
+  throw new Error('dev must be exactly "node server.js" — it is what Busabase runs.');
 if (packageJson.scripts?.start !== "node server.js")
   throw new Error("start must not build or spawn subprocesses.");
 if (contents["app/vendor/busabase-sdk.js"].length < 10_000)
@@ -98,6 +110,7 @@ const browserSource = [
   contents["app/js/app.js"],
   contents["app/js/config.js"],
   contents["app/js/busabase-client.js"],
+  contents["app/js/runtime.js"],
   contents["app/js/providers/busabase-provider.js"],
 ].join("\n");
 
@@ -126,12 +139,62 @@ if (absoluteAssetRef.test(browserSource) || absoluteAssetRef.test(contents["app/
   throw new Error(
     "Absolute asset path found; use relative paths so the Local Node sub-path proxy works.",
   );
+// --- Runtime detection -----------------------------------------------------
+// The app must learn where it runs from `BUSABASE_AIRAPP_RUNTIME`, which
+// Busabase injects into the process it spawns and `server.js` re-exposes at
+// `__airapp/runtime`. Hostname tests are wrong in BOTH directions: a
+// Busabase-hosted AirApp is served from `localhost` on Desktop/OSS, and a
+// standalone `npm run dev` is reached over LAN IPs and signed dev tunnels
+// (`https://3111-….dev.budaapps.com`). The "not localhost ⇒ hosted" direction
+// is the damaging one — the app hides its own connection gate, calls
+// `/api/v1` unauthenticated, and reports an error the user cannot act on.
+// Comments are stripped first so the reasoning may name `localhost` in prose.
+const withoutComments = browserSource
+  .replace(/\/\*[\s\S]*?\*\//g, " ")
+  .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, "$1 ");
+if (/location\s*\.\s*(?:hostname|host)\b/.test(withoutComments))
+  throw new Error(
+    "Hostname-based runtime detection found; read the runtime from __airapp/runtime instead.",
+  );
+if (
+  /(?:===|!==|==|!=)\s*["'`][^"'`]*(?:localhost|127\.0\.0\.1)|(?:includes|startsWith|endsWith|indexOf|search|match|test)\s*\(\s*\/?["'`]?[^"'`)]*(?:localhost|127\.0\.0\.1)/.test(
+    withoutComments,
+  )
+) {
+  throw new Error("Loopback host comparison found; runtime detection must not depend on the URL.");
+}
+if (!/getRuntime\s*\(/.test(contents["app/js/app.js"]))
+  throw new Error("app.js must resolve the runtime via runtime.js's getRuntime().");
+if (!browserSource.includes("__airapp/runtime"))
+  throw new Error("Browser source must probe the __airapp/runtime endpoint.");
+// Relative on purpose — under the Local Node engine a leading slash resolves
+// against busabase's origin root instead of the app's preview sub-path.
+if (/["'`]\/__airapp\/runtime/.test(browserSource))
+  throw new Error("Runtime probe must use the relative path __airapp/runtime, without a slash.");
+if (!/process\.env\.BUSABASE_AIRAPP_RUNTIME\b/.test(contents["server.js"]))
+  throw new Error("server.js must read BUSABASE_AIRAPP_RUNTIME.");
+if (!/["'`]\/__airapp\/runtime["'`]/.test(contents["server.js"]))
+  throw new Error("server.js must serve the /__airapp/runtime endpoint.");
+
 if (/BUSABASE_API_KEY/i.test(browserSource))
   throw new Error("API key reference found in browser source.");
 if (/Bearer/i.test(browserSource)) throw new Error("Bearer header found in browser source.");
 // The dev proxy may reference the env var; it may never carry a literal token.
 if (/Bearer\s+(?!\$\{)[A-Za-z0-9_-]{8,}/.test(contents["server.js"]))
   throw new Error("Literal Bearer token found in server.js.");
+if (!contents["server.js"].includes("createBusabaseAirAppLocalGateway"))
+  throw new Error("Server must use the SDK local AirApp OAuth/Space gateway.");
+for (const route of [
+  "/auth/status",
+  "/auth/start",
+  "/auth/callback",
+  "/auth/space",
+  "/auth/logout",
+]) {
+  if (!contents["server.js"].includes(route)) throw new Error(`Server is missing ${route}.`);
+}
+if (!contents["app/js/app.js"].includes("/auth/space"))
+  throw new Error("Browser setup must implement explicit multi-Space selection.");
 if (appConfig.readOnly && appConfig.permissions.change_request_procedures.length) {
   throw new Error("Read-only app declares write procedures.");
 }
