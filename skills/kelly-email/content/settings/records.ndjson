@@ -1,0 +1,1 @@
+{"key":"set-demo-config","fields":{"record-id":"set-demo-config","name":"kelly-email-config","kind":"config","value":"See config.example.json. Mailbox credentials belong in the Vault namespace kelly-email, never here."}}

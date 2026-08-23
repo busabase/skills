@@ -92,6 +92,7 @@ Claude 和 Codex 内置技能都采用 MCP 优先方式：它们依赖 OAuth 和
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | 通过 HTTP 操作 Busabase 工作区：列出 Base 和记录、提出 ChangeRequest，并合并已获批准的变更。 |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 将产品构想转化为完整的 Busabase 工作区应用，使用原生资源、受限数据访问和可审核的 AirApp。 |
+| [`kelly-email`](./skills/kelly-email/SKILL.md) | 可安装的**模板**：收件审批台，装进来就带表、AirApp 和这份手册，Agent 拿到工作区就知道怎么用。 |
 
 ## 仓库结构
 

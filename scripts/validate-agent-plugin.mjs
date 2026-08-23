@@ -111,10 +111,16 @@ async function validateSkills() {
     const match = content.match(/^---\n([\s\S]*?)\n---\n/);
     assert(match, `${entry.name}/SKILL.md must start with YAML frontmatter`);
 
+    // Only the TOP-LEVEL keys are checked below, so only top-level lines are
+    // parsed: an indented line belongs to a nested mapping or a list, and
+    // demanding a `key: value` shape from those rejected ordinary YAML. A list
+    // like `metadata.tags` passed only because every item happened to contain a
+    // colon of its own.
     const frontmatter = Object.fromEntries(
       match[1]
         .split("\n")
-        .filter((line) => line.trim())
+        .filter((line) => line.trim() && !line.startsWith(" ") && !line.startsWith("\t"))
+        .filter((line) => !line.trimStart().startsWith("#"))
         .map((line) => {
           const separator = line.indexOf(":");
           assert(separator > 0, `${entry.name}/SKILL.md has invalid frontmatter: ${line}`);
