@@ -1,3 +1,4 @@
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
 import { appConfig } from "./config.js";
 import { messages } from "./messages.js";
 import { getProvider } from "./providers/index.js";
@@ -171,93 +172,27 @@ function renderSettings() {
     .join("");
 }
 
+// Connection UX Contract gate — `busabase-sdk/airapp-gate`, configured. The
+// three screens (connect / choose a Space / initialize the workspace), the
+// state machine behind them, and their stylesheet all live in the SDK; only
+// this app's name and demo escape hatch are its own. `shouldGate` is passed
+// explicitly rather than letting the SDK infer it from a status probe: where
+// this app runs is a fact its host states (`BUSABASE_AIRAPP_RUNTIME`,
+// surfaced through runtime.js's `getRuntime()`), never something to guess
+// from the hostname — see runtime.js for why both directions of that guess
+// are wrong.
 const isDemo = () => new URLSearchParams(window.location.search).get("demo") === "1";
 
-/**
- * The local `/auth/*` gateway exists only in a standalone run, so consult it
- * only there. `runtime.hosted` comes from the env var Busabase injects into the
- * process it spawned — not from the hostname, the path, or whether we are in an
- * iframe. Those all misclassify: a hosted AirApp is served from `localhost` on
- * Desktop/OSS, and a standalone app reached over a dev tunnel is neither
- * loopback nor a hosted preview path, which used to skip the connect gate
- * entirely and leave the user with an unactionable error.
- *
- * `unknown` (the probe did not answer) is treated as standalone on purpose:
- * showing a connect gate that turns out to be unnecessary is recoverable,
- * silently skipping a required one is not.
- */
-const shouldUseLocalGateway = (runtime) => !runtime.hosted;
-
-const setupOption = (value, title, hint, checked = false) => `
-  <label class="setup-option">
-    <input type="radio" name="server_mode" value="${value}" ${checked ? "checked" : ""}>
-    <span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></span>
-  </label>`;
-
-function showSetup(status) {
-  let overlay = byId("setupGate");
-  if (!overlay) {
-    overlay = document.createElement("div");
-    overlay.id = "setupGate";
-    overlay.className = "setup-gate";
-    document.body.append(overlay);
-  }
-  const oauthError = new URLSearchParams(window.location.search).get("oauth_error");
-  const safeError = oauthError || status.message || "";
-  const footer = `<footer class="setup-footer"><span>${escapeHtml(messages.localCredential)}</span><a href="?demo=1">${escapeHtml(messages.demo)}</a></footer>`;
-
-  if (status.readiness === "needs_space") {
-    const choices = (status.spaces || [])
-      .map(
-        (space, index) =>
-          `<label class="space-option"><input type="radio" name="space_id" value="${escapeHtml(space.id)}" ${index === 0 ? "checked" : ""}><span><strong>${escapeHtml(space.name)}</strong><code>${escapeHtml(space.id)}</code></span></label>`,
-      )
-      .join("");
-    overlay.innerHTML = `<section class="setup-panel" aria-labelledby="setupTitle"><header><span class="eyebrow">${escapeHtml(messages.setupEyebrow)}</span><h1 id="setupTitle">${escapeHtml(messages.spaceTitle)}</h1><p>${escapeHtml(status.spaces?.length ? messages.spaceCopy : messages.noSpaces)}</p></header>${safeError ? `<div class="setup-error" role="alert">${escapeHtml(safeError)}</div>` : ""}<form class="setup-form" data-space-form>${choices}<button class="setup-primary" type="submit" ${choices ? "" : "disabled"}>${escapeHtml(messages.selectSpace)}</button></form>${footer}</section>`;
-    const form = overlay.querySelector("[data-space-form]");
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const button = form.querySelector("button");
-      button.disabled = true;
-      const response = await fetch("/auth/space", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(new FormData(form))),
-      });
-      if (response.ok) window.location.reload();
-      else {
-        const body = await response.json().catch(() => ({}));
-        showSetup({ ...status, message: body.error || messages.retry });
-      }
-    });
-    return;
-  }
-
-  if (status.readiness === "retry") {
-    overlay.innerHTML = `<section class="setup-panel" aria-labelledby="setupTitle"><header><span class="eyebrow">${escapeHtml(messages.setupEyebrow)}</span><h1 id="setupTitle">${escapeHtml(messages.retryTitle)}</h1></header><div class="setup-error" role="alert">${escapeHtml(safeError || messages.retryTitle)}</div><div class="setup-actions"><button class="setup-primary" type="button" data-retry>${escapeHtml(messages.retry)}</button></div>${footer}</section>`;
-    overlay
-      .querySelector("[data-retry]")
-      ?.addEventListener("click", () => window.location.reload());
-    return;
-  }
-
-  overlay.innerHTML = `<section class="setup-panel" aria-labelledby="setupTitle"><header><span class="eyebrow">${escapeHtml(messages.setupEyebrow)}</span><h1 id="setupTitle">${escapeHtml(messages.connectTitle)}</h1><p>${escapeHtml(messages.connectCopy)}</p></header>${safeError ? `<div class="setup-error" role="alert">${escapeHtml(safeError)}</div>` : ""}<form class="setup-form" method="post" action="/auth/start" data-connect-form><fieldset><legend class="sr-only">Server</legend>${setupOption("cloud", messages.cloud, "busabase.com", true)}${setupOption("custom", messages.customServer, messages.customServerHint)}</fieldset><label class="custom-origin" hidden><span>${escapeHtml(messages.serverUrl)}</span><input type="url" name="custom_base_url" autocomplete="url" placeholder="https://busabase.example.com"></label><input type="hidden" name="base_url" value="${escapeHtml(status.cloudBaseUrl || "https://busabase.com")}"><button class="setup-primary" type="submit">${escapeHtml(status.readiness === "needs_auth" ? messages.reconnect : messages.connect)}</button></form>${footer}</section>`;
-  const form = overlay.querySelector("[data-connect-form]");
-  const baseUrl = form?.querySelector('[name="base_url"]');
-  const custom = form?.querySelector(".custom-origin");
-  const customInput = form?.querySelector('[name="custom_base_url"]');
-  form?.querySelectorAll('[name="server_mode"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      const customMode = radio.checked && radio.value === "custom";
-      custom.hidden = !customMode;
-      customInput.required = customMode;
-      if (!customMode) baseUrl.value = status.cloudBaseUrl || "https://busabase.com";
-    });
-  });
-  customInput?.addEventListener("input", () => {
-    baseUrl.value = customInput.value;
-  });
-}
+const gate = createAirAppConnectGate({
+  appName: appConfig.appName,
+  demoHref: "?demo=1",
+  shouldGate: () => !isDemo() && !state.runtime?.hosted,
+  onProvision: () => {
+    throw new Error(
+      "This template does not self-provision; resources are created at scaffold time.",
+    );
+  },
+});
 
 function render() {
   document.documentElement.lang = appConfig.locale;
@@ -291,16 +226,12 @@ async function load() {
   // runtime decides what to TELL the user, the API decides what is possible.
   state.runtime = await getRuntime();
   try {
-    if (!isDemo() && shouldUseLocalGateway(state.runtime)) {
-      state.authStatus = await fetch("/auth/status", {
-        headers: { accept: "application/json" },
-      }).then((response) => response.json());
-      if (state.authStatus.readiness !== "ready") {
-        setText("loadingState", "");
-        showSetup(state.authStatus);
-        return;
-      }
+    const ready = await gate.pass({ onReady: load });
+    if (!ready) {
+      setText("loadingState", "");
+      return;
     }
+    state.authStatus = await gate.status();
     state.provider = await getProvider();
     state.payload = await state.provider.getState();
     setText("loadingState", "");

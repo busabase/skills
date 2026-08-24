@@ -25,7 +25,7 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
  * The ONLY sanctioned way for browser code to learn where it is running.
  *
  * Busabase spawns this very process when it hosts the app, and injects
- * `BUSABASE_AIRAPP_RUNTIME` (`nodepod` | `local-node` | `srt` | `embed`).
+ * `BUSABASE_AIRAPP_RUNTIME` (`nodepod` | `local` | `srt` | `embed`).
  * Nobody else sets it, so its absence is the positive fact "standalone".
  * This route re-exposes that to the browser, which cannot read env vars.
  *
@@ -49,12 +49,25 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
  * sub-path of busabase's origin, so a leading slash resolves against the
  * origin root — busabase itself — and 404s.
  */
-const AIRAPP_HOSTED_RUNTIMES = new Set(["nodepod", "local-node", "srt", "embed"]);
+// Hosted is decided from PRESENCE, never from membership of a list of known
+// engine names. A local list is what broke 66 shipped apps when `local-node`
+// became `local`: each answered "standalone" inside a hosted preview, showed
+// its own connection gate, called /api/v1 with no credential, and left the
+// operator with nothing to act on. Only Busabase sets this variable, so any
+// non-empty value means it spawned this process — including an engine this app
+// has never heard of.
+//
+// The same rule now also lives in busabase-sdk as `isBusabaseAirAppHosted()` /
+// `readBusabaseAirAppRuntime()`, which is where it belongs. It is NOT used here
+// yet on purpose: the scaffold pins the latest *published* SDK, and those
+// exports ship in the next release. Importing them now would generate apps that
+// crash on boot against every SDK currently on npm. Swap this for the helpers
+// once a release carrying them is out.
 const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
 app.get("/__airapp/runtime", (context) =>
   context.json({
     runtime: airappRuntime || "standalone",
-    hosted: AIRAPP_HOSTED_RUNTIMES.has(airappRuntime),
+    hosted: airappRuntime !== "",
     devProxy: Boolean((process.env.BUSABASE_BASE_URL || "").trim()),
   }),
 );

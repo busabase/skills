@@ -205,8 +205,7 @@ test("scaffolds and checks a project without network access", async () => {
   assert.match(server, /appId: "launch-tracker"/);
   assert.match(server, /\/auth\/space/);
   assert.doesNotMatch(server, /context\.req\.header\("x-busabase-space"\)/);
-  assert.match(browser, /readiness !== "ready"/);
-  assert.match(browser, /\/auth\/space/);
+  assert.match(browser, /createAirAppConnectGate/);
   const check = await checkGeneratedProject(outputPath, { requireBundle: false });
   assert.equal(check.ok, true);
   assert.equal(check.deployment, "cloud");
@@ -259,6 +258,7 @@ test("emits and consumes custom per-Base read budgets", async () => {
   const vendorPath = path.join(outputPath, "app/vendor");
   await mkdir(vendorPath, { recursive: true });
   await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
+  await writeFile(path.join(vendorPath, "busabase-airapp-gate.js"), "x".repeat(1_001), "utf8");
   const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
     cwd: outputPath,
   });

@@ -14,7 +14,7 @@ const normalizeRecords = (records, baseKey) =>
   (records || []).map((record) => ({
     ...record,
     baseKey,
-    fields: record.headCommit?.fields || record.fields || {},
+    fields: record.headCommit?.payload || record.fields || {},
   }));
 
 const readPage = async (client, base, cursor) => {

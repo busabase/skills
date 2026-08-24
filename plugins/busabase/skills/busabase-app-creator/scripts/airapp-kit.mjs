@@ -705,8 +705,10 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   ]) {
     if (!serverSource.includes(route)) throw new Error(`Server is missing ${route}.`);
   }
-  if (!source.includes("SPACE_SELECTION_REQUIRED") && !source.includes("/auth/space"))
-    throw new Error("Browser setup must block on explicit multi-Space selection.");
+  // Space selection now lives in busabase-sdk/airapp-gate's createAirAppConnectGate(),
+  // not a hand-rolled literal route in each app's own source.
+  if (!source.includes("createAirAppConnectGate"))
+    throw new Error("Browser setup must use busabase-sdk/airapp-gate's createAirAppConnectGate().");
   return {
     ok: true,
     sdkVersion,

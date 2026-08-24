@@ -43,6 +43,14 @@ deployment, or accepted remote-only work; back-port accepted remote-only work in
 before the next deployment. Inspect the existing deployment config,
 Folder/Base/View/resource ids, procedure allowlists, per-Base budgets, SDK version, and Run command.
 
+If the existing `dev`/`start` script runs Vite, check the pinned version before touching it: only
+`vite@7.3.1` is verified runnable in this Nodepod runtime (see "Why 'no Vite' is not a style
+preference" in `references/runtime-and-sdk.md`). A working `7.3.1` pin is not tech debt to migrate
+off — leave it. Never bump it to `vite@8` (rolldown's native binding cannot load here) or accept an
+unpinned/caret range on the assumption a newer patch is safer; both are confirmed to crash the dev
+server before it binds a port, and `packages/busabase-core/src/logic/airapp-runnable.ts`'s write
+gate will reject any other pin outright on the next write.
+
 Preserve outside the requested scope:
 
 - parent Folder, Bases, fields, Views, canonical records, and all materialized resource ids;

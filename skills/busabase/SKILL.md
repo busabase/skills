@@ -43,8 +43,10 @@ curl -s -o /dev/null -w '%{http_code}' "$BUSABASE_BASE_URL/api/v1/bases"   # no 
 
 - **`200`** → no key needed, proceed anonymously.
 - **`401`** → this instance requires auth — run
-  `npm exec -y --package busabase-cli@latest -- busabase-cli login --device-code`. The user signs in
-  and selects or creates an API Key in the browser; the CLI saves it locally.
+  `npm exec -y --package busabase-cli@latest -- busabase-cli login --device-code --no-browser`.
+  This prints a verification URL and code instead of trying to open a browser on the agent's
+  machine. Show that URL to the user so they can open it themselves and sign in; the CLI keeps
+  polling in the background and saves the API Key locally once they approve.
 
 Never ask the user to paste an API Key into chat, and never print, quote, summarize, or otherwise
 expose a credential. Use `--api-key` only when the user explicitly chooses a non-interactive
@@ -230,7 +232,7 @@ is code that talks to Busabase, hand off:
 
 | You are… | Use |
 | --- | --- |
-| Writing TypeScript/JavaScript against the API | `busabase-sdk` — `createBusabaseClient({ baseUrl, apiKey })`. One client, fully typed against the same contract `/api/v1` serves. It is the only client the SDK ships. |
+| Writing TypeScript/JavaScript against the API | `busabase-sdk` — `createBusabaseClient({ baseUrl, apiKey })`. One client, fully typed against the same contract `/api/v1` serves. It is the only client the SDK ships. It carries the same embed-link surface you use from the shell: `client.embedLinks.create({ nodeId })` returns `{ url, iframeUrl, expiresAt }`, so code that writes on a user's behalf can hand back a no-login link too. |
 | Creating or continuously evolving a Busabase **AirApp** (an app that runs inside a workspace) | the `busabase-app-creator` skill — it owns identity checks, approved resource/schema/UI changes, scaffolding/runtime upgrades, data-access budgets, and the review flow. Don't hand-roll one from here. |
 
 Two auth facts worth knowing before you debug a `401`:
@@ -332,26 +334,86 @@ After every successful mutation, include a short Markdown link in the chat respo
 exact result in Busabase. A bare id or local filesystem path is not enough when a browser URL can be
 constructed.
 
-- Build root-host links as
-  `${BUSABASE_BASE_URL}/dashboard/${BUSABASE_SPACE_ID}/<target-path>`; URL-encode the Space ID
-  and route segments, and remove any trailing `/api/v1` from `BUSABASE_BASE_URL` first.
-- While a ChangeRequest is awaiting review, link to
-  `/inbox/<change-request-id>`. After it is merged, prefer the canonical result:
-  `/base/<base-slug>`, `/base/<base-slug>/<record-id>`, `/doc/<slug>`,
-  `/folder/<slug>`, `/skill/<slug>`, `/drive/<slug>`, `/file/<slug>`, or
+Which link to give depends on the edition you probed at connect time, because "open this" means
+something very different when the reader has no session — you are often writing into another agent's
+chat window, on a machine that never signed in to Busabase.
+
+**Desktop / local (the `200` probe)** — one link is enough. That instance has no auth, so the plain
+dashboard URL opens for anyone who can reach the host. Do not mint an embed link; there is nothing to
+bypass, and the endpoint does not exist on the OSS server.
+
+**Cloud (the `401` probe), already merged** — the dashboard URL needs a session the reader may not
+have. When the result's node type is `base`, `doc`, `file`, `drive`, `skill`, `folder`, or `airapp`,
+mint a short-lived read-only embed link and lead with it:
+
+```bash
+busabase-cli embed-links create --node-id <node-id> --output json
+```
+
+or the same call over curl, when you are already in the raw-API loop:
+
+```bash
+curl -s -X POST "$BUSABASE_BASE_URL/api/v1/embed-links" \
+  -H "Authorization: Bearer $BUSABASE_API_KEY" \
+  -H "x-busabase-space: $BUSABASE_SPACE_ID" \
+  -H 'content-type: application/json' \
+  -d '{"nodeId":"<node-id>"}'
+```
+
+It returns `url` (open top-level — the capability is swapped for a cookie and the token drops out of
+the address bar) and `iframeUrl` (for embedding inside another page). Use `url` unless the caller
+explicitly wants to embed. Pass whichever one you use through **verbatim**; never hand-assemble it.
+
+Give **both** links, in this order — they fail in opposite ways, so neither alone is enough:
+
+1. the embed `url` — opens with no sign-in, but **expires in 15 minutes**
+2. the dashboard URL — never expires, but needs a signed-in Busabase session
+
+Always state the expiry next to the embed link. A dead link that still looks alive is worse than no
+link at all.
+
+**Cloud, still awaiting review** — a ChangeRequest has no no-login view, by design: a CR is
+space-scoped and carries no per-node ACL, so it is deliberately excluded from both anonymous reads
+and embed links. Link `/inbox/<change-request-id>` and say plainly that it needs a signed-in account.
+Do not try to mint an embed link for a CR — the endpoint rejects it.
+
+**Cloud, a single record** — `record` is not an embeddable node type. Link the record on the
+dashboard (`/base/<base-slug>/<record-id>`) and note it needs sign-in. Only embed the parent Base if
+the user actually wants the Base view, and say that is what the link shows.
+
+Building the URLs:
+
+- Root-host shape is `${BUSABASE_BASE_URL}/dashboard/${BUSABASE_SPACE_ID}/<target-path>`; URL-encode
+  the Space ID and route segments, and remove any trailing `/api/v1` from `BUSABASE_BASE_URL` first.
+- After merge, prefer the canonical result: `/base/<base-slug>`, `/base/<base-slug>/<record-id>`,
+  `/doc/<slug>`, `/folder/<slug>`, `/skill/<slug>`, `/drive/<slug>`, `/file/<slug>`, or
   `/airapp/<slug>`.
-- For Busabase Desktop, use its confirmed local Space ID in the same
-  `/dashboard/<space-id>/...` shape. For a confirmed workspace-subdomain URL, preserve that
-  origin and use its short `/dashboard/<target-path>` route instead.
-- Prefer an exact URL already returned by the live API or CLI. Otherwise construct the URL only
-  from the confirmed base URL, Space ID, and identifiers read back after the write. Never put API
-  keys, tokens, or other credentials in the URL.
+- For Busabase Desktop, use its confirmed local Space ID in the same `/dashboard/<space-id>/...`
+  shape. For a confirmed workspace-subdomain URL, preserve that origin and use its short
+  `/dashboard/<target-path>` route instead.
+- Prefer an exact URL already returned by the live API or CLI over one you assemble yourself.
+  Otherwise construct it only from the confirmed base URL, Space ID, and identifiers read back after
+  the write.
+- **Never put an API key in a URL.** The one credential that legitimately rides in a link is the
+  embed capability token the server itself placed in `url` / `iframeUrl`: it is read-only, scoped to
+  that single node, expires in 15 minutes, and can be revoked. That is the only exception — treat
+  every other credential as never-in-a-URL.
 - If the exact canonical target cannot yet be resolved, link to the ChangeRequest rather than
   guessing. State whether it is pending review or already merged.
 
-Example final response:
+Example final responses:
 
-`Created the customer record and submitted it for review: [Open ChangeRequest](https://busabase.com/dashboard/org_123/inbox/cr_123).`
+Merged, on Cloud:
+
+`Added the Q3 pricing doc: [Open without signing in](https://busabase.com/embed/emb_a1B2c3D4e5F6g7H8?token=REDACTED) (expires in 15 min) · [Open in Busabase](https://busabase.com/dashboard/org_123/doc/q3-pricing) (needs sign-in).`
+
+Awaiting review, on Cloud:
+
+`Created the customer record and submitted it for review: [Open ChangeRequest](https://busabase.com/dashboard/org_123/inbox/cr_123) — needs a signed-in account, since a pending ChangeRequest has no public view.`
+
+Desktop / local:
+
+`Created the customer record: [Open](http://localhost:15419/dashboard/local/base/customers/rec_123).`
 
 ### Review is permission-aware, not a client-side rule
 

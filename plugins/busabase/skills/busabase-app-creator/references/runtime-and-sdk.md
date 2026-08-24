@@ -15,6 +15,46 @@ These constraints are authoritative for higher-level App-in-Skill creators too. 
 product workflow and UI requirements, but must not replace this runtime with a conflicting language,
 framework, package, authentication, or deployment model.
 
+### Why "no Vite" is not a style preference
+
+This was verified against real boots, not assumed — real `onServerReady` events and real 200
+responses through the SW proxy, using Nodepod's own `examples/issue-44-react-dev-server` and
+`examples/vite-dev-exit-1` regression pages run against the currently published `@scelar/nodepod`
+(the exit-code-only check that page's own summary uses is a false-positive trap: a `npm run dev`
+process can exit 0 *after* an unhandled rejection already killed the dev server before it bound a
+port — check for a real `onServerReady`/200, not a clean exit code):
+
+- **Unpinned or old Vite (5.x/6.x, and any fresh `npm create vite` scaffold)** throws
+  `Cannot destructure property 'createServer' of '(intermediate value)'` out of its esbuild WASM
+  init before the dev server binds a port. Confirmed broken.
+- **Vite 8's default bundler, rolldown**, ships a native `.node`-class WASM binding Nodepod's
+  browser-emulated npm cannot resolve (`Cannot find native binding`), traced back to
+  `SharedArrayBuffer is not defined` breaking rolldown's own WASI random-data syscall. This is a
+  structural mismatch (the "native binaries... do not [work]" line above), not something a config
+  tweak fixes. Confirmed broken even with zero CSP/CORS restrictions on the host page.
+- **The one exception: `vite@7.3.1` exactly**, esbuild JSX transform (no `@vitejs/plugin-react`
+  Babel, or the Babel Fast Refresh variant — both real-boot; the SWC variant
+  [`@vitejs/plugin-react-swc`] does not, same native-binary class of failure as rolldown). This is
+  the exact pin `packages/busabase-core/src/logic/airapp-runnable.ts`'s `assertAirAppRunnable`
+  write gate allows through as `KNOWN_RUNNABLE_BUNDLER_VERSIONS` — every other bundler version is
+  rejected at write time with `AIRAPP_NOT_RUNNABLE`, precisely because it isn't runnable.
+- **Even the verified `7.3.1` pin needs host cooperation**: Nodepod lazy-loads `esbuild-wasm` from
+  `esm.sh` and (for the SQLite demo) `wa-sqlite`/`brotli-wasm` from `cdn.jsdelivr.net`. A host CSP
+  without those origins in `script-src` blocks the fetch and produces the exact same
+  `createServer` crash as an unpinned version — this is what actually broke it in production
+  before `apps/busabase/next.config.mjs`'s `NODEPOD_TOOL_CDN_ORIGINS` allowlist was added.
+  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` are
+  not required for the `7.3.1` boot itself (it passed without them in testing) but are Nodepod's
+  own documented recommendation for the full SharedArrayBuffer path.
+
+This skill still scaffolds Hono plus vanilla JS by default — that default is about keeping
+generated AirApps boring, reviewable as plain file diffs, and free of a build step the runtime
+doesn't need, not about Vite being unable to run at all. If a blueprint has an explicit,
+user-authorized reason to need Vite/React (e.g. porting an existing Vite app in `maintain` mode),
+pin exactly `vite@7.3.1` with the esbuild JSX transform, and confirm the target Busabase's AirApp
+CSP allows `esm.sh`/`cdn.jsdelivr.net` before promising it will run — do not scaffold `vite@8` or
+an unpinned `vite` range on the assumption a newer version is safer.
+
 ## Canonical Local Source
 
 There are two source-ownership modes:
@@ -90,28 +130,33 @@ export function createRuntimeClient() {
 
 Busabase spawns the AirApp's own process in every hosted row, so it simply *tells* the app what it
 is. `packages/busabase-core/src/domains/airapp/utils/airapp-runtime-env.ts` owns the contract; both
-engines inject it (`local-node-runtime.ts` into the spawned process env, `nodepod-runner.ts` into
+engines inject it (`local-runtime.ts` into the spawned process env, `nodepod-runner.ts` into
 `Nodepod.boot` + the `npm run dev` spawn). Only Busabase ever sets it, so **absence is the positive
 fact "standalone"**.
 
 | `BUSABASE_AIRAPP_RUNTIME` | Runtime | `/api/v1` is authenticated by |
 | --- | --- | --- |
 | `nodepod` | in-browser engine, dashboard preview | the viewer's session cookie |
-| `local-node` / `srt` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
+| `local` / `srt` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
 | `embed` | public embed | the embed's capability, never the viewer |
 | *(unset)* | standalone `npm run dev` | this app's own dev proxy / OAuth registration |
 
-`server.js` re-exposes it to the browser, which cannot read env vars, and `app/js/runtime.js` is the
-only module allowed to answer the question. Both ship in the template; keep them.
+The app's host (`server.js`, or `server.py` for a Python AirApp) re-exposes it to the browser, which
+cannot read env vars, and `app/js/runtime.js` is the only module allowed to answer the question.
+Both ship in the template; keep them. The contract is the same in either language — only the host
+that serves it differs.
 
 ```js
-// server.js — the app's own boundary is the only thing that knows
-const AIRAPP_HOSTED_RUNTIMES = new Set(["nodepod", "local-node", "srt", "embed"]);
+// server.js — the app's own boundary is the only thing that knows.
+// Any non-empty value means hosted. Never check the name against a list of
+// known engines: Busabase adds and renames them, and a pinned list makes a
+// hosted app answer "standalone" and show its connection gate inside a hosted
+// preview. Absence is the signal; the name is only informational.
 const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
 app.get("/__airapp/runtime", (context) =>
   context.json({
     runtime: airappRuntime || "standalone",
-    hosted: AIRAPP_HOSTED_RUNTIMES.has(airappRuntime),
+    hosted: airappRuntime !== "",
     devProxy: Boolean(busabaseBaseUrl),
   }),
 );
@@ -135,6 +180,18 @@ Interactive apps authenticate through browser OAuth only when running standalone
 only for an independently opened local `npm run dev` process. That setup offers the canonical
 Busabase Cloud origin and one custom-origin option, then submits to Hono's server-side OAuth start
 route. Do not direct the user to `busabase-cli login`, device-code login, or an API-key field.
+
+Use `createAirAppConnectGate()` from `busabase-sdk/airapp-gate` for the browser half of this
+boundary — the connect screen, the Space-selection screen, and the state machine that decides which
+one is owed. Do not hand-roll this UI per app; every App-in-Skill that did carried a duplicated
+~160-line renderer plus a byte-identical stylesheet across dozens of apps before this existed. Pass
+`shouldGate: () => !isDemo() && !runtime.hosted` explicitly — never let the gate infer whether it is
+needed from a status probe, for the same reason hostname detection is banned below. Import
+`busabase-sdk/airapp-gate.css` (or vendor it, matching how `busabase-sdk` itself is vendored) for the
+default look; it is themed entirely through `--bb-gate-*` custom properties, so match `appConfig`'s
+accent color by overriding them rather than forking the renderer. `gate.pass({ onReady })` returns
+`true` once the app may load data; call `gate.status()` afterward if the UI needs to display the
+connected Space (e.g. in a settings panel).
 
 The Hono boundary must:
 

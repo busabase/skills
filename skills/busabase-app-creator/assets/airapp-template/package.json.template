@@ -7,7 +7,7 @@
     "node": ">=24.18.0"
   },
   "scripts": {
-    "build:sdk": "esbuild node_modules/busabase-sdk/dist/index.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-sdk.js",
+    "build:sdk": "esbuild node_modules/busabase-sdk/dist/index.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-sdk.js && esbuild node_modules/busabase-sdk/dist/airapp-gate.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-airapp-gate.js && cp node_modules/busabase-sdk/dist/airapp-gate.css app/vendor/busabase-airapp-gate.css",
     "dev": "node server.js",
     "start": "node server.js",
     "check": "node scripts/check.mjs"

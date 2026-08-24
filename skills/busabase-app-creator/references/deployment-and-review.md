@@ -55,6 +55,35 @@ Pass `autoMerge: false` explicitly; omitting it can merge immediately when the s
 has write permission. The response must be a pending CR/materialized-false result. If live OpenAPI
 differs, follow it and update the payload without weakening review-first behavior.
 
+## Reinstalling An Already-Built Bundle
+
+The section above is for a brand-new AirApp coming out of blueprint approval and scaffolding. A
+different, more common case is a delegated App-in-Skill's already-built `<skill-root>/app/` —
+reviewed once, unchanged — that needs to exist in a Space that has never had it, or needs its latest
+local edits pushed to a Space that already has an older copy. Hand-constructing the CR above for that
+case is what turned every reinstall into an agent session instead of a script (see the 2026-08-18
+handoff report referenced in `busabase-sdk`'s `airapp.ts` changelog). Use `publishAirApp` instead:
+
+```ts
+import { provisionDeclaredResources, publishAirApp } from "busabase-sdk/airapp";
+
+await provisionDeclaredResources(client, config); // Folder + Bases, autoMerge: true, unchanged
+const result = await publishAirApp(client, config, files); // files: [{ path, content, mimeType? }]
+// result.status is "created" (Space never had this AirApp) or "updated" (it already does);
+// result.changeRequestId is always pending — publishAirApp always passes autoMerge: false for
+// executable AirApp code, the same rule as the raw CR above, non-negotiable either way.
+```
+
+`files` is the caller's job to read from disk (the SDK module stays isomorphic, no `fs` access) —
+walk `<skill-root>/app/`, excluding `node_modules`, lockfiles that are regenerated per-install, and
+anything `.gitignore`d. `publishAirApp` diffs against the deployed node's file list (path only, not
+content) to choose `create` vs `update` per file; it never deletes a remote-only path. It cannot skip
+a no-op publish (no cheap way to compare content without a per-file fetch), so a rerun with nothing
+changed still proposes a CR — a reviewer sees an empty diff and merges or ignores it, which is a
+review-noise cost, not a correctness one. Same review-first rule as every other AirApp change: report
+the CR id and wait for merge or explicit chat authorization; never claim the reinstall is done before
+that CR is merged.
+
 ## CR Review Summary
 
 Report:
