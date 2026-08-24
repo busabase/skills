@@ -4,8 +4,8 @@
   "ref": "main",
   "templates": [
     {
-      "subdir": "skills/kelly-email",
-      "name": "kelly-email",
+      "subdir": "skills/busa-email",
+      "name": "busa-email",
       "description": "Inbox triage, human review, and trusted execution — an approval-first email desk.",
       "category": "email",
       "tags": [

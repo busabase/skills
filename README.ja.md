@@ -98,7 +98,7 @@ codex mcp login busabase
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | HTTP 経由で Busabase ワークスペースを操作します。Base とレコードの一覧取得、ChangeRequest の提案、承認済み変更のマージを行います。 |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 製品アイデアを、ネイティブリソース、制限されたデータアクセス、レビュー可能な AirApp を備えた完全な Busabase ワークスペースアプリに変換します。 |
-| [`kelly-email`](./skills/kelly-email/SKILL.md) | インストール可能な**テンプレート**：受信トレイのトリアージデスク。テーブル、AirApp、そしてこのマニュアルが一緒に届くので、エージェントは渡されたワークスペースの使い方が分かります。 |
+| [`busa-email`](./skills/busa-email/SKILL.md) | インストール可能な**テンプレート**：受信トレイのトリアージデスク。テーブル、AirApp、そしてこのマニュアルが一緒に届くので、エージェントは渡されたワークスペースの使い方が分かります。 |
 
 ## リポジトリ構成
 
