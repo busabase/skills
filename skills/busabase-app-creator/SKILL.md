@@ -278,6 +278,29 @@ For `create`, finish only when all are true:
 
 For `maintain`, use the separate completion criteria in `references/maintenance.md`.
 
+## Publishing the finished app as an installable template
+
+Only when the user asks for it. A working app in one workspace is the deliverable; a template is a
+further step that says "anyone should be able to install this".
+
+Do not hand-write the package layout — export the app you just built and verified, so the published
+template is the thing that actually ran rather than a second description of it:
+
+```bash
+npx busabase-cli export <folder-slug> -o ./<name> --template
+```
+
+That writes the layout the Template Center reads: the folder's Skill node lifted to the package root
+as `SKILL.md`, `busabase.json` with the catalog metadata, and the resources under `content/`. The
+Base slugs come back as the app declared them, not as the prefixed ones the workspace installed
+them under. If the folder has no Skill node yet, a `SKILL.md` draft is generated from its structure
+— full of TODOs on purpose, because an agent acts on what that file says and a plausible guess about
+what a table means is worse than an obvious blank. Fill them in with the user.
+
+Templates are submitted by pull request to <https://github.com/busabase/templates>, whose
+`AGENTS.md` carries that repository's own conventions (where a template goes, what is generated,
+what disqualifies one). Read it before opening the PR; do not restate or override it here.
+
 ## Stop Conditions
 
 Stop and ask for direction when:
