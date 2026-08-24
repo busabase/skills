@@ -101,7 +101,12 @@ running one of the install commands above.
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | Drive a Busabase workspace over HTTP: list Bases/records, propose ChangeRequests, and merge approved ones. |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | Turn a product idea into a complete Busabase workspace app with native resources, bounded data access, and a reviewable AirApp. |
-| [`busa-email`](./skills/busa-email/SKILL.md) | An installable **template**: an inbox-triage desk that arrives as tables, an AirApp and this manual, so an agent knows the workspace it was handed. |
+
+
+> **Looking for installable templates?** Complete apps — tables, an AirApp and
+> the manual an agent reads — live in [busabase/templates](https://github.com/busabase/templates).
+> They are kept separate so installing these two skills does not pull down every
+> template's source and screenshots.
 
 ## Repo layout
 

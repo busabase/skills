@@ -1,5 +1,0 @@
-packages:
-  - "."
-
-minimumReleaseAgeExclude:
-  - "busabase-sdk@0.17.2"
