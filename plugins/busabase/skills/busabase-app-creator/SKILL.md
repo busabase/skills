@@ -84,6 +84,7 @@ Read each selected reference completely before acting:
 | Structure creation, AirApp deployment, seed CRs, approval rules | `references/deployment-and-review.md` |
 | Shared shell, domain customization, local and target verification | `references/ui-and-validation.md` |
 | Existing AirApp identity, continuous resource/UI evolution, and canonical readback | `references/maintenance.md` |
+| Package layout, `busabase.json`, SKILL.md frontmatter, validation — **required before writing any file package-first** | `references/template-format.md` |
 
 Always read the sibling Busabase skill at `../busabase/SKILL.md` before connecting or writing. Treat live OpenAPI as authoritative when an endpoint shape is uncertain.
 
@@ -145,9 +146,10 @@ finished app as an installable template"). The template is then a recording of s
 demonstrably worked.
 
 **Package-first** (the route for authoring a skill or template: a new app-skill, a contribution to
-`busabase/templates`, or work without a Space to build in). Write the package layout on disk —
-`SKILL.md`, `busabase.json`, `content/<base>/base.json`, `content/<name>-app/` — then install it
-into a scratch Space to verify:
+`busabase/templates`, or work without a Space to build in). **Read
+`references/template-format.md` completely before writing the first file** — it carries the layout,
+the manifest and frontmatter shapes, the record cap, and what disqualifies a template. Write the
+package on disk, then install it into a scratch Space to verify:
 
 ```bash
 npx busabase-cli install <path-or-repo-url> --into-folder <scratch>
@@ -184,7 +186,7 @@ verification install:
 | 6 Scaffold the AirApp | scaffold, then deploy | scaffold at `content/<name>-app/` (with `_node.json`; `.busabaseignore` for tests/lockfiles) |
 | 7 Validate | local checks + UI acceptance | identical local checks; UI acceptance happens in step 9's scratch install |
 | 8 Deploy as ChangeRequest | submit the AirApp CR | nothing — the install in step 9 is what proposes it |
-| 9 Seed and verify | seed CRs, run merged HEAD | write `records.ndjson` (≤50/Base), then `busabase-cli install` into a scratch Space, merge, open the app, read data back |
+| 9 Seed and verify | seed CRs, run merged HEAD | write `records.ndjson` (≤50/Base), run `busabase-cli index . --repo <owner/repo> -o templates.json`, then `busabase-cli install` into a scratch Space, merge, open the app, read data back |
 
 Write the manual as you go, not at the end: on this route `SKILL.md` is authored directly (there is
 no Skill node to export from), and it must name only resources `content/` actually ships.
