@@ -25,12 +25,14 @@ skill must never grow opinions that would fight such a layer.
 - Establish source ownership before scaffolding. For a standalone AirApp, ask whether source should
   use a temporary directory or a user-specified persistent directory. When a higher-level App-in-Skill
   creator delegates here, do not ask again: use that skill's AirApp project root as the complete,
-  persistent source. That root is `<skill-root>/app/` in the classic App-in-Skill layout, and
-  `<skill-root>/content/<name>-app/` when the skill is laid out as a busabase template — resolve which
-  by looking for `package.json` at each, preferring `app/`. Either way it contains `package.json`,
-  `server.js`, the browser `app/` subtree, checks, and lockfile; it remains runnable with `pnpm dev`,
-  but delegated creation does not start local development unless the user explicitly requests local
-  preview or debugging.
+  persistent source. **That root is `<skill-root>/content/<name>-app/`** — the template layout, which
+  is what a skill carrying an app looks like. A skill still holding its project at `<skill-root>/app/`
+  predates that and is awaiting migration: read it where it is, and do not relocate it as a side
+  effect of unrelated work (moving it also touches harness paths and root scripts, so it belongs to a
+  deliberate migration). Resolve the root by looking for `package.json` under `content/<name>-app/`
+  first, then `app/`. Either way it contains `package.json`, `server.js`, the browser `app/` subtree,
+  checks, and lockfile; it remains runnable with `pnpm dev`, but delegated creation does not start
+  local development unless the user explicitly requests local preview or debugging.
 - Treat the persistent local project as canonical. Submit the same reviewed project file tree to
   AirApp, excluding local-only files such as `.env`, `node_modules`, and logs. Do not maintain a
   second AirApp implementation, and never leave a remote-only edit: read it back, back-port it to the
@@ -127,14 +129,23 @@ For Cloud, use the connection selected by `busabase-cli login` and confirm the t
 `create` has two starting points. They differ only in where the files first exist; they converge on
 the same finished thing, and neither is allowed to skip the other's proof.
 
-**Workspace-first** (the default, and what to pick when the shape is still being decided). Build the
+Which to pick is decided by what is being produced, not by preference:
+
+- Producing a **skill** (a directory that will live in a skills repository) → package-first. A skill
+  that carries an app is a template; authoring it any other way means writing files and then
+  reconciling them with a Space afterwards.
+- Producing an **app for one workspace**, with no distributable artifact asked for → workspace-first.
+- Unsure, or the shape is still being decided → workspace-first, and export at the end if it turns
+  out to be worth sharing.
+
+**Workspace-first** (what to pick when the shape is still being decided). Build the
 Folder, Bases and AirApp in a live Space through the workflow below, get it running against real
 data, and — only if the user wants it distributable — export it afterwards (§ "Publishing the
 finished app as an installable template"). The template is then a recording of something that
 demonstrably worked.
 
-**Package-first** (pick when the user is authoring a template directly: contributing to
-`busabase/templates`, or working without a Space to build in). Write the package layout on disk —
+**Package-first** (the route for authoring a skill or template: a new app-skill, a contribution to
+`busabase/templates`, or work without a Space to build in). Write the package layout on disk —
 `SKILL.md`, `busabase.json`, `content/<base>/base.json`, `content/<name>-app/` — then install it
 into a scratch Space to verify:
 
@@ -372,8 +383,8 @@ For `create`, finish only when all are true:
   `~/.busabase/airapps`; no CLI login or browser-visible credential is required;
 - actual node URLs, CR ids, source directory, SDK version, and remaining limitations are reported.
 - when delegated by an App-in-Skill creator, the delegating skill's AirApp project root
-  (`<skill-root>/app/`, or `<skill-root>/content/<name>-app/` in the template layout) remains the
-  canonical local project, `pnpm dev` remains supported without being started by default, and the
+  (`<skill-root>/content/<name>-app/`, or `<skill-root>/app/` for a skill not yet migrated) remains
+  the canonical local project, `pnpm dev` remains supported without being started by default, and the
   merged AirApp is traceable to that same reviewed source tree.
 
 For a **package-first** `create` run, additionally: the package installs into a scratch Space with
