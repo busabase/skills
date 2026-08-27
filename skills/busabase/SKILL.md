@@ -116,6 +116,9 @@ npx busabase-cli bases list              # the tables
 npx busabase-cli records list --base-id <base-id> --limit 20 --output json
 npx busabase-cli change-requests list \
   --status-json '["in_review","approved","conflict"]' --limit 20 --output json
+npx busabase-cli change-requests list \
+  --affects-node-id <node-id> \
+  --status-json '["in_review","approved","conflict"]' --limit 1 --output json
 
 # Which account / which space am I on? (offline — reads the stored config, no API call)
 npx busabase-cli auth status             # accounts, grouped by host, * = active
@@ -141,6 +144,11 @@ npx busabase-cli assets put-text --asset-id <asset-id> --file ./extracted.txt
 npx busabase-cli bases create-change-request --base-id <id> \
   --fields-json '{"title":"…","body":"…"}' \
   --message "Add Acme Corp — qualified lead from the June webinar"
+# Update many existing records in one atomic review. Each fields object is a
+# partial patch; omitted keys stay unchanged and null clears a field.
+npx busabase-cli records bulk-update-change-request --base-id <id> \
+  --updates-json @updates.json \
+  --message "Apply August content review decisions" --require-review
 # If it comes back "in_review" (your key is changeRequest-level, or the human wants
 # review), a human decides:
 npx busabase-cli change-requests review --change-request-id <id> --verdict approved
@@ -192,15 +200,18 @@ npx busabase-cli change-requests close --change-request-id <id> --reason "Wrong 
 Run `npx busabase-cli --help` for the full command list; add `--output json` to parse results.
 For record listing, keep `--limit` at `100` or below and use `nextCursor` with `--cursor` for
 additional pages.
-When checking unfinished CRs, prefer the bounded `change-requests list --status-json ... --limit`
-form above — `list` is cursor-paginated via `nextCursor`, which is what "follow at most five pages"
-below means. (`change-requests list-page` is a different, numbered-page command for jumping to an
-arbitrary page with a total count — not what this bounded-check pattern uses.) If you
-must prove that no CR targets a specific node and the live API has no node filter, follow
-`nextCursor` for at most five 20-item pages and filter locally by exact node id. If another cursor
-remains, report the check as inconclusive instead of assuming absence. A full `change-requests list
---output json` can return large nested AirApp file trees and should be used only when that complete
-payload is actually required.
+When checking whether unfinished CRs affect one resource, first inspect the live
+`/api/v1/openapi.json`. If `GET /change-requests` advertises `affectsNodeId`, use the exact
+`--affects-node-id ... --limit 1` query above; an empty result is conclusive and avoids hydrating
+unrelated CRs. Do not infer support from the installed CLI or trust an unknown query parameter:
+older deployments may ignore it. When the live API lacks the filter, fall back to the bounded
+`change-requests list --status-json ... --limit 20` form and filter locally. `list` is
+cursor-paginated via `nextCursor`; follow at most five pages, then report the check as inconclusive
+instead of assuming absence. (`change-requests list-page` is the numbered-page endpoint and is not
+the fallback loop.) `affectsNodeId` exists on `list` and `list-page` only — the dashboard's inbox
+snapshot carries whole-space tab badges and takes no resource filter, so never route a node-scoped
+check through it. A full unbounded CR listing can return large nested file trees and should be
+used only when that complete payload is actually required.
 
 ### 2. `curl` — quick, zero install
 

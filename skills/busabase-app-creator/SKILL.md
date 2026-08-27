@@ -1,6 +1,13 @@
 ---
 name: busabase-app-creator
-description: Create a complete isolated Busabase workspace app, author an installable Busabase template, or continuously evolve an existing AirApp — all through one review-first workflow. Start either way: build in a live Space and export the result as a template, or write the template package on disk and install it to verify. Use for new Cloud/Desktop workspace apps, for authoring or contributing a busabase template or template skill, and for auditing, upgrading, extending, or migrating an identified AirApp, including approved changes to its UI, files, Folder, Bases, Views, data, and related native resources while preserving everything outside the requested scope.
+description: >-
+  Create a complete isolated Busabase workspace app, author an installable Busabase template, or
+  continuously evolve an existing AirApp — all through one review-first workflow. Start either way:
+  build in a live Space and export the result as a template, or write the template package on disk
+  and install it to verify. Use for new Cloud/Desktop workspace apps, for authoring or contributing
+  a busabase template or template skill, and for auditing, upgrading, extending, or migrating an
+  identified AirApp, including approved changes to its UI, files, Folder, Bases, Views, data, and
+  related native resources while preserving everything outside the requested scope.
 ---
 
 # Busabase App Creator
