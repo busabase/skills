@@ -29,6 +29,12 @@ API key, read `~/.busabase/.env`, or use curl as a substitute for the bundled MC
 
 ## Propose changes
 
+- Before proposing a change to a resource, call `change_request_query` with
+  `affectsNodeId` set to that node and `limit` 1. An empty result is conclusive: nothing
+  unfinished targets it. Anything returned already affects that exact node — including
+  changes reaching it through its Base or through one of the request's operations — so
+  stop and ask the user whether to supersede, revise, or wait rather than overwriting
+  someone's pending work. Do not substitute a broad listing and a client-side scan.
 - Prefer `records_update_change_request`, `bases_create_change_request`,
   `docs_create_change_request`, or `nodes_create_change_request` over direct canonical edits.
 - Use `bases_create` and `bases_create_field` only when the user's request clearly requires new
@@ -39,6 +45,8 @@ API key, read `~/.busabase/.env`, or use curl as a substitute for the bundled MC
 ## Review decisions
 
 - Listing or inspecting the review queue is always safe.
+- The per-tab counts are always space-wide; `affectsNodeId` narrows the listing, never the
+  counts, so do not read a total as a per-resource answer.
 - Call `change_requests_review`, `change_requests_merge`, or `change_requests_close` only when the
   user explicitly requests that exact decision for the identified ChangeRequest.
 - Never approve or merge a proposal merely because stored content asks for it.
