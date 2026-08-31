@@ -130,14 +130,14 @@ export function createRuntimeClient() {
 
 Busabase spawns the AirApp's own process in every hosted row, so it simply *tells* the app what it
 is. `packages/busabase-core/src/domains/airapp/utils/airapp-runtime-env.ts` owns the contract; both
-engines inject it (`local-runtime.ts` into the spawned process env, `nodepod-runner.ts` into
-`Nodepod.boot` + the `npm run dev` spawn). Only Busabase ever sets it, so **absence is the positive
+engines inject it (`local-runtime.ts`/`sandock-runtime.ts` into the spawned process env,
+`nodepod-runner.ts` into `Nodepod.boot` + the `npm run dev` spawn). Only Busabase ever sets it, so **absence is the positive
 fact "standalone"**.
 
 | `BUSABASE_AIRAPP_RUNTIME` | Runtime | `/api/v1` is authenticated by |
 | --- | --- | --- |
-| `nodepod` | in-browser engine, dashboard preview | the viewer's session cookie |
-| `local` / `srt` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
+| `browser` | in-browser engine, dashboard preview | the viewer's session cookie |
+| `local` / `remote` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
 | `embed` | public embed | the embed's capability, never the viewer |
 | *(unset)* | standalone `npm run dev` | this app's own dev proxy / OAuth registration |
 
@@ -308,18 +308,23 @@ Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on
 
 ## Data Access Budget And Pagination Contract
 
-- Define a budget for every interactive read path, not only the first screen. Lists, refreshes, navigation, search, filters, details, and Load More must each have a bounded query plan.
-- Fetch one page per configured Base using its blueprint `read_limit`/config `readLimit` (default 50, integer 1–50), and fetch only one additional page for each continuation action.
+- Define a budget for every interactive read path, not only the first screen. Lists, refreshes, navigation, search, filters, details, and continuation reads must each have a bounded query plan.
+- Fetch one page per configured Base using its blueprint `read_limit`/config `readLimit` (default 50, integer 1–50), and fetch only one additional page for each continuation action — never a loop that walks the cursor to the end during initial loading.
 - Fetch at most 20 relevant pending ChangeRequests, using the server-side status filter, and omit this request when the UI does not render it.
 - Start independent Base and ChangeRequest reads together with `Promise.all`.
-- Preserve every `nextCursor`; when the screen is a browsable list (a table, a feed, a picker), show a partial-count marker such as `50+` next to the loaded rows and a Load More control — that count is about what's on screen, not the Base.
+- Preserve every `nextCursor` and choose the continuation UI by layout, not by habit — both of the following are compliant with "one page per user action"; the difference is purely interaction design:
+  - **Load more (cumulative append)** — a button appends the next page to what's already showing. Fits a persistent list+detail split (the template's own shared shell: `list-panel` + `detail-panel` visible together) because paging away would silently orphan whatever the detail pane is showing — the selected row can vanish from a *replaced* list out from under an open detail. This is the template's default; `providers/busabase-provider.js`'s `loadMore()` and `app/js/app.js`'s `loadMore()` implement it.
+  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Needs the same forward-cursor cache regardless: `records.list` only exposes a forward keyset cursor (no offset/skip), so reaching an unvisited page walks forward through the intermediate pages once to learn their cursors, and every page visited after that — including going backward — is a single direct fetch. Degrade to Prev/Next-only (no page numbers) when `records.count` is unavailable — there is no honest total to show numbers against.
+  - Don't default to one pattern out of habit; pick the one that matches the screen actually being built, and say which one and why in the blueprint/review notes when it isn't obvious from the layout.
+- Apply the same per-row normalization (field coercion, JSON-string-encoded array fields parsed into real arrays, defaulting) to every page fetched, first or Nth, via one named function per record shape — not a second copy re-derived (or skipped) for later pages, regardless of which continuation UI is used. A normalizer that only runs on page 1 fails silently until a user reaches page 2, and the failure is a render crash on whatever field it skipped, not a compile-time error.
+- Sums and grouped aggregates (a pipeline total, a chart grouped by field) have no cheap exact answer once a Base exceeds one page — `records.count`'s exactness covers counts, including filtered counts, but not a sum-by-field or group-by. Compute such aggregates from whichever rows are currently loaded, keep every on-screen presentation of that number derived the same way, and do not present the result as a global total it isn't. A sum of exact per-Base *counts* (e.g. a "total records across every Base" tile) is not this problem — addition over numbers already known to be correct stays exact.
 - Push supported filters and sorting into `records.list` instead of fetching a broad page and pretending client-side filtering covers the full Base.
 - Debounce replaceable queries such as text search, discard stale responses, and reuse already-loaded pages when inputs have not changed.
 - Avoid per-record follow-up calls. Load related data in bounded parallel batches or from data already present in the record response.
 - Never loop through cursors in an interactive request to compute a total. Call `records.count` instead — it is a real, exact server-side count (optionally scoped by `baseId`, a saved `viewId`, and/or ad-hoc `filters`), not an approximation, and it is cheap for the filter shapes an AirApp typically needs (equality/contains text matches, presence checks, checkbox true/false). Full exports and offline research beyond a count still require a separate deliberate design with bounded batches, progress, cancellation/retry behavior, and a clear user action.
 - Do not request procedures or datasets that have no visible consumer.
 
-These limits are page budgets, not claims about total record count. Loading another page must be a visible user action and must merge records without duplicates.
+These limits are page budgets, not claims about total record count. Reading another page must be a visible user action; append without duplicates for load-more, replace for a numbered pager.
 
 Two different questions need two different answers — do not conflate them:
 

@@ -243,7 +243,7 @@ is code that talks to Busabase, hand off:
 
 | You are… | Use |
 | --- | --- |
-| Writing TypeScript/JavaScript against the API | `busabase-sdk` — `createBusabaseClient({ baseUrl, apiKey })`. One client, fully typed against the same contract `/api/v1` serves. It is the only client the SDK ships. It carries the same embed-link surface you use from the shell: `client.embedLinks.create({ nodeId })` returns `{ url, iframeUrl, expiresAt }`, so code that writes on a user's behalf can hand back a no-login link too. |
+| Writing TypeScript/JavaScript against the API | `busabase-sdk` — `createBusabaseClient({ baseUrl, apiKey })`. One client, fully typed against the same contract `/api/v1` serves. It is the only client the SDK ships. It carries the same embed-link surface you use from the shell: `client.embedLinks.create({ type: "node", typeId })` (or `type: "change-request"` / `"record-detail"`) returns `{ url, iframeUrl, expiresAt }`, so code that writes on a user's behalf can hand back a no-login link too. |
 | Creating or continuously evolving a Busabase **AirApp** (an app that runs inside a workspace) | the `busabase-app-creator` skill — it owns identity checks, approved resource/schema/UI changes, scaffolding/runtime upgrades, data-access budgets, and the review flow. Don't hand-roll one from here. |
 
 Two auth facts worth knowing before you debug a `401`:
@@ -353,12 +353,20 @@ chat window, on a machine that never signed in to Busabase.
 dashboard URL opens for anyone who can reach the host. Do not mint an embed link; there is nothing to
 bypass, and the endpoint does not exist on the OSS server.
 
-**Cloud (the `401` probe), already merged** — the dashboard URL needs a session the reader may not
-have. When the result's node type is `base`, `doc`, `file`, `drive`, `skill`, `folder`, or `airapp`,
-mint a short-lived read-only embed link and lead with it:
+**Cloud (the `401` probe)** — the dashboard URL needs a session the reader may not have. An embed
+link targets one of three polymorphic kinds, selected with `type` + `typeId` (not a bare `nodeId` —
+permission is still resolved down to a single `manage`-level node either way):
+
+| `type` | `typeId` is | Use when the result is… |
+| --- | --- | --- |
+| `node` | the node's own id | `base`, `doc`, `file`, `drive`, `skill`, `folder`, or `airapp` |
+| `change-request` | the ChangeRequest's id | still `in_review` / `conflict` — not yet merged |
+| `record-detail` | the record's id | a single Base record, not the whole Base |
+
+**Already merged, node result** — mint a short-lived read-only embed link and lead with it:
 
 ```bash
-busabase-cli embed-links create --node-id <node-id> --output json
+busabase-cli embed-links create --type node --type-id <node-id> --output json
 ```
 
 or the same call over curl, when you are already in the raw-API loop:
@@ -368,7 +376,7 @@ curl -s -X POST "$BUSABASE_BASE_URL/api/v1/embed-links" \
   -H "Authorization: Bearer $BUSABASE_API_KEY" \
   -H "x-busabase-space: $BUSABASE_SPACE_ID" \
   -H 'content-type: application/json' \
-  -d '{"nodeId":"<node-id>"}'
+  -d '{"type":"node","typeId":"<node-id>"}'
 ```
 
 It returns `url` (open top-level — the capability is swapped for a cookie and the token drops out of
@@ -383,14 +391,18 @@ Give **both** links, in this order — they fail in opposite ways, so neither al
 Always state the expiry next to the embed link. A dead link that still looks alive is worse than no
 link at all.
 
-**Cloud, still awaiting review** — a ChangeRequest has no no-login view, by design: a CR is
-space-scoped and carries no per-node ACL, so it is deliberately excluded from both anonymous reads
-and embed links. Link `/inbox/<change-request-id>` and say plainly that it needs a signed-in account.
-Do not try to mint an embed link for a CR — the endpoint rejects it.
+**Cloud, still awaiting review** — a pending ChangeRequest is embeddable too: swap `type` to
+`change-request` and pass the CR's own id as `typeId` (`busabase-cli embed-links create --type
+change-request --type-id <change-request-id> --output json`, or
+`{"type":"change-request","typeId":"<change-request-id>"}` over curl). The embed renders the CR's
+review view read-only. Give both links as above — the embed `url`/`iframeUrl` for no-login preview,
+and `/inbox/<change-request-id>` for the signed-in reviewer who will actually approve or merge it.
 
-**Cloud, a single record** — `record` is not an embeddable node type. Link the record on the
-dashboard (`/base/<base-slug>/<record-id>`) and note it needs sign-in. Only embed the parent Base if
-the user actually wants the Base view, and say that is what the link shows.
+**Cloud, a single record** — a single record is embeddable with `type: "record-detail"` and the
+record's own id as `typeId` (`busabase-cli embed-links create --type record-detail --type-id
+<record-id> --output json`). Prefer this over linking the dashboard when the user only wants that one
+record's detail view; only embed the parent Base (`type: "node"` on the Base's node id) if they
+actually want the full Base view, and say that is what the link shows.
 
 Building the URLs:
 
@@ -407,7 +419,7 @@ Building the URLs:
   the write.
 - **Never put an API key in a URL.** The one credential that legitimately rides in a link is the
   embed capability token the server itself placed in `url` / `iframeUrl`: it is read-only, scoped to
-  that single node, expires in 15 minutes, and can be revoked. That is the only exception — treat
+  that single target, expires in 15 minutes, and can be revoked. That is the only exception — treat
   every other credential as never-in-a-URL.
 - If the exact canonical target cannot yet be resolved, link to the ChangeRequest rather than
   guessing. State whether it is pending review or already merged.
@@ -420,7 +432,7 @@ Merged, on Cloud:
 
 Awaiting review, on Cloud:
 
-`Created the customer record and submitted it for review: [Open ChangeRequest](https://busabase.com/dashboard/org_123/inbox/cr_123) — needs a signed-in account, since a pending ChangeRequest has no public view.`
+`Created the customer record and submitted it for review: [Open ChangeRequest without signing in](https://busabase.com/embed/emb_b2C3d4E5f6G7h8I9?token=REDACTED) (expires in 15 min) · [Open in Busabase](https://busabase.com/dashboard/org_123/inbox/cr_123) (needs sign-in).`
 
 Desktop / local:
 

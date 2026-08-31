@@ -25,7 +25,7 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
  * The ONLY sanctioned way for browser code to learn where it is running.
  *
  * Busabase spawns this very process when it hosts the app, and injects
- * `BUSABASE_AIRAPP_RUNTIME` (`nodepod` | `local` | `srt` | `embed`).
+ * `BUSABASE_AIRAPP_RUNTIME` (`browser` | `local` | `remote` | `embed`).
  * Nobody else sets it, so its absence is the positive fact "standalone".
  * This route re-exposes that to the browser, which cannot read env vars.
  *
@@ -53,16 +53,25 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
 // engine names. A local list is what broke 66 shipped apps when `local-node`
 // became `local`: each answered "standalone" inside a hosted preview, showed
 // its own connection gate, called /api/v1 with no credential, and left the
-// operator with nothing to act on. Only Busabase sets this variable, so any
-// non-empty value means it spawned this process — including an engine this app
-// has never heard of.
+// operator with nothing to act on. The names moved again since — `nodepod` and
+// `sandock` became `browser` and `remote`, and `srt` was removed — which cost
+// nothing precisely because this reads presence. Only Busabase sets this
+// variable, so any non-empty value means it spawned this process, including an
+// engine this app has never heard of.
 //
-// The same rule now also lives in busabase-sdk as `isBusabaseAirAppHosted()` /
-// `readBusabaseAirAppRuntime()`, which is where it belongs. It is NOT used here
-// yet on purpose: the scaffold pins the latest *published* SDK, and those
-// exports ship in the next release. Importing them now would generate apps that
-// crash on boot against every SDK currently on npm. Swap this for the helpers
-// once a release carrying them is out.
+// The same rule now also lives in busabase-sdk, which is where it belongs, and
+// `describeBusabaseAirAppRuntime()` returns this whole body — so the swap deletes
+// the `hosted:` line rather than restating it. That matters: this exact line has
+// regressed twice, both times by an app being copied from an older source, and
+// both times with every test still green.
+//
+// It is NOT used here yet on purpose: the scaffold pins the latest *published*
+// SDK, and that export ships in the next release. Importing it now would generate
+// apps that crash on boot against every SDK currently on npm. Once a release
+// carrying it is out, this whole block becomes:
+//
+//   import { describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
+//   app.get("/__airapp/runtime", (context) => context.json(describeBusabaseAirAppRuntime()));
 const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
 app.get("/__airapp/runtime", (context) =>
   context.json({

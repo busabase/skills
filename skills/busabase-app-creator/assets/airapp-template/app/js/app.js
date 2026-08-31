@@ -58,17 +58,46 @@ const setText = (id, value) => {
   if (element) element.textContent = value;
 };
 
+// A real total (records.count) when it's known, so this badge isn't stuck
+// showing "however many happen to be loaded" once a Base has more than one
+// page. Falls back to the loaded-so-far "12+" style marker when the count
+// was denied or unavailable.
+function navCount(base) {
+  const total = state.payload?.totalCount?.[base.key];
+  if (total != null) return String(total);
+  const loaded = (state.payload?.records || []).filter(
+    (record) => record.baseKey === base.key,
+  ).length;
+  return loadedCount(loaded, state.payload?.pageInfo?.[base.key]?.nextCursor);
+}
+
 function renderNavigation() {
   byId("baseNav").innerHTML = appConfig.schema.bases
     .map(
       (base) => `
     <button class="nav-item ${base.key === state.activeBase ? "active" : ""}" type="button" data-base="${escapeHtml(base.key)}">
       <span>${escapeHtml(base.name)}</span>
-      <span>${loadedCount((state.payload?.records || []).filter((record) => record.baseKey === base.key).length, state.payload?.pageInfo?.[base.key]?.nextCursor)}</span>
+      <span>${navCount(base)}</span>
     </button>
   `,
     )
     .join("");
+}
+
+// A sum of exact per-Base counts (records.count) is itself exact -- unlike a
+// sum of a *field* across records (a real aggregate, which no SDK endpoint
+// answers without loading everything), this is just addition over numbers
+// already known to be correct. Falls back to a loaded-so-far approximation
+// only when at least one Base's count was denied/unavailable.
+function totalRecordsAcrossBases() {
+  const totals = Object.values(state.payload?.totalCount || {});
+  if (totals.length === appConfig.schema.bases.length && totals.every((value) => value != null)) {
+    return String(totals.reduce((sum, value) => sum + value, 0));
+  }
+  return loadedCount(
+    state.payload?.records?.length || 0,
+    Object.values(state.payload?.pageInfo || {}).some((page) => page.nextCursor),
+  );
 }
 
 function renderMetrics() {
@@ -76,13 +105,7 @@ function renderMetrics() {
     ["in_review", "changes_requested", "approved", "conflict"].includes(request.status),
   ).length;
   const metrics = [
-    [
-      messages.totalRecords,
-      loadedCount(
-        state.payload?.records?.length || 0,
-        Object.values(state.payload?.pageInfo || {}).some((page) => page.nextCursor),
-      ),
-    ],
+    [messages.totalRecords, totalRecordsAcrossBases()],
     [messages.bases, state.payload?.bases?.length || 0],
     [messages.pending, loadedCount(pending, state.payload?.changeRequestPageInfo?.nextCursor)],
   ];
@@ -101,7 +124,13 @@ function renderList() {
   const base = baseConfig();
   const records = filteredRecords();
   setText("listTitle", base?.name || messages.records);
-  setText("recordCount", loadedCount(records.length, pageInfoForBase().nextCursor));
+  const baseTotal = base ? state.payload?.totalCount?.[base.key] : null;
+  setText(
+    "recordCount",
+    baseTotal != null
+      ? String(baseTotal)
+      : loadedCount(records.length, pageInfoForBase().nextCursor),
+  );
   setText("mobileTitle", base?.name || appConfig.appName);
   byId("loadMore").hidden = !pageInfoForBase().nextCursor || Boolean(state.query);
   setText("loadMore", messages.loadMore);

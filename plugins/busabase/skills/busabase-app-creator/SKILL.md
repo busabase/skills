@@ -421,6 +421,25 @@ them under. If the folder has no Skill node yet, a `SKILL.md` draft is generated
 — full of TODOs on purpose, because an agent acts on what that file says and a plausible guess about
 what a table means is worse than an obvious blank. Fill them in with the user.
 
+Before opening the pull request, check it:
+
+```bash
+npx busabase-cli check ./<name> --strict                                       # the contract
+npx busabase-cli index . --repo busabase/templates -o templates.json --check   # the catalog
+cd templates/<name> && node scripts/sync-content.mjs --check                   # only if it has one
+```
+
+`check` reads the rules above off a directory and reports each applicable layer separately —
+**package**, **skill**, **template**, **airapp**. A layer that does not apply reports `–`, never
+`✓`. It is static: nothing is installed and none of the template's own code runs, so it is the
+check to run repeatedly while building rather than only before submitting. Errors are what break
+an installing user; warnings are defaults worth defending in review, and `--strict` fails on them
+too. Point it at a repo root to sweep every template, `--only airapp` while iterating on the app,
+and `--json` in CI.
+
+The second command answers a different question — whether the repository's catalog file is
+current — and neither one implies the other.
+
 Templates are submitted by pull request to <https://github.com/busabase/templates>, whose
 `AGENTS.md` carries that repository's own conventions (where a template goes, what is generated,
 what disqualifies one). Read it before opening the PR; do not restate or override it here.

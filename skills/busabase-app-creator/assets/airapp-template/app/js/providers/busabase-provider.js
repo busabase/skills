@@ -17,6 +17,11 @@ const normalizeRecords = (records, baseKey) =>
     fields: record.headCommit?.payload || record.fields || {},
   }));
 
+// One page per call, cursor returned to the caller -- never several pages in
+// one function call. See "Reading Records At Scale" in
+// references/runtime-and-sdk.md: a capped loop here (however high the cap)
+// would still hide a multi-page scan behind a single loading state instead
+// of fetching a page per user action.
 const readPage = async (client, base, cursor) => {
   requireProcedure("records.list");
   const { baseId, key: baseKey } = base;
@@ -30,6 +35,20 @@ const readPage = async (client, base, cursor) => {
     nextCursor: page.nextCursor || null,
     limit: base.readLimit,
   };
+};
+
+// A real, exact total for a Base -- never `records.length` from whatever has
+// been loaded so far. Returns null (not 0) on denial/failure so the UI can
+// fall back to an honest "12+" style approximation instead of a made-up
+// total.
+const countRecords = async (client, base) => {
+  if (!allowedReads.has("records.count")) return null;
+  try {
+    const { total } = await client.records.count({ baseId: base.baseId });
+    return total;
+  } catch {
+    return null;
+  }
 };
 
 const readChangeRequests = async (client) => {
@@ -60,12 +79,9 @@ export const busabaseProvider = {
     }
     runtimeClient = client;
     runtimeBases = new Map(bases.map((base) => [base.key, base]));
-    const [pages, changeRequestPage] = await Promise.all([
-      Promise.all(
-        bases.map(async (base) => {
-          return [base.key, await readPage(client, base)];
-        }),
-      ),
+    const [pages, counts, changeRequestPage] = await Promise.all([
+      Promise.all(bases.map(async (base) => [base.key, await readPage(client, base)])),
+      Promise.all(bases.map(async (base) => [base.key, await countRecords(client, base)])),
       readChangeRequests(client),
     ]);
     return {
@@ -81,6 +97,10 @@ export const busabaseProvider = {
       pageInfo: Object.fromEntries(
         pages.map(([key, page]) => [key, { nextCursor: page.nextCursor, limit: page.limit }]),
       ),
+      // Real total per Base from records.count, or null when denied/unavailable
+      // -- the UI falls back to a "12+" style loaded-so-far approximation in
+      // that case instead of presenting a made-up number.
+      totalCount: Object.fromEntries(counts),
       changeRequests: changeRequestPage.changeRequests,
       changeRequestPageInfo: {
         nextCursor: changeRequestPage.nextCursor,

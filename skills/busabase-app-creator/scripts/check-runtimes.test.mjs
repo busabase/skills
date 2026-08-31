@@ -196,7 +196,9 @@ describe("airapp template check — runtimes", () => {
     // The exact shape that broke 66 shipped apps when `local-node` became
     // `local`: each carried its own copy of the list and answered `hosted` from
     // membership in it, so every one of them claimed "standalone" inside a
-    // hosted preview. Moving the list into an app is how that comes back.
+    // hosted preview. Moving the list into an app is how that comes back — and
+    // the list below is now doubly stale (`nodepod`/`srt` are gone), which is
+    // exactly the rot this rejects.
     const root = build("node");
     writeFileSync(
       path.join(root, "server.js"),

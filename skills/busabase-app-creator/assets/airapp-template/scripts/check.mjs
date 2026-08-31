@@ -72,8 +72,8 @@ if (
 ) {
   throw new Error("esbuild-wasm must use an exact version.");
 }
-// `dev` is the script that matters: BOTH AirApp engines run `npm run dev` (nodepod-runner.ts
-// and local-runtime.ts). This check only ever asserted `start`, so a project that dropped
+// `dev` is the script that matters: EVERY AirApp engine runs `npm run dev` (nodepod-runner.ts
+// in the browser, local-runtime.ts and sandock-runtime.ts on a server). This check only ever asserted `start`, so a project that dropped
 // `dev` — the exact shape a Vite scaffold produces — passed here and then died at run time on
 // `npm error Missing script: "dev"`. `start` is still checked because deployment uses it.
 if (isNode && packageJson.scripts?.dev !== "node server.js")

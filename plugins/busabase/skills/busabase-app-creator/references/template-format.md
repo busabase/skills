@@ -205,11 +205,49 @@ Warnings do not disqualify — no AirApp (a data-only template), no sample rows,
 no screenshots, no `agentPrompts` — but each is a card that is honest about
 being less than it could be.
 
+That command answers one question: *will this list and install*. It deliberately
+says nothing about the rest of this skill's contract, which `check` reads off the
+directory itself:
+
+```bash
+npx busabase-cli check ./<name>              # one directory
+npx busabase-cli check . --strict --json     # every template in a repo, for CI
+npx busabase-cli check ./<name> --only airapp  # while iterating on the app
+```
+
+Four things can be true of one directory and they are not four rungs of a ladder,
+so `check` reports each applicable layer separately:
+
+| Layer | Answers |
+| --- | --- |
+| `package` | identity, the screenshots the card promises, committed secrets or workspace ids |
+| `skill` | frontmatter, a description an agent can dispatch on, unfilled TODOs, references that travel |
+| `template` | `validateTemplate` — will it list and install as one |
+| `airapp` | the runtime contract: `dev`/`start`, the SDK pin, runtime detection, page budgets, config slugs |
+
+A layer that does not apply reports `–`, never `✓`: "not applicable" and "passed"
+look identical in a checklist that only has ticks, and that is how coverage gets
+assumed instead of verified.
+
+It is static — no install, and none of the template's own code is executed, so it
+is safe on a pull request from a stranger and fast enough to re-run while
+building. **Errors** break an installing user or publish someone's credentials.
+**Warnings** are documented defaults worth defending in review, and `--strict`
+fails on them too.
+
+The rules live where they are versioned with what they check: the AirApp contract
+in `busabase-sdk/airapp-check` (beside the runtime it is about, so the two cannot
+drift), the format rules in `busabase-package/audit`. `check` composes them and
+owns none of its own.
+
 **A validator pass is a precondition, never the finish line.** Install the
 package into a scratch Space, merge, and open the app. A package can satisfy
-every static rule while the app's own provisioning is broken, because install
-reads `base.json` and never exercises the declaration the app provisions from.
-That exact defect shipped once. Only a real install-and-open finds it.
+every static rule while its runtime behaviour is broken. The known example is
+provisioning: install reads `base.json` and never exercises the declaration the
+app provisions from, so a config Base that lost its `slug` shipped once through
+a green catalog check. `busabase-cli check` now catches that particular one —
+which is exactly why it is not evidence that the next one is covered. Only a
+real install-and-open finds those.
 
 ## Publishing
 
