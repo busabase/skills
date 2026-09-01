@@ -212,6 +212,61 @@ export const hosted = AIRAPP_HOSTED_RUNTIMES.has(airappRuntime);
     assert.match(result.stderr, /hardcoded engine list/);
   });
 
+  it("rejects the engine-name list on the CLIENT, which is where 66 apps actually carry it", () => {
+    // The exact bytes shipped in 66 apps. Server-side they are all correct
+    // (`hosted: airappRuntime !== ""`), so the old server-only rule passed them
+    // while the list sat in the browser bundle one file away.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/runtime.js"),
+      `const HOSTED = new Set(["nodepod", "local-node", "srt", "embed"]);
+export async function getRuntime() {
+  const response = await fetch("__airapp/runtime");
+  const body = await response.json();
+  return { ...body, hosted: body.hosted === true || HOSTED.has(body.runtime) };
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0, "client-side engine list was accepted");
+    assert.match(result.stderr, /hardcoded engine list/);
+  });
+
+  it("names the list it found, rather than only the rule it broke", () => {
+    // An author who wrote `HOSTED` does not recognise themselves in a message
+    // about `AIRAPP_HOSTED_RUNTIMES`. Echo the literal back.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/runtime.js"),
+      `const WHATEVER = new Set(["nodepod", "srt"]);
+export async function getRuntime() {
+  const response = await fetch("__airapp/runtime");
+  const body = await response.json();
+  return { ...body, hosted: WHATEVER.has(body.runtime) };
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /nodepod/);
+    assert.match(result.stderr, /PRESENCE/);
+  });
+
+  it("still accepts ordinary vocabulary that merely overlaps an engine name", () => {
+    // "local" and "browser" are words an app may legitimately use — a rule that
+    // fires on those would be untrue often enough to get switched off.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/runtime.js"),
+      `const STORAGE_MODES = ["local", "browser"];
+export async function getRuntime() {
+  const response = await fetch("__airapp/runtime");
+  const body = await response.json();
+  return { ...body, modes: STORAGE_MODES, hosted: body.hosted === true };
+}`,
+    );
+    const result = run(root);
+    assert.equal(result.status, 0, `ordinary vocabulary rejected: ${result.stderr}`);
+  });
+
   it("does not let a comment mentioning the SDK helper stand in for reading the variable", () => {
     // How this bit: the shipped template's comment *names*
     // `readBusabaseAirAppRuntime()` while explaining why it is not called yet,

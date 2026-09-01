@@ -232,6 +232,42 @@ if (!readsRuntimeEnv)
 // The one shape that must never come back: deciding hosting from a hardcoded
 // list of engine names. That is what broke 66 apps when `local-node` became
 // `local`, and moving the list into an app would reintroduce it wholesale.
+//
+// Matched on the LIST, not on what it is called. The previous rule keyed off
+// the identifier (`AIRAPP_HOSTED_RUNTIMES`, or a `.has()` on something spelled
+// `…RUNTIME…`) and so missed the shape actually shipped in 66 apps, which names
+// it `HOSTED`:
+//
+//     const HOSTED = new Set(["nodepod", "local-node", "srt", "embed"]);
+//     hosted: body.hosted === true || HOSTED.has(body.runtime),
+//
+// A name is a detail the next author picks freely; a collection of engine names
+// is the defect itself. Two or more of them in one literal is the signal — one
+// alone is an ordinary string like "local" or "browser" that any app may use.
+//
+// It also runs over the BROWSER source now, not just the host's. Those 66 apps
+// were all correct server-side and carried the list on the client, where this
+// gate never looked. A rule that only inspects half the app is how a defect it
+// was written to prevent ships anyway.
+const ENGINE_NAME = /["'`](?:nodepod|local-node|sandock|srt|embed|browser|remote|local)["'`]/g;
+// At least one of these makes the intent unmistakable — "local" plus "browser"
+// could be innocent vocabulary; "nodepod" or "embed" could not.
+const DISTINCTIVE_ENGINE_NAME = /["'`](?:nodepod|local-node|sandock|srt|embed|remote)["'`]/;
+const findEngineNameList = (code) =>
+  (code.match(/\[[^\]]*\]/g) ?? []).find((literal) => {
+    const names = literal.match(ENGINE_NAME) ?? [];
+    return names.length >= 2 && DISTINCTIVE_ENGINE_NAME.test(literal);
+  });
+for (const [label, code] of [
+  [serverFile, serverCode],
+  ["Browser source (app/js/runtime.js and friends)", stripComments(browserSource)],
+]) {
+  const found = findEngineNameList(code);
+  if (found)
+    throw new Error(
+      `${label} carries a hardcoded engine list ${found.trim()}; hosting is decided from PRESENCE of BUSABASE_AIRAPP_RUNTIME, never membership. Use the server's own \`hosted\` field (or the SDK's isBusabaseAirAppHosted) and delete the list.`,
+    );
+}
 if (/AIRAPP_HOSTED_RUNTIMES\s*=\s*new Set|hosted:\s*\w*RUNTIMES?\w*\.has\s*\(/.test(serverCode))
   throw new Error(
     `${serverFile} decides hosting from a hardcoded engine list; use the SDK's isBusabaseAirAppHosted (presence, not membership).`,
