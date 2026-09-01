@@ -147,19 +147,12 @@ Both ship in the template; keep them. The contract is the same in either languag
 that serves it differs.
 
 ```js
-// server.js — the app's own boundary is the only thing that knows.
-// Any non-empty value means hosted. Never check the name against a list of
-// known engines: Busabase adds and renames them, and a pinned list makes a
-// hosted app answer "standalone" and show its connection gate inside a hosted
-// preview. Absence is the signal; the name is only informational.
-const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
-app.get("/__airapp/runtime", (context) =>
-  context.json({
-    runtime: airappRuntime || "standalone",
-    hosted: airappRuntime !== "",
-    devProxy: Boolean(busabaseBaseUrl),
-  }),
-);
+import { describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
+
+// The SDK owns the presence-based `hosted` decision and preserves unknown
+// future engine names instead of treating them as standalone.
+const airappRuntime = describeBusabaseAirAppRuntime();
+app.get("/__airapp/runtime", (context) => context.json(airappRuntime));
 ```
 
 The browser probe must use the **relative** path `__airapp/runtime` (no leading slash — under the

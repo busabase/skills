@@ -69,9 +69,9 @@ ${opts.node ? 'import { createAirAppConnectGate } from "../vendor/busabase-airap
 }`,
 });
 
-const NODE_SERVER = `import { createBusabaseAirAppLocalGateway } from "busabase-sdk/airapp-node";
+const NODE_SERVER = `import { createBusabaseAirAppLocalGateway, describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
 const gateway = createBusabaseAirAppLocalGateway({});
-const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
+const airappRuntime = describeBusabaseAirAppRuntime();
 // routes: "/auth/status" "/auth/start" "/auth/callback" "/auth/space" "/auth/logout"
 // runtime: "/__airapp/runtime"
 export { gateway, airappRuntime };
@@ -82,7 +82,7 @@ const NODE_PACKAGE = {
   private: true,
   type: "module",
   scripts: { dev: "node server.js", start: "node server.js" },
-  dependencies: { "busabase-sdk": "0.17.2" },
+  dependencies: { "busabase-sdk": "0.30.1" },
   devDependencies: { "esbuild-wasm": "0.25.0" },
 };
 

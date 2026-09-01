@@ -202,6 +202,7 @@ test("scaffolds and checks a project without network access", async () => {
   assert.doesNotMatch(provider, /client\.bases\.list\s*\(/);
   assert.doesNotMatch(provider, /while\s*\(\s*cursor\s*\)/);
   assert.match(server, /createBusabaseAirAppLocalGateway/);
+  assert.match(server, /describeBusabaseAirAppRuntime/);
   assert.match(server, /appId: "launch-tracker"/);
   assert.match(server, /\/auth\/space/);
   assert.doesNotMatch(server, /context\.req\.header\("x-busabase-space"\)/);
@@ -420,7 +421,7 @@ test("verifies the installed SDK client export", async () => {
   );
   await writeFile(
     path.join(modulePath, "dist", "airapp-node.js"),
-    "export const createBusabaseAirAppLocalGateway = () => ({});\n",
+    "export const createBusabaseAirAppLocalGateway = () => ({});\nexport const describeBusabaseAirAppRuntime = () => ({});\n",
     "utf8",
   );
   await verifyInstalledSdk(temporary);
@@ -449,4 +450,33 @@ test("rejects an installed SDK without the local AirApp gateway export", async (
   await writeFile(path.join(sdkRoot, "dist", "airapp-node.js"), "export {};\n", "utf8");
 
   await assert.rejects(verifyInstalledSdk(temporary), /required AirApp gateway export/);
+});
+
+test("rejects an installed SDK without the runtime report export", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-sdk-runtime-test-"));
+  const sdkRoot = path.join(temporary, "node_modules", "busabase-sdk");
+  await mkdir(path.join(sdkRoot, "dist"), { recursive: true });
+  await writeFile(
+    path.join(sdkRoot, "package.json"),
+    JSON.stringify({
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./airapp-node": "./dist/airapp-node.js",
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "index.js"),
+    "export const createBusabaseClient = () => ({});\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "airapp-node.js"),
+    "export const createBusabaseAirAppLocalGateway = () => ({});\n",
+    "utf8",
+  );
+
+  await assert.rejects(verifyInstalledSdk(temporary), /required runtime export/);
 });

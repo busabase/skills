@@ -223,7 +223,9 @@ const serverCode = stripComments(serverSource);
 // every app) or read the variable directly; both are correct. A Python host has
 // no SDK to call, so it reads it itself.
 const readsRuntimeEnv = isNode
-  ? /readBusabaseAirAppRuntime\s*\(|process\.env\.BUSABASE_AIRAPP_RUNTIME\b/.test(serverCode)
+  ? /(?:describe|read)BusabaseAirAppRuntime\s*\(|process\.env\.BUSABASE_AIRAPP_RUNTIME\b/.test(
+      serverCode,
+    )
   : /BUSABASE_AIRAPP_RUNTIME/.test(serverCode);
 if (!readsRuntimeEnv)
   throw new Error(`${serverFile} must read BUSABASE_AIRAPP_RUNTIME (directly or via the SDK).`);

@@ -1,6 +1,9 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { createBusabaseAirAppLocalGateway } from "busabase-sdk/airapp-node";
+import {
+  createBusabaseAirAppLocalGateway,
+  describeBusabaseAirAppRuntime,
+} from "busabase-sdk/airapp-node";
 import { Hono } from "hono";
 
 const app = new Hono();
@@ -49,38 +52,12 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
  * sub-path of busabase's origin, so a leading slash resolves against the
  * origin root — busabase itself — and 404s.
  */
-// Hosted is decided from PRESENCE, never from membership of a list of known
-// engine names. A local list is what broke 66 shipped apps when `local-node`
-// became `local`: each answered "standalone" inside a hosted preview, showed
-// its own connection gate, called /api/v1 with no credential, and left the
-// operator with nothing to act on. The names moved again since — `nodepod` and
-// `sandock` became `browser` and `remote`, and `srt` was removed — which cost
-// nothing precisely because this reads presence. Only Busabase sets this
-// variable, so any non-empty value means it spawned this process, including an
-// engine this app has never heard of.
-//
-// The same rule now also lives in busabase-sdk, which is where it belongs, and
-// `describeBusabaseAirAppRuntime()` returns this whole body — so the swap deletes
-// the `hosted:` line rather than restating it. That matters: this exact line has
-// regressed twice, both times by an app being copied from an older source, and
-// both times with every test still green.
-//
-// It is NOT used here yet on purpose: the scaffold pins the latest *published*
-// SDK, and that export ships in the next release. Importing it now would generate
-// apps that crash on boot against every SDK currently on npm. Once a release
-// carrying it is out, this whole block becomes:
-//
-//   import { describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
-//   app.get("/__airapp/runtime", (context) => context.json(describeBusabaseAirAppRuntime()));
-const airappRuntime = (process.env.BUSABASE_AIRAPP_RUNTIME || "").trim();
-app.get("/__airapp/runtime", (context) =>
-  context.json({
-    runtime: airappRuntime || "standalone",
-    hosted: airappRuntime !== "",
-    devProxy: Boolean((process.env.BUSABASE_BASE_URL || "").trim()),
-  }),
-);
-console.log(`AirApp runtime: ${airappRuntime || "standalone"}`);
+// Keep presence-based hosting detection centralized in the SDK. The helper
+// also preserves unknown future engine names while exposing a narrowed
+// `knownRuntime` for callers that genuinely need engine-specific behavior.
+const airappRuntime = describeBusabaseAirAppRuntime();
+app.get("/__airapp/runtime", (context) => context.json(airappRuntime));
+console.log(`AirApp runtime: ${airappRuntime.runtime}`);
 
 app.use("/*", serveStatic({ root: "./app" }));
 

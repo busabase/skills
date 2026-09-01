@@ -400,6 +400,7 @@ export async function verifyInstalledSdk(projectPath) {
     ".then(([sdk, airapp]) => {",
     '  if (typeof sdk.createBusabaseClient !== "function") process.exit(2);',
     '  if (typeof airapp.createBusabaseAirAppLocalGateway !== "function") process.exit(3);',
+    '  if (typeof airapp.describeBusabaseAirAppRuntime !== "function") process.exit(4);',
     "})",
     ".catch((error) => { console.error(error.message); process.exit(1); });",
   ].join("");
@@ -414,6 +415,10 @@ export async function verifyInstalledSdk(projectPath) {
     if (error?.code === 3)
       throw new Error(
         "Installed busabase-sdk does not provide the required AirApp gateway export createBusabaseAirAppLocalGateway.",
+      );
+    if (error?.code === 4)
+      throw new Error(
+        "Installed busabase-sdk does not provide the required runtime export describeBusabaseAirAppRuntime.",
       );
     throw new Error(
       `Unable to import installed busabase-sdk: ${error?.stderr || error?.message || error}`,
