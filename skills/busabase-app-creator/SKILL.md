@@ -47,8 +47,8 @@ skill must never grow opinions that would fight such a layer.
 - **Pick a runtime first: `node` (default) or `python`.** The browser half of an AirApp — everything under `app/` — is identical either way; only the process serving it differs. Choose `python` when the app's own work is Python's (data, scraping, ML), and `node` otherwise. See "Python AirApps" below for the one thing they cannot do.
 - Use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one. Do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
 - Resolve the latest published `busabase-sdk`, verify that it exports `createBusabaseClient`, the
-  local AirApp OAuth helpers, and the Node credential-store entry, then pin the exact version in the
-  generated app.
+  local AirApp OAuth gateway, `describeBusabaseAirAppRuntime`, and the Node credential-store entry,
+  then pin the exact version in the generated app.
 - Use `createBusabaseClient` against `window.location.origin` in browser code. Never hard-code an
   absolute Busabase URL, never use the obsolete `/__busabase_api__/` bridge prefix, and never put an
   API key, Bearer token, OAuth token, session cookie, or secret in browser code
