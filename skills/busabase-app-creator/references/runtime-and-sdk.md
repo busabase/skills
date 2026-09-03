@@ -291,7 +291,9 @@ Default read surface:
 
 ```text
 records.list
-records.count  # only when a screen renders an authoritative total, not a loaded-rows count
+records.count     # only when a screen renders an authoritative total, not a loaded-rows count
+records.groupBy   # only when a screen renders per-bucket counts (board columns, a by-status chart)
+records.listPage  # numbered pagination, or a date-windowed screen (see dateRange below)
 changeRequests.list  # only when pending review data is rendered
 ```
 
@@ -307,11 +309,31 @@ Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on
 - Start independent Base and ChangeRequest reads together with `Promise.all`.
 - Preserve every `nextCursor` and choose the continuation UI by layout, not by habit — both of the following are compliant with "one page per user action"; the difference is purely interaction design:
   - **Load more (cumulative append)** — a button appends the next page to what's already showing. Fits a persistent list+detail split (the template's own shared shell: `list-panel` + `detail-panel` visible together) because paging away would silently orphan whatever the detail pane is showing — the selected row can vanish from a *replaced* list out from under an open detail. This is the template's default; `providers/busabase-provider.js`'s `loadMore()` and `app/js/app.js`'s `loadMore()` implement it.
-  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Needs the same forward-cursor cache regardless: `records.list` only exposes a forward keyset cursor (no offset/skip), so reaching an unvisited page walks forward through the intermediate pages once to learn their cursors, and every page visited after that — including going backward — is a single direct fetch. Degrade to Prev/Next-only (no page numbers) when `records.count` is unavailable — there is no honest total to show numbers against.
+  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Prefer `records.listPage` here: it takes `page`/`pageSize` directly and returns `total`/`totalPages`, so jumping to page 7 is one request and the page numbers have an honest total behind them. (`records.list` only exposes a forward keyset cursor with no offset/skip, so building a numbered pager on it means walking forward through intermediate pages once to learn their cursors and caching them — still valid if you are already on that path, but not the thing to reach for now.) Degrade to Prev/Next-only (no page numbers) when neither `records.listPage` nor `records.count` is available — there is no honest total to show numbers against.
   - Don't default to one pattern out of habit; pick the one that matches the screen actually being built, and say which one and why in the blueprint/review notes when it isn't obvious from the layout.
 - Apply the same per-row normalization (field coercion, JSON-string-encoded array fields parsed into real arrays, defaulting) to every page fetched, first or Nth, via one named function per record shape — not a second copy re-derived (or skipped) for later pages, regardless of which continuation UI is used. A normalizer that only runs on page 1 fails silently until a user reaches page 2, and the failure is a render crash on whatever field it skipped, not a compile-time error.
-- Sums and grouped aggregates (a pipeline total, a chart grouped by field) have no cheap exact answer once a Base exceeds one page — `records.count`'s exactness covers counts, including filtered counts, but not a sum-by-field or group-by. Compute such aggregates from whichever rows are currently loaded, keep every on-screen presentation of that number derived the same way, and do not present the result as a global total it isn't. A sum of exact per-Base *counts* (e.g. a "total records across every Base" tile) is not this problem — addition over numbers already known to be correct stays exact.
+- **Grouped counts** (a board column header, a "by status" bar chart, a pipeline stage breakdown) have an exact server-side answer: `records.groupBy`. One call returns every bucket's real count for a `select` or `checkbox` field, optionally scoped by `viewId`/`filters`, without reading a single record into the browser. Use it for any grouped *count*; never derive one by tallying loaded rows.
+- **Sums and averages** (a revenue total, an average deal size) still have no cheap exact answer once a Base exceeds one page — `records.count` and `records.groupBy` cover counts, not `sum`/`avg` over a field. Compute those from whichever rows are currently loaded, keep every on-screen presentation of that number derived the same way, and do not present the result as a global total it isn't. A sum of exact per-Base *counts* (e.g. a "total records across every Base" tile) is not this problem — addition over numbers already known to be correct stays exact.
+- `records.groupBy` is deliberately limited to `select` and `checkbox` fields, because their stored value *is* the grouping key. Grouping by a text field is rejected rather than approximated (the indexed projection truncates long values, so two distinct values could silently collide into one bucket), and so is grouping by a date (bucketing by day depends on the *viewer's* timezone, which the server never has). For a date-bucketed view, scope the read instead — see the calendar note below.
+
+  In the provider, it follows the same shape as the existing `countRecords` helper — permission-gated, and returning `null` (never a fabricated empty result) so the UI can hide the breakdown rather than invent one:
+
+  ```js
+  // `groups` is [{ value, count }]. `value` is the raw choice id (or "true"/
+  // "false" for a checkbox); `null` is the bucket of records with no value.
+  // Zero-count buckets are OMITTED — render an empty column from the field's
+  // own choice list, not from this response.
+  const groupRecords = async (client, base, fieldSlug) => {
+    if (!allowedReads.has("records.groupBy")) return null;
+    try {
+      return await client.records.groupBy({ baseId: base.baseId, fieldSlug });
+    } catch {
+      return null;
+    }
+  };
+  ```
 - Push supported filters and sorting into `records.list` instead of fetching a broad page and pretending client-side filtering covers the full Base.
+- **A calendar/date-windowed screen scopes its read to the window it draws**, via `records.listPage`'s `dateRange` (`{ fieldSlug, gte, lt }` — a half-open `[gte, lt)` interval on a `date`/`created_time`/`updated_time` field). Compute the bounds from the grid you are about to render (a month view is typically a 42-day grid starting before the 1st, not just the calendar month) and send them as **absolute UTC instants** — `new Date(localMidnight).toISOString()` already does this conversion. The server compares real timestamps and has no idea what timezone the viewer is in, which is precisely why the bounds are the caller's job: send local-day boundaries converted to UTC, and each viewer gets their own correct grid. Do not fetch the whole Base and bucket by day in the browser.
 - Debounce replaceable queries such as text search, discard stale responses, and reuse already-loaded pages when inputs have not changed.
 - Avoid per-record follow-up calls. Load related data in bounded parallel batches or from data already present in the record response.
 - Never loop through cursors in an interactive request to compute a total. Call `records.count` instead — it is a real, exact server-side count (optionally scoped by `baseId`, a saved `viewId`, and/or ad-hoc `filters`), not an approximation, and it is cheap for the filter shapes an AirApp typically needs (equality/contains text matches, presence checks, checkbox true/false). Full exports and offline research beyond a count still require a separate deliberate design with bounded batches, progress, cancellation/retry behavior, and a clear user action.
@@ -319,10 +341,11 @@ Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on
 
 These limits are page budgets, not claims about total record count. Reading another page must be a visible user action; append without duplicates for load-more, replace for a numbered pager.
 
-Two different questions need two different answers — do not conflate them:
+Three different questions need three different answers — do not conflate them:
 
 - **"How many rows have I loaded so far?"** (a browsable list, a feed, a picker) — this is about the page budget above. A displayed count must say or signal when it covers only loaded rows; show `50+` (or similar), never present a partial window as a canonical total.
 - **"What is the total?"** (a summary/stat tile — "Total PRs: 825", "Open issues: 57") — this is not a loaded-rows question at all. Call `records.count` and render its `total` directly. Never derive a summary-tile number from `records.list` page length, and never label a `50+`-style partial count as if it were this kind of total.
+- **"How many in each bucket?"** (board column headers, a by-status chart, "Open 57 / In progress 12 / Done 340") — call `records.groupBy` once and render each bucket's `count`. This is the question that most often gets answered wrongly by draining the Base: a number that climbs while rows load is worse than no number, because the user cannot tell when it has stopped being wrong. The counts are exact from the first paint and do not depend on how many records the screen has fetched.
 
 ## Optional Actions
 

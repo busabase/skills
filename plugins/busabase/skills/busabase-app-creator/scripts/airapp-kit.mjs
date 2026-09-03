@@ -40,11 +40,19 @@ const FIELD_TYPES = new Set([
  * be granting itself a route that 404s. (`drives.get` / `drives.listFiles` /
  * `drives.readFile` were stale even before that: the Drive/Skill/AirApp groups
  * merged into `fileTrees` some time ago.)
+ *
+ * `records.groupBy` and `records.listPage` are the two reads that let a screen
+ * be correct WITHOUT walking every page: a board column's header count, or a
+ * calendar month's slice. Without them the only way to show an exact grouped
+ * number is to drain the Base into the browser — which is exactly the failure
+ * this budget exists to prevent.
  */
 const READ_PROCEDURES = new Set([
   "bases.listViews",
   "records.list",
+  "records.listPage",
   "records.count",
+  "records.groupBy",
   "records.get",
   "records.search",
   "nodes.list",
