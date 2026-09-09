@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -168,6 +168,127 @@ describe("airapp template check — runtimes", () => {
     const result = run(root);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /must declare a `start` command/);
+  });
+
+  it("still sees a violation when a line comment contains a /* sequence", () => {
+    // Regression: comment stripping used one greedy `/\*[\s\S]*?\*/` pass over
+    // the whole source. A path written in an ordinary line comment —
+    // `content/*/base.json`, which every template package's config.js names —
+    // opens a block comment that never legitimately closes, so the pass ate
+    // everything up to the next `*/` in the file. The rules downstream then
+    // ran against a near-empty string and passed unconditionally.
+    //
+    // The trailing JSDoc block is load-bearing, not decoration: a non-greedy
+    // `[\s\S]*?\*/` only matches when some later `*/` exists to close it, so
+    // the bypass needs one. Every real app has documentation, which is why this
+    // reproduced in practice and not in a minimal fixture.
+    //
+    // The point of the gate is that these two rules cannot be bypassed, so a
+    // bypass reachable by writing a file path is the whole bug.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `// content/*/base.json is generated from this config
+import { getRuntime } from "./runtime.js";
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+export async function main() {
+  const runtime = await getRuntime();
+  const hosted = location.hostname !== "localhost";
+  createAirAppConnectGate({ shouldGate: () => !runtime.hosted && !hosted });
+}
+/** Any ordinary documentation block closes the comment the path opened. */
+export const VERSION = 1;`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0, "hostname detection must still be rejected");
+    assert.match(result.stderr, /Hostname-based runtime detection/);
+  });
+
+  it("keeps ignoring a // that is part of a URL inside a string", () => {
+    // The other direction: stripping must not treat `https://` as a comment,
+    // or everything after it on that line stops being inspected.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `import { getRuntime } from "./runtime.js";
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+const DOCS = "https://example.com/docs";
+export async function main() {
+  const runtime = await getRuntime();
+  const hosted = location.hostname === "localhost"; // must still be caught
+  createAirAppConnectGate({ shouldGate: () => !runtime.hosted && !hosted });
+  return DOCS;
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0, "a URL must not shield later code from inspection");
+    assert.match(result.stderr, /Hostname-based runtime detection/);
+  });
+
+  it("refuses a template package whose app pins resource ids", () => {
+    // A template materializes fresh resources in the installer's Space, so
+    // pinned ids can only name the author's. Publishing one succeeds, and the
+    // app then reads nothing — or, if an id resolves, a stranger's data.
+    // "Is this id from this Space" is not answerable statically, so refusing
+    // the combination is the only place it can be caught.
+    const root = build("node");
+    mkdirSync(path.join(root, "../fixture-package/content"), { recursive: true });
+    const packageRoot = mkdtempSync(path.join(tmpdir(), "airapp-template-pkg-"));
+    roots.push(packageRoot);
+    const appRoot = path.join(packageRoot, "content", APP_SLUG);
+    mkdirSync(appRoot, { recursive: true });
+    cpSync(root, appRoot, { recursive: true });
+    writeFileSync(
+      path.join(packageRoot, "busabase.json"),
+      JSON.stringify({
+        format: "busabase-package@1",
+        name: "fixture",
+        template: { category: "x" },
+      }),
+    );
+    const result = spawnSync("node", ["scripts/check.mjs"], { cwd: appRoot, encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /template must bind runtime/);
+  });
+
+  it("still accepts a template package whose app carries no ids", () => {
+    const root = build("node");
+    const packageRoot = mkdtempSync(path.join(tmpdir(), "airapp-template-ok-"));
+    roots.push(packageRoot);
+    const appRoot = path.join(packageRoot, "content", APP_SLUG);
+    mkdirSync(appRoot, { recursive: true });
+    cpSync(root, appRoot, { recursive: true });
+    // Same fixture minus the pinned ids the workspace-first route would carry.
+    const runtimeBound = {
+      ...APP_CONFIG,
+      schema: { ...APP_CONFIG.schema, bases: [{ key: "items", readLimit: 25, views: [] }] },
+    };
+    writeFileSync(
+      path.join(appRoot, "app/js/config.js"),
+      `export const appConfig = ${JSON.stringify(runtimeBound, null, 2)};`,
+    );
+    // With no ids in the config, the provider must resolve them itself.
+    writeFileSync(
+      path.join(appRoot, "app/js/providers/busabase-provider.js"),
+      `import { inspectProvisionedResources } from "../../vendor/busabase-airapp.js";
+export const load = async (client, config) => {
+  const resources = await inspectProvisionedResources(client, config);
+  // Resolved ids merged onto the declaration, which is where readLimit lives.
+  const declared = config.schema.bases[0];
+  const base = { ...declared, ...resources.bases.find((item) => item.key === declared.key) };
+  return client.records.list({ baseId: base.baseId, limit: base.readLimit });
+};`,
+    );
+    writeFileSync(
+      path.join(packageRoot, "busabase.json"),
+      JSON.stringify({
+        format: "busabase-package@1",
+        name: "fixture",
+        template: { category: "x" },
+      }),
+    );
+    const result = spawnSync("node", ["scripts/check.mjs"], { cwd: appRoot, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
   });
 
   it("rejects an unknown runtime rather than falling back to Node's rules", () => {

@@ -23,9 +23,21 @@ there. Product voice, visual style, layout conventions and interaction polish be
 or to a higher-level skill that layers them on top (the way `kelly-app-skill-creator` does); this
 skill must never grow opinions that would fight such a layer.
 
+The two layers that exist today: `busabase-template-creator` for the public
+`busabase/templates` catalog, and `kelly-app-skill-creator` for `mr-kelly/skills`. Both call
+this skill for correctness and add only a publishing bar on top. Note that
+`busabase-package-creator`, `busabase-skill-creator`, and `busabase-app-package-creator` are
+symlinks to this skill, not separate ones — four entry names, one contract.
+
 ## Non-Negotiable Contract
 
 - Use `$busabase` for connection, API, ChangeRequest, and approval behavior. Read its `SKILL.md` before any remote operation.
+- **Ship the manual and the prompts, not just the resources.** Whatever this run produces, its
+  Folder ends with one `skill` node named after the app, and **every node it creates carries
+  scenario agent prompts** that open by pointing the agent at that skill. A folder whose nodes
+  only offer their node type's generic prompts is unfinished: the person who installs it is left
+  with "there is data, now what". Write both as you go: the skill node as the app takes shape, each node's
+  prompts as that node is created (step 5, item 6). Shape and bar: step 10.
 - Establish the route at the start and never mix routes mid-run: **reinstall** (a built bundle just needs to exist in this Space — see step 1), **`create` workspace-first**, **`create` package-first** (see § "Two Ways In"), or **`maintain`**. In `create`, produce a new Folder, at least one new workflow Base, required native resources, and a new AirApp; never attach to or modify an existing business Base. In `maintain`, follow `references/maintenance.md`; the app may continuously create or change related workspace resources when those changes are included in the approved maintenance scope.
 - Ask exactly one decision question per message. Present two or three concrete options labeled `A`, `B`, and optionally `C`; mark one as recommended when appropriate, then invite the user to reply with a letter or type a custom answer. Never ask a bare open-ended interview question.
 - Ask the user to choose Busabase Cloud or Desktop before connecting.
@@ -65,7 +77,7 @@ skill must never grow opinions that would fight such a layer.
   assets, and Vault references for secrets. Generated local config may contain exact materialized ids,
   procedure allowlists, limits, schema versions, and non-secret readiness metadata only. Do not use
   local JSON, SQLite, browser storage, or a demo provider as a second persistent source of truth.
-- In `create`, after structure creation, write every materialized Folder, Node, Base, View, and resource id back into the blueprint. Generated runtime code in either mode must use exact ids instead of listing the workspace and rediscovering resources by slug.
+- In `create`, after structure creation, write every materialized Folder, Node, Base, View, and resource id back into the blueprint. Generated runtime code must then reach those resources by a stable handle rather than by listing the workspace and matching a name or slug. Which handle depends on how the artifact binds — see § "Two Ways To Bind" below; both are correct, and the wrong one for the route produces an app that cannot work.
 - Give every data-reading workflow an explicit budget. Default interactive pages to at most 50 records per Base and 20 relevant pending ChangeRequests, use server-side filters/sorts, run independent reads in parallel, preserve `nextCursor`, and fetch only one page per user action. Never hide a full scan behind loading, search, filtering, refresh, navigation, or detail opening; full exports and offline analysis require a separate, explicit batched workflow.
 - Generate the UI in the user's conversation language. Keep messages centralized so a later iteration can add locales.
 - In `create`, generate three to five realistic seed records by default and submit them as ChangeRequests; do not auto-merge records.
@@ -77,6 +89,40 @@ skill must never grow opinions that would fight such a layer.
   apply the validation and acceptance gates in `references/maintenance.md`.
 - In `create`, allow `autoMerge` only for the exact Folder/Base/field/relation structure the user approved in the current conversation. In `maintain`, submit every approved file, structure, content, or data change with `autoMerge: false` so each iteration remains reviewable.
 - Submit AirApp code and create-mode seed data as reviewable ChangeRequests. Review or merge a CR only after the user explicitly authorizes that specific CR in chat.
+
+## Two Ways To Bind
+
+An artifact reaches its resources one of two ways, and the route decides which.
+Naming this is not pedantry: the same config field is required in one and
+forbidden in the other, so a provider copied across the boundary is an app that
+can never load.
+
+| Binding | Ids in the app config | Resolution | Belongs to |
+| --- | --- | --- | --- |
+| `pinned` | Yes — Space id and every Folder/Node/Base/View id | Used directly; no discovery | **workspace-first `create`** and `maintain`, where the ids exist before the app is scaffolded |
+| `runtime` | No | `inspectProvisionedResources` matches each Base by its stamped `resourceKey` | **package-first `create`** and every installed template, where the ids do not exist until someone installs |
+
+Resolving by `resourceKey` is not the name-and-slug rediscovery this skill
+forbids. The key is stamped at install time and is unique to that installed
+app, so it cannot land on an unrelated resource that merely shares a name — the
+failure mode the prohibition exists to prevent.
+
+Two rules keep the pair honest:
+
+- **`pinned` must never fall back to discovery when an id is missing.** A
+  fallback turns a loud configuration error into an app that quietly reads and
+  writes the wrong resource. Fail with the missing slugs instead.
+- **A `pinned` artifact must never be published as a template.** A template
+  materializes fresh resources in the installer's Space; pinned ids name the
+  author's. Publishing one ships the author's node ids to every installer, and
+  the install *succeeds* before the app reads nothing — or, on a collision,
+  someone else's data. `content/<base>/base.json` is a resource *declaration*;
+  pinned ids are the *materialization result*. Shipping the result as the
+  declaration is a category error.
+
+So the lifecycle runs one way only: a template binds `runtime`, is installed,
+and only then may that one instance be pinned. Pinning is an operation on a
+deployment, never a property of a distribution.
 
 ## Read References Deliberately
 
@@ -224,6 +270,12 @@ Create a machine-readable `blueprint.json` and show the user a concise human vie
 3. Folder/resource graph, including Bases, native Views, Docs, Drives, and optional nodes.
 4. Fields, types, required values, select choices, and View configuration.
 5. Seed-record and initial-artifact outline.
+5a. **Per-node scenario list — what a person will be able to ask an agent to do with each node.**
+   Derive it from the User Story's recurring job and the Actions allowlist you just wrote; do not
+   invent a second vocabulary. One line per scenario, phrased the way the user would say it ("log
+   a customer visit"), grouped by the node it belongs to. This is what becomes each node's
+   `agentPrompts` in step 5, and it belongs in the approval because "what can I ask it to do" is
+   the question the user is actually approving.
 6. Procedure capability matrix, per-screen data budgets, and action allowlist.
 7. Vault requirement names and trusted execution owner, never secret values.
 8. Product onboarding version, required fields, Busabase completion resource, validation, and unlocked capabilities; or an explicit empty contract with rationale.
@@ -246,6 +298,10 @@ After approval:
 3. Create the Folder, Bases, fields, relations, native Views, Docs, Drives, and approved optional resources represented by the blueprint.
 4. Use `autoMerge` only because the user approved this exact structure.
 5. Read the materialized resources back and write every Folder/Node/Base/View/resource id into `blueprint.json` before scaffolding.
+6. **Write each node's `agentPrompts` the moment that node exists**, from its scenario list in the
+   approved blueprint (step 4, item 5a) — see step 10 for the shape, the CLI call and the writing
+   bar. A node is not "created" until someone opening it can see what to ask for; deferring this
+   to the end produces prompts written from memory of an app you have stopped looking at.
 
 If the returned status is not materialized/merged, stop and report the CR instead of pretending the structure exists.
 
@@ -376,6 +432,81 @@ After the user merges or explicitly authorizes each relevant CR:
 
 Running a pending AirApp CR is not supported. Never claim target verification before merged HEAD is actually run.
 
+### 10. The Manual And The Prompts — Shape, And Final Sweep
+
+Written throughout the run, not here: the skill node as the app takes shape, and each node's
+prompts as that node is created (step 5, item 6). This step is where their shape is defined, and
+where you sweep for anything that got missed before calling the run finished.
+
+The resources are only half of what installs. The other half is *how a non-expert drives them*,
+and it lives in two places:
+
+**The Folder's skill node.** One `skill` node in the Folder, named after the app — what the Bases
+mean, what each field is for, the workflow, and what the app must never do. Package-first, this is
+the root `SKILL.md` the installer lifts into that node; workspace-first, create the node directly.
+`$busabase` tells every agent to read it before writing in that Folder, so it is the one document
+that makes the app self-driving. A Folder may hold more than one skill; keep each node's name
+equal to its skill's frontmatter `name`.
+
+**Scenario prompts on every node.** These are not invented here — they are the per-node scenario
+list the user already approved in the blueprint (step 4, item 5a), written out in full. Each Base,
+Doc, AirApp and Drive gets the ones that belong to it.
+
+**Where a scenario comes from.** The blueprint's User Story names one audience and one recurring
+job; the Actions allowlist names what the app may do. A scenario is the intersection: a thing that
+audience does, often, using this node. `As a sales rep, I want to keep visit notes with the
+account` + a `Visits` Base ⇒ "log a customer visit", "show me everything we discussed with this
+account this quarter". If a would-be prompt is not traceable to the story, either it does not
+belong to this app or the story was incomplete — fix the story, not the prompt list.
+
+**The bar.** A prompt earns its place when it says what the PERSON wants, in their words, and the
+agent has to work out the operations. Two failure modes, both easy to fall into:
+
+| ❌ | ✅ | Why |
+| --- | --- | --- |
+| "Create a record in Visits" | "Log a customer visit" | The first is the API with a Base name pasted in; the node type's own prompts already cover it. |
+| "Update the status field to closed-won" | "Mark this deal as won and note why" | The first tells the agent which column to write; the second tells it what happened, which is what the skill's workflow is FOR. |
+| One prompt per field | 2–5 per node, one per recurring job | A prompt list as long as the schema is a schema, not a menu of things worth asking. |
+
+Write 2–5 per node. Fewer than two usually means the node has no job of its own and the prompts
+belong on its parent; more than five usually means field-level operations crept in.
+
+Every body opens by naming the skill:
+
+```
+{target}
+
+Read the `crm-visits` skill in this folder and follow its workflow, then add a visit record with
+today's date, the contact I name, and a one-line summary.
+```
+
+`{target}` expands to a COMPLETE SENTENCE — `Target: the Busabase Base "Visits" (nodeId: nod_…),
+in space "Acme" (spaceId: spc_…).` — so give it its own line, the way the built-in prompts do.
+Dropped mid-sentence ("add a visit to {target} today") it reads as a run-on with two full stops.
+
+Write them with the CLI, which validates before it sends:
+
+```bash
+npx busabase-cli nodes set-agent-prompts --node-id <nodeId> --file prompts.json
+```
+
+`prompts.json` is a list of `{ key, label, body, intent? }`. `label` is what the user picks from
+the list (≤80 chars); `body` is what the agent receives, with `{target}` substituted at render
+time for the node/space target line; `intent` is `read-only` or `change` (default `change`).
+Limits: 50 prompts per node, 8 KiB per body per locale. Both `label` and `body` accept an
+i18n object (`{ "en": "…", "zh-CN": "…" }`) when the app is multilingual.
+
+Package-first, write the same list into each node's sidecar (`agentPrompts` in `_node.json`,
+`_folder.json`, `base.json`, a `file` node's `.node.json`, or a Doc's frontmatter) so it survives
+export → install. `busabase-cli check` warns for a package with no skill node and for any node
+without prompts.
+
+**Final sweep.** Before the completion criteria: list the Folder's nodes, and for each one confirm
+it has prompts that a person — not an API — would recognise as their own job. Package-first, run
+`busabase-cli check` and read its `template/node-without-prompts` warning as a to-do list rather
+than noise. A node that reaches this sweep with nothing on it was created without the step-5 half
+of its definition; go back and write them against the node as it actually turned out.
+
 ## Completion Criteria
 
 For `create`, finish only when all are true:
@@ -385,6 +516,8 @@ For `create`, finish only when all are true:
   explicitly selected local-preview acceptance followed by target Run;
 - AirApp code CR is merged with explicit human authority;
 - canonical seed records are read back;
+- the Folder has a `skill` node named after the app, and every node this run created carries
+  scenario agent prompts whose bodies name that skill, each traceable to a scenario in the approved blueprint (steps 4–5, shape in step 10);
 - merged AirApp runs against real data in the target environment;
 - runtime config contains the exact materialized Folder/Node/Base/View/resource ids and non-secret Vault requirements, and every interactive read path is bounded, appropriately filtered, and visibly paginated;
 - no secret appears in files, logs, screenshots, or chat;
@@ -397,8 +530,9 @@ For `create`, finish only when all are true:
   merged AirApp is traceable to that same reviewed source tree.
 
 For a **package-first** `create` run, additionally: the package installs into a scratch Space with
-no warnings, its AirApp opens and reads real data there, and `SKILL.md` names only resources the
-package actually ships. A validator pass is a precondition, never the finish line.
+no warnings, its AirApp opens and reads real data there, `SKILL.md` names only resources the
+package actually ships, and the installed nodes show their authored prompts (not their node type's
+defaults) when opened in the scratch Space. A validator pass is a precondition, never the finish line.
 
 For `maintain`, use the separate completion criteria in `references/maintenance.md`.
 

@@ -142,4 +142,6 @@ The approved blueprint is not deployable until it contains:
 - every native View `view_id`;
 - every Doc, Drive, Whiteboard, Form, Workflow, and HTML `node_id`.
 
-The AirApp deployment config contains those ids and non-secret requirements. It must not list the whole Space to rediscover resources by name or slug.
+A **pinned** AirApp's deployment config contains those ids and non-secret requirements. It must not list the whole Space to rediscover resources by name or slug.
+
+A **runtime**-bound AirApp — the package-first route, and every installed template — has no ids to carry: they do not exist until an installer materializes them. It resolves each Base through `inspectProvisionedResources`, which matches the `resourceKey` stamped at install time. That is a stable per-install handle, not a name or slug, so it is not the rediscovery forbidden above. See § "Two Ways To Bind" in `SKILL.md`.

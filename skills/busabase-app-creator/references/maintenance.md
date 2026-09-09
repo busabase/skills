@@ -96,8 +96,9 @@ changes so reviewers can accept or reject them independently.
 
 Run the existing project checks plus `airapp-kit check` when the maintained project follows this
 creator's contract. Verify Demo behavior and real bounded reads through the local dev proxy. Use an
-already-selected CLI or shell credential without printing it; when absent, require
-`busabase-cli login --device-code`, never a key pasted into chat.
+already-selected CLI or shell credential without printing it; when absent, sign in with the
+two-turn flow in `../busabase/references/connect-and-space.md` (`busabase-cli login --no-wait`, then
+`--resume-code` in a later turn), never a key pasted into chat.
 
 Exercise changed behavior at desktop and 390px when the UI changed. For a runtime-only migration,
 prove the existing UI still loads and the request plan stays within every configured Base's

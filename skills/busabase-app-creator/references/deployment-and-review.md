@@ -6,7 +6,8 @@ Use this reference after blueprint approval.
 
 Read `../busabase/SKILL.md`. For Cloud, use the already-selected `busabase-cli` connection or local
 shell environment, confirm the selected Space, and sanitize all connection reporting. If no
-credential exists, require `busabase-cli login --device-code`; never ask for a key in chat. For
+credential exists, sign in with the two-turn flow in `../busabase/references/connect-and-space.md`
+(`busabase-cli login --no-wait`, then `--resume-code` in a later turn); never ask for a key in chat. For
 Desktop, probe the configured local URL without assuming authentication.
 
 Never print `~/.busabase/.env`, API keys, cookies, or authorization headers.

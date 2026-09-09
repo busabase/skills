@@ -93,13 +93,30 @@ if (isNode && contents["app/vendor/busabase-sdk.js"].length < 10_000)
   throw new Error("Browser SDK bundle is missing or incomplete.");
 if (!["cloud", "desktop"].includes(appConfig.deployment))
   throw new Error("Invalid deployment mode.");
-if (appConfig.deployment === "cloud" && !appConfig.spaceId)
-  throw new Error("Cloud app requires spaceId.");
 if (!Array.isArray(appConfig.schema?.bases) || !appConfig.schema.bases.length)
   throw new Error("Configured Bases are missing.");
-if (!appConfig.schema.folder?.nodeId) throw new Error("Configured Folder node id is missing.");
-if (appConfig.schema.bases.some((base) => !base.nodeId || !base.baseId))
-  throw new Error("Configured Base node/base ids are missing.");
+// How this app reaches its resources — see § "Two Ways To Bind" in SKILL.md.
+// Inferred from the config rather than declared, so an app scaffolded before
+// the distinction existed still classifies correctly: ids present means
+// workspace-first `create`/`maintain`, absent means package-first or an
+// installed template, where they cannot exist until someone installs.
+//
+// Requiring ids unconditionally, as this gate used to, made every package-first
+// app fail here — including the ones this skill tells an agent to write.
+const binding =
+  appConfig.spaceId || appConfig.schema.bases.some((base) => base.nodeId || base.baseId)
+    ? "pinned"
+    : "runtime";
+
+if (binding === "pinned") {
+  if (appConfig.deployment === "cloud" && !appConfig.spaceId)
+    throw new Error("Cloud app requires spaceId.");
+  if (!appConfig.schema.folder?.nodeId) throw new Error("Configured Folder node id is missing.");
+  if (appConfig.schema.bases.some((base) => !base.nodeId || !base.baseId))
+    throw new Error("Configured Base node/base ids are missing.");
+  if (appConfig.schema.bases.some((base) => (base.views || []).some((view) => !view.viewId)))
+    throw new Error("Configured View ids are missing.");
+}
 if (
   appConfig.schema.bases.some(
     (base) => !Number.isInteger(base.readLimit) || base.readLimit < 1 || base.readLimit > 50,
@@ -112,8 +129,6 @@ for (const [index, base] of appConfig.schema.bases.entries()) {
   if (base.readLimit !== expected)
     throw new Error(`Configured Base ${base.key || index} readLimit does not match blueprint.`);
 }
-if (appConfig.schema.bases.some((base) => (base.views || []).some((view) => !view.viewId)))
-  throw new Error("Configured View ids are missing.");
 const resourceCollections = ["docs", "drives", "whiteboards", "forms", "workflows", "html"];
 if (
   resourceCollections.some((collection) =>
@@ -151,6 +166,14 @@ const browserSource = [
 ].join("\n");
 
 if (!browserSource.includes("createBusabaseClient")) throw new Error("SDK client missing.");
+// The mirror obligation of a runtime binding: with no ids to use, the app must
+// resolve them, and by the stamped resourceKey rather than by listing the Space
+// and matching a name. An app that does neither loads nothing.
+if (binding === "runtime" && !/inspectProvisionedResources/.test(browserSource)) {
+  throw new Error(
+    "A runtime-bound app must resolve its resources via inspectProvisionedResources.",
+  );
+}
 // One relative path, every environment: same-origin inside Busabase, this app's
 // own dev proxy when run standalone. A hard-coded absolute Busabase URL or a
 // leftover bridge prefix would work in exactly one of them.
@@ -185,9 +208,65 @@ if (absoluteAssetRef.test(browserSource) || absoluteAssetRef.test(contents["app/
 // is the damaging one — the app hides its own connection gate, calls
 // `/api/v1` unauthenticated, and reports an error the user cannot act on.
 // Comments are stripped first so the reasoning may name `localhost` in prose.
-const withoutComments = browserSource
-  .replace(/\/\*[\s\S]*?\*\//g, " ")
-  .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, "$1 ");
+//
+// Scanned rather than regex-replaced, and that distinction is load-bearing.
+// The previous version ran one greedy `/\*[\s\S]*?\*/` pass over the whole
+// source, so an ordinary line comment naming a path — `content/*/base.json`,
+// which every generated config.js mentions — opened a block comment that ran
+// to the next `*/` anywhere in the file. A single JSDoc block later on was
+// enough to close it, and everything in between stopped being inspected. The
+// negative rules below then ran against a hole and passed unconditionally:
+// a gate bypassed by writing a file path.
+//
+// A scanner also fixes the mirror-image case the old second pass patched by
+// hand: `//` inside a string is a URL, not a comment, and must not blank the
+// rest of that line.
+const stripComments = (source) => {
+  let out = "";
+  let state = "code"; // code | line | block | ' | " | `
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const pair = char + source[i + 1];
+    if (state === "code") {
+      if (pair === "//") {
+        state = "line";
+        i += 1;
+        out += " ";
+      } else if (pair === "/*") {
+        state = "block";
+        i += 1;
+        out += " ";
+      } else {
+        if (char === "'" || char === '"' || char === "`") state = char;
+        out += char;
+      }
+    } else if (state === "line") {
+      if (char === "\n") {
+        state = "code";
+        out += char;
+      }
+    } else if (state === "block") {
+      if (pair === "*/") {
+        state = "code";
+        i += 1;
+      } else if (char === "\n") {
+        out += char;
+      }
+    } else {
+      // Inside a string literal: only its own closing quote ends it, and a
+      // backslash escapes whatever follows (including that quote).
+      if (char === "\\") {
+        out += source.slice(i, i + 2);
+        i += 1;
+      } else {
+        if (char === state) state = "code";
+        out += char;
+      }
+    }
+  }
+  return out;
+};
+const withoutComments = stripComments(browserSource);
 if (/location\s*\.\s*(?:hostname|host)\b/.test(withoutComments))
   throw new Error(
     "Hostname-based runtime detection found; read the runtime from __airapp/runtime instead.",
@@ -209,14 +288,39 @@ if (/["'`]\/__airapp\/runtime/.test(browserSource))
   throw new Error("Runtime probe must use the relative path __airapp/runtime, without a slash.");
 // The host must read the injected variable and re-expose it, whatever language
 // it is written in — this is the one contract every AirApp host shares.
+// A template must bind `runtime`. Pinned ids name the author's Space, so
+// publishing one hands every installer node ids that resolve to nothing —
+// after an install that reported success. Worse on a collision: it resolves to
+// a stranger's data. Nothing downstream can detect that, because "is this id
+// from this Space" is not a question a static check can answer; refusing the
+// combination is the only place it can be caught.
+//
+// The manifest sits two levels up in a template package and is simply absent
+// for a standalone app, so its absence is not a failure.
+const packageManifestRaw = await readFile(
+  path.join(root, "..", "..", "busabase.json"),
+  "utf8",
+).catch(() => null);
+if (packageManifestRaw) {
+  const packageManifest = JSON.parse(packageManifestRaw);
+  const pinnedBases = (appConfig.schema?.bases ?? appConfig.bases ?? [])
+    .filter((base) => base.nodeId || base.baseId)
+    .map((base) => base.slug || base.key);
+  if (packageManifest.template && (pinnedBases.length || appConfig.spaceId)) {
+    throw new Error(
+      `A template must bind runtime, but this app pins resources: ${
+        pinnedBases.join(", ") || "spaceId"
+      }. Pin an installed instance instead of publishing pinned ids.`,
+    );
+  }
+}
+
 const serverSource = contents[serverFile];
 // Comments are stripped first, and that is load-bearing rather than tidiness:
 // the template's own comment *names* the SDK helper while explaining why it is
 // not called yet, and matching that mention let a server that had stopped
 // reading the variable entirely pass this gate. Prose about a rule must never
 // satisfy the rule. (Same technique the browser-source rules below already use.)
-const stripComments = (source) =>
-  source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:'"`\\])\/\/[^\n]*/g, "$1 ");
 const serverCode = stripComments(serverSource);
 
 // A Node host may go through the SDK (one definition of "hosted", shared by

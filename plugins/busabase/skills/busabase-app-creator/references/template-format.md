@@ -17,7 +17,7 @@ of requiring one to guess a schema.
 ├── references/ agents/ scripts/  optional; installed alongside SKILL.md
 ├── busabase.json                 the manifest — required
 ├── content/                      the resources, as plain files — required
-│   ├── _folder.json              { "name": "...", "description": "..." }
+│   ├── _folder.json              { "name": "...", "description": "...", "agentPrompts": [...] }
 │   ├── <base>/base.json          one directory per Base
 │   ├── <base>/records.ndjson     optional sample rows
 │   ├── <name>-app/               the AirApp
@@ -59,6 +59,18 @@ metadata:
     risk: gated-write
 ---
 ```
+
+A template must bind `runtime` — no `spaceId`, and no `nodeId`/`baseId` on any
+Base in the app config. The ids in a pinned app name the author's Space; a
+template materializes fresh resources in the installer's. Publishing a pinned
+one ships the author's node ids to everybody, and the install *succeeds* before
+the app reads nothing — or, if an id happens to resolve, someone else's data.
+`content/<base>/base.json` is the resource declaration; pinned ids are the
+materialization result, and the result cannot stand in for the declaration.
+`check.mjs` refuses the combination.
+
+Pin an installed instance if you want one locked to specific nodes. That is an
+operation on a deployment, not a property of a distribution.
 
 `template: true` is deliberate rather than implied. Publishing a template means
 accepting that installers run this app's code and hand this file to their agent;
@@ -105,6 +117,12 @@ charge, merge its own proposals). An agent follows what is written here.
 would I even ask this thing", which is what decides whether an installed app
 gets used or sits there. Write two or three that the app can actually satisfy.
 
+This one is **template-level** — a flat list of strings for the Template Center
+card and the install-time "Ask agent" action, about the app as a whole. It is a
+different thing from the **per-node** `agentPrompts` below, which are structured
+and become each node's own prompts after install. Write both: the card sells the
+app, the node prompts drive it.
+
 With more than one AirApp, replace `airapp` with `airapps` and mark exactly one
 `primary`:
 
@@ -141,6 +159,77 @@ in the same package by slug:
   "required": false, "options": { "targetBaseSlug": "companies" } }
 ```
 
+`targetBaseSlug` is the target's `content/` **directory name**, not the Base's
+prefixed `slug`. Install resolves it within the package, so it must not be
+written as `<name>-companies`.
+
+When `content/` is generated from the app config (see below), that value comes
+from a `templateRelations` map on the config, keyed `"<baseKey>.<fieldSlug>"`:
+
+```js
+templateRelations: {
+  "invoices.company": "companies",
+}
+```
+
+It sits beside the schema rather than inside the field because the field's
+runtime `options` and its package `options` are not the same thing: at runtime a
+relation is resolved against a materialized Base, while in the package it can
+only name a sibling directory. One field, two representations, so the mapping
+that produces the package one is kept separate.
+
+## `agentPrompts` — per-node scenario prompts
+
+Every node sidecar takes an optional `agentPrompts`: the scenario prompts that
+node shows in its Agent-prompts dialog after install. Without them the installed
+node falls back to its node TYPE's generic prompts, which say nothing about what
+this app is for — the "installed it, now what?" gap.
+
+It goes in whichever sidecar describes the node:
+
+| Node | File | Key sits |
+| --- | --- | --- |
+| Base | `content/<base>/base.json` | top level, beside `fields` |
+| Folder | `content/<folder>/_folder.json` | top level |
+| Skill / AirApp / Drive | `content/<node>/_node.json` | top level |
+| File | `content/<file>.node.json` | top level |
+| Doc | the `.md`'s YAML frontmatter | top level |
+
+```jsonc
+{
+  "name": "Email Reviews",
+  "agentPrompts": [
+    {
+      "key": "triage-inbox",
+      "label": "Triage today's inbox",
+      "body": "{target}\n\nRead the `email-desk` skill in this folder and follow its workflow, then triage everything received today.",
+      "intent": "change"
+    }
+  ],
+  "fields": [ /* … */ ]
+}
+```
+
+- `key` — unique within the node. `label` — what the user picks from the list,
+  ≤80 chars. `body` — what the agent receives, ≤8 KiB per locale. Max 50 per node.
+- `intent` — `read-only` or `change`; omitted means `change`, so a prompt cannot
+  quietly bypass the approval path.
+- `label` and `body` also accept an i18n object: `{ "en": "…", "zh-CN": "…" }`.
+- `{target}` is substituted with a COMPLETE SENTENCE naming the node and space
+  (`Target: the Busabase Base "Email Reviews" (nodeId: nod_…), in space "…"
+  (spaceId: …).`) — give it its own line, as the built-in prompts do. Inline, it
+  reads as a run-on with two full stops.
+
+Install writes these onto the node right after creating it. One consequence worth
+knowing: on a review-first install a **Doc or File** node is still a pending
+change request and has no node id yet, so its prompts are reported as a warning
+instead of applied — re-run `busabase-cli nodes set-agent-prompts` after merging,
+or install with `--auto-merge`. Folders, Bases, Skills, AirApps and Drives are
+materialized during install and are unaffected.
+
+`busabase-cli check` warns (never errors) for a package with no `SKILL.md` and
+for any non-folder node with no prompts.
+
 ## `content/<base>/records.ndjson`
 
 One JSON object per line: `{"key": "…", "fields": {…}}`. `key` is
@@ -159,7 +248,14 @@ An AirApp that provisions its own resources (via `provisionDeclaredResources`)
 carries the field definitions in its own config, because it cannot read
 `content/` from inside the installed node. Then `content/<base>/base.json` is
 **generated from that config**, never hand-edited, by a script the template ships
-(see `busa-email`'s `scripts/sync-content.mjs`, which also takes `--check`).
+Copy `assets/package-scripts/sync-content.mjs` from this skill into the
+package's `scripts/`; it resolves the app directory from `busabase.json`, or
+from the single `content/` directory that has an `app/js/config.js` when the
+package is not a template. It also takes `--check`, which exits non-zero when
+`content/` has drifted — the form to run in CI, because drift is silent
+otherwise: `busabase-cli install` reads `base.json` while the app's own
+`provisionDeclaredResources` reads the config, so the two routes simply land on
+different Bases.
 
 Two rules matter here, and the second cost a real defect:
 
