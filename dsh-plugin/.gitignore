@@ -1,0 +1,7 @@
+/.skills-source/
+/node_modules/
+/lib/
+/coverage/
+/playwright-report/
+/test-results/
+*.tsbuildinfo
