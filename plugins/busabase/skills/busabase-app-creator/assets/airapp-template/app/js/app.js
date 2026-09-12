@@ -23,13 +23,43 @@ const escapeHtml = (value) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+// Busabase resource ids: rec records, bse Bases, bsf fields, nod nodes, cmt
+// commits, crq change requests. None of them belong on screen — the reader can
+// neither recognise one nor click it, and it looks like content while saying
+// nothing. So the last resort here is "-", never the id and never JSON.
+const RESOURCE_ID = /^(?:rec|bse|bsf|nod|cmt|crq)[a-z0-9]{10,}$/;
 const displayValue = (value) => {
   if (value == null || value === "") return "-";
   if (Array.isArray(value)) return value.map((item) => displayValue(item)).join(", ");
-  if (typeof value === "object")
-    return value.name || value.title || value.id || JSON.stringify(value);
+  if (typeof value === "object") return value.name || value.title || "-";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
+  const text = String(value);
+  return RESOURCE_ID.test(text) ? "-" : text;
+};
+
+// A relation field's value is the bare id of the target record, so printing it
+// straight renders `recmtu6jct9xgoq405` where a name belongs. Resolve it against
+// the loaded records; when the target has not been paged in yet, say that rather
+// than showing the id.
+const cellText = (field, value) => {
+  if (field?.type !== "relation") return displayValue(value);
+  const targetKey = appConfig.schema.bases.find(
+    (base) => base.slug === field.options?.targetBaseSlug,
+  )?.key;
+  const ids = (Array.isArray(value) ? value : [value])
+    .map((item) => (item && typeof item === "object" ? item.id || item.name : item))
+    .filter((item) => item != null && item !== "")
+    .map(String);
+  if (!ids.length) return "-";
+  const targets = (state.payload?.records || []).filter((record) => record.baseKey === targetKey);
+  const targetPrimary =
+    appConfig.schema.bases.find((base) => base.key === targetKey)?.fields?.[0]?.slug || "name";
+  return ids
+    .map((id) => {
+      const target = targets.find((record) => record.id === id);
+      return target ? displayValue(target.fields?.[targetPrimary]) : messages.relationUnloaded;
+    })
+    .join(", ");
 };
 
 const baseConfig = () =>
@@ -145,7 +175,7 @@ function renderList() {
       (record) => `
     <button class="record-row ${record.id === state.selectedRecordId ? "selected" : ""}" type="button" data-record="${escapeHtml(record.id)}">
       <strong>${escapeHtml(displayValue(record.fields?.[primaryField()]))}</strong>
-      <span>${secondaryFields.map((field) => escapeHtml(displayValue(record.fields?.[field.slug]))).join(" / ")}</span>
+      <span>${secondaryFields.map((field) => escapeHtml(cellText(field, record.fields?.[field.slug]))).join(" / ")}</span>
     </button>
   `,
     )
@@ -167,7 +197,7 @@ function renderDetail() {
     .slice(1)
     .map(
       (field) => `
-    <div class="field-row"><span>${escapeHtml(field.name)}</span><strong>${escapeHtml(displayValue(record.fields?.[field.slug]))}</strong></div>
+    <div class="field-row"><span>${escapeHtml(field.name)}</span><strong>${escapeHtml(cellText(field, record.fields?.[field.slug]))}</strong></div>
   `,
     )
     .join("");

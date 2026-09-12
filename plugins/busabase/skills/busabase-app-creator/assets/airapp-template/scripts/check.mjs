@@ -183,6 +183,26 @@ if (browserSource.includes("__busabase_api__"))
   throw new Error("Obsolete /__busabase_api__ bridge prefix found.");
 if (/baseUrl\s*:\s*["'`]https?:\/\//.test(browserSource))
   throw new Error("Hard-coded Busabase URL found in browser source.");
+// The summary is a band, and it must stay one line. `auto-fit` wraps when space
+// runs short, so the summary grows downward with every metric added until the
+// record list sits below the fold — while every width-based check still passes,
+// because nothing overflowed horizontally. Cap the count rather than let the
+// band grow: a fourth number belongs in the nav or a filter.
+const stylesSource = contents["app/styles.css"];
+const metricsRule = stylesSource.match(/\.metrics\s*\{[^}]*\}/);
+if (!metricsRule) throw new Error("No .metrics rule in app/styles.css.");
+if (/auto-fit|auto-fill/.test(metricsRule[0]))
+  throw new Error(
+    ".metrics must not use auto-fit/auto-fill: a wrapping summary pushes the list below the fold.",
+  );
+const metricsArray = contents["app/js/app.js"].match(/const metrics = \[([\s\S]*?)\n {2}\];/);
+if (!metricsArray) throw new Error("No metrics array in app/js/app.js.");
+const metricCount = (metricsArray[1].match(/^\s*\[/gm) || []).length;
+if (metricCount > 3)
+  throw new Error(
+    `At most 3 metrics; found ${metricCount}. Move the rest into a nav item or a filter.`,
+  );
+
 const providerSource = contents["app/js/providers/busabase-provider.js"];
 if (!/limit:\s*base\.readLimit/.test(providerSource))
   throw new Error("Busabase provider must consume each configured Base readLimit.");
@@ -297,6 +317,33 @@ if (/["'`]\/__airapp\/runtime/.test(browserSource))
 //
 // The manifest sits two levels up in a template package and is simply absent
 // for a standalone app, so its absence is not a failure.
+// A relation with no target is a field that exists, is named, and links to
+// nothing. Provisioning accepts it and creates `options: {}`, so the failure
+// surfaces as "the picker is empty" long after the schema was written — and one
+// skill in this repo shipped three of them. Both bindings need a target; only
+// the form differs, since a runtime-bound app has no ids yet.
+for (const base of appConfig.schema?.bases ?? appConfig.bases ?? []) {
+  for (const field of base.fields ?? []) {
+    if (field.type !== "relation") continue;
+    const { targetBaseId, targetBaseSlug } = field.options ?? {};
+    if (!targetBaseId && !targetBaseSlug) {
+      throw new Error(
+        `Relation ${base.key}.${field.slug} declares no target; set options.targetBaseSlug (or targetBaseId when pinned).`,
+      );
+    }
+    if (
+      targetBaseSlug &&
+      !(appConfig.schema?.bases ?? appConfig.bases ?? []).some(
+        (sibling) => sibling.slug === targetBaseSlug,
+      )
+    ) {
+      throw new Error(
+        `Relation ${base.key}.${field.slug} targets ${targetBaseSlug}, which is not a Base in this app.`,
+      );
+    }
+  }
+}
+
 const packageManifestRaw = await readFile(
   path.join(root, "..", "..", "busabase.json"),
   "utf8",

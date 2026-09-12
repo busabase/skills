@@ -8,6 +8,8 @@ export const messages = {
   overview: "Overview",
   records: "Records",
   record: "Record",
+  // Shown instead of a relation id when the target record has not been paged in.
+  relationUnloaded: "(not loaded)",
   search: "Search loaded records",
   searchPlaceholder: "Search this loaded page",
   loading: "Loading data...",

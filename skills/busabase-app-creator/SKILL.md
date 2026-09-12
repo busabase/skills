@@ -124,6 +124,11 @@ So the lifecycle runs one way only: a template binds `runtime`, is installed,
 and only then may that one instance be pinned. Pinning is an operation on a
 deployment, never a property of a distribution.
 
+The same law covers skills themselves: a **pointer stub** — a repo-local
+`SKILL.md` that names a deployed skill node's id and fetches its body at use
+time (§ "Two Ways In") — is a pin on a deployment. It is how one workspace
+skill serves many repositories, and it is never published as a template.
+
 ## Read References Deliberately
 
 Read each selected reference completely before acting:
@@ -191,6 +196,24 @@ Which to pick is decided by what is being produced, not by preference:
 - Producing an **app for one workspace**, with no distributable artifact asked for → workspace-first.
 - Unsure, or the shape is still being decided → workspace-first, and export at the end if it turns
   out to be worth sharing.
+- Producing **repo access to a skill already deployed in a workspace** ("our other repositories
+  want this same skill") → neither route. Do not export a copy per repo — copies drift. Write a
+  **pointer stub** in each consuming repo instead: a minimal local `SKILL.md` carrying only the
+  real trigger `description` in frontmatter, the fetch command below, and the Space/node table.
+
+  ```bash
+  npx busabase-cli@latest skills read-file --node-id <id> --file-path SKILL.md --output json
+  ```
+
+  Both flags earn their place, for different reasons. `--output json` is what returns the body at
+  all: the default text output collapses it to a one-line preview — measured against a real
+  server, a 40 KB skill comes back as 426 bytes ending in an ellipsis, where the JSON form
+  returns all 40652 characters plus the `contentHash`. `@latest` guards the other failure: `npx`
+  will serve a cached older CLI that may lack the subcommand entirely.
+
+  A stub pins ids, so the `pinned` rules above apply verbatim: never publish one as a template,
+  and a failed fetch is a stop — the agent must not improvise the procedure from the one-line
+  description.
 
 **Workspace-first** (what to pick when the shape is still being decided). Build the
 Folder, Bases and AirApp in a live Space through the workflow below, get it running against real
@@ -483,6 +506,8 @@ today's date, the contact I name, and a one-line summary.
 `{target}` expands to a COMPLETE SENTENCE — `Target: the Busabase Base "Visits" (nodeId: nod_…),
 in space "Acme" (spaceId: spc_…).` — so give it its own line, the way the built-in prompts do.
 Dropped mid-sentence ("add a visit to {target} today") it reads as a run-on with two full stops.
+Omit it entirely and that same line is prepended as the body's first paragraph: the placeholder
+chooses the sentence's PLACEMENT, it does not decide whether the prompt names its target.
 
 Write them with the CLI, which validates before it sends:
 

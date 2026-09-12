@@ -163,20 +163,25 @@ in the same package by slug:
 prefixed `slug`. Install resolves it within the package, so it must not be
 written as `<name>-companies`.
 
-When `content/` is generated from the app config (see below), that value comes
-from a `templateRelations` map on the config, keyed `"<baseKey>.<fieldSlug>"`:
+The app config uses the other form — the target Base's own `slug` — because that
+is what `provisionDeclaredResources` resolves when the app builds its Bases in a
+live Space:
 
 ```js
-templateRelations: {
-  "invoices.company": "companies",
-}
+{ slug: "company", name: "Company", type: "relation", required: false,
+  options: { targetBaseSlug: "invoicing-companies" } }
 ```
 
-It sits beside the schema rather than inside the field because the field's
-runtime `options` and its package `options` are not the same thing: at runtime a
-relation is resolved against a materialized Base, while in the package it can
-only name a sibling directory. One field, two representations, so the mapping
-that produces the package one is kept separate.
+Declare it there and only there. `sync-content.mjs` translates it to the
+directory name when it writes `base.json`, so one declaration serves both
+routes.
+
+Declaring it only on the package side is a silent defect, not a style choice.
+Install then produces a working relation while provisioning produces
+`options: {}` — a field that exists, is named, and links to nothing. Only the
+second route runs in a live Space, so the package looks correct everywhere
+except where it matters, and the symptom arrives much later as an empty picker.
+`check.mjs` and `sync-content.mjs` both refuse a relation with no target.
 
 ## `agentPrompts` — per-node scenario prompts
 
@@ -218,7 +223,9 @@ It goes in whichever sidecar describes the node:
 - `{target}` is substituted with a COMPLETE SENTENCE naming the node and space
   (`Target: the Busabase Base "Email Reviews" (nodeId: nod_…), in space "…"
   (spaceId: …).`) — give it its own line, as the built-in prompts do. Inline, it
-  reads as a run-on with two full stops.
+  reads as a run-on with two full stops. A body with no `{target}` at all gets
+  that line prepended automatically, so the target is always present; the
+  placeholder only controls where it sits.
 
 Install writes these onto the node right after creating it. One consequence worth
 knowing: on a review-first install a **Doc or File** node is still a pending

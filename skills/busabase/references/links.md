@@ -99,3 +99,10 @@ Awaiting review, on Cloud:
 Desktop / local:
 
 `Created the customer record: [Open](http://localhost:15419/dashboard/local/base/customers/rec_123).`
+
+**If the CLI is present but this skill is not** — the same instructions ship inside the binary, so
+an agent that only ran `npx busabase-cli` is not left guessing at the rules above. `busabase-cli
+skill` prints this skill offline, `busabase-cli skill setup` prints the one-time onboarding
+document instead (connect, seed a first Base, install the permanent skills), and `busabase-cli
+skill install` writes the skill into the agent's skills directory so it loads on every later
+session. No network call and no credential is needed for any of the three.

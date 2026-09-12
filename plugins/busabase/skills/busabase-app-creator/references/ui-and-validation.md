@@ -90,9 +90,27 @@ Cheap in code, and their absence is what makes a tool look unfinished:
 ### Composition
 
 - Page sits on `--canvas`; content sits in white cards with a hairline border and `--shadow-card`.
-- Metrics are cards in an `auto-fit` row: label at `--text-base` muted, value at `--text-2xl` with
-  `tabular-nums`, optional `.metric-delta` beneath.
+- Metrics are a **band, not a row of cards**: one line that never wraps, hairline dividers between
+  cells, no per-cell border/radius/shadow, label muted at `--text-sm` and value at `--text-xl` with
+  `tabular-nums`. Use `grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr)` — never
+  `repeat(auto-fit, …)`. A band that cannot wrap squeezes itself when space runs out; an `auto-fit`
+  row squeezes the work surface instead, by growing downward until the list falls past the fold.
+- **At most three numbers**, and every one of them must be unavailable elsewhere on the screen.
+  Per-base totals are already next to each nav item; the one number that demands action is already
+  in the sidebar's attention block. A band that restates them is a second navigation that cannot be
+  clicked. Put subsets that take a computation to know — "repos owned by no product", "merged but
+  not accepted" — and move the fourth idea into a nav item or a filter.
 - The list/detail workspace is one card, not two floating panels.
+- **Resource ids never reach the screen.** A relation field comes back as the bare id string of the
+  target record, so anything that prints the raw value renders `recmtu6jct9xgoq405` where a name
+  belongs. Resolve a relation to the target record's primary field; when that record is not in the
+  loaded page say so ("not loaded") rather than falling back to the id. An identifier the reader can
+  neither recognise nor click is worse than an admission that the value has not arrived — it looks
+  like content. The same rule kills `value.id` and `JSON.stringify(value)` as the last resort of a
+  display helper; the last resort is `-`.
+- A row's secondary line is a **chosen** set of fields. Slicing "the 3rd through 5th declared field"
+  picks up whatever the schema happens to hold there — which is how two relation columns ended up as
+  the subtitle of every row in a shipped app.
 - Numbers that sit in a column — counts, currency, percentages — get `tabular-nums` so rows align.
 - One accent per app. A `.badge` takes its dot, its 9% background wash, and its text color from a
   single `--dot` token, so a status can never end up half-colored. Keep the wash that light.
@@ -111,6 +129,15 @@ Each of these is a specific, recurring way a generated app reads as busy rather 
   twenty rows into a bag of highlighters. Do not hand-write a status pill with a solid fill.
 - A horizontal scrollbar inside a toolbar or filter strip. `.toolbar` wraps instead — a nested
   scrollbar is the most common way these layouts start looking broken at narrow widths.
+- A summary that wraps to a second row. Six `auto-fit` metric cards become 217px of numbers at
+  `1280x820` and 238px at `390x844`, and the record list starts below the fold. Nothing overflows
+  horizontally, so every width-based check still passes while the app has stopped showing its
+  content. Cap the count instead of letting the band grow.
+- Numbers already visible elsewhere. `navCount(...)` in a metric cell is the clearest case: the
+  sidebar prints that exact number one column to the left.
+- Raw `rec…` / `bse…` / `nod…` ids anywhere a human reads: rows, detail fields, headings, tooltips.
+  They are the most common reason a generated app looks broken on real data while looking fine on
+  Demo data.
 - Decorative gradients, hero sections, nested cards, oversized headings, marketing copy, mock
   skeleton graphics presented as content, and hover states that promote every control to primary.
 
@@ -136,7 +163,12 @@ It should include:
 - one human-attention case;
 - list and detail content;
 - no private or random data;
-- no network dependency.
+- no network dependency;
+- **the same value shapes the live API returns.** A relation arrives as a bare id string, not as
+  `{ id, name }`, and real ids look like `recmtu6jct9xgoq405`, not `"p1"`. Demo data that hands the
+  app a pre-resolved object is doing the app's job for it: the resolution path never runs, the id
+  path never renders, and Demo acceptance certifies a screen production will never show. Shape Demo
+  records like the API, then let the app resolve them.
 
 Production provider failure must never fall back to Demo silently.
 
@@ -161,6 +193,7 @@ Static checks must verify:
 - only non-secret Vault requirements exist in config; no value or browser secret API exists;
 - every Base config has an integer `readLimit` from 1–50 matching blueprint `read_limit` (default 50), providers consume it, and interactive reads contain no automatic cursor-exhaustion or per-record request loop;
 - Demo records exist;
+- `.metrics` uses neither `auto-fit` nor `auto-fill`, and the app renders at most three metrics;
 - required files exist.
 
 ## Validation Modes
@@ -184,12 +217,18 @@ reviewable AirApp CR. Do not patch only the remote copy.
 
 Start the server, report the actual `127.0.0.1` URL, and open `?demo=1`.
 
-Verify desktop around `1440x900`:
+Verify desktop around `1440x900`, and again at `1280x820` — the smaller one is where a summary
+band starts costing the list its rows:
 
-- meaningful first viewport;
+- the work surface is above the fold: the metrics band is **one row** and no taller than 56px, the
+  list panel shows at least three records, and the page itself does not scroll vertically
+  (`document.documentElement.scrollHeight <= window.innerHeight`);
 - navigation, metrics, filters, list, and detail work;
 - no overlap or page-level overflow;
-- loading/empty/error states render.
+- loading/empty/error states render;
+- no resource id is visible anywhere. Walk every view, open the first record in each, and assert
+  that the rendered text matches no `(rec|bse|bsf|nod|cmt|crq)[a-z0-9]{10,}`. This is a sweep, not a
+  spot check: the ids surface in whichever view happens to declare a relation.
 - partial counts are marked and Load More fetches one page without duplicating records.
 
 Verify phone at `390x844`:

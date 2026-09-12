@@ -69,6 +69,43 @@ const { appConfig } = await import(
 const stale = [];
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 
+const baseBySlug = new Map((appConfig.bases ?? []).map((base) => [base.slug, base]));
+
+/**
+ * A relation names its target twice, in two forms, and this translates between
+ * them from the single declaration on the field.
+ *
+ * The app config uses the target's own `slug`, because that is what
+ * `provisionDeclaredResources` resolves when the app builds its Bases in a live
+ * Space. The package uses the target's `content/` directory name, because that
+ * is what install resolves — it adds the package prefix itself.
+ *
+ * Declaring it only in the package (the old `templateRelations` map) is the
+ * failure this replaces: install produced a working relation, provisioning
+ * produced `options: {}` — a field that exists, is named, and links to nothing.
+ * Only the second route runs in a live Space, so the package looked correct
+ * everywhere except where it mattered. Hence the throw rather than a default:
+ * a relation with no target is not a relation.
+ */
+const packageRelationOptions = (base, field) => {
+  const options = { ...(field.options ?? {}) };
+  if (field.type !== "relation") return options;
+  const target = options.targetBaseSlug;
+  if (!target) {
+    throw new Error(
+      `${base.key}.${field.slug} is a relation with no options.targetBaseSlug. ` +
+        `Declare the target Base's slug on the field; provisioning reads it from there.`,
+    );
+  }
+  const sibling = baseBySlug.get(target);
+  if (!sibling) {
+    throw new Error(
+      `${base.key}.${field.slug} targets ${target}, which is not a Base in this package.`,
+    );
+  }
+  return { ...options, targetBaseSlug: sibling.key };
+};
+
 const emit = async (relativePath, contents) => {
   const target = path.join(root, relativePath);
   if (check) {
@@ -94,15 +131,7 @@ for (const base of appConfig.bases ?? []) {
         type: field.type,
         required: Boolean(field.required),
         position: index,
-        options: {
-          ...(field.options ?? {}),
-          // A relation points at another Base *in this package*, by its content/
-          // directory name — which is not what the field carries at runtime, so
-          // the mapping lives beside the schema rather than inside the field.
-          ...(appConfig.templateRelations?.[`${base.key}.${field.slug}`]
-            ? { targetBaseSlug: appConfig.templateRelations[`${base.key}.${field.slug}`] }
-            : {}),
-        },
+        options: packageRelationOptions(base, field),
       })),
       views: [],
     }),

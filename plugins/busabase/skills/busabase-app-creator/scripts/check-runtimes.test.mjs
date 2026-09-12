@@ -291,6 +291,65 @@ export const load = async (client, config) => {
     assert.equal(result.status, 0, result.stderr);
   });
 
+  it("rejects a relation field that names no target", () => {
+    // Provisioning accepts this and creates options:{} — a field that exists,
+    // is named, and links to nothing. Nothing fails until someone opens the
+    // picker and finds it empty, by which time the schema is long written.
+    // One Base, so the unrelated blueprint/readLimit pairing stays satisfied
+    // and the assertion is about the relation rule alone.
+    const root = build("node");
+    const withRelation = {
+      ...APP_CONFIG,
+      schema: {
+        ...APP_CONFIG.schema,
+        bases: [
+          {
+            ...APP_CONFIG.schema.bases[0],
+            slug: "fixture-items",
+            fields: [{ slug: "parent", name: "Parent", type: "relation" }],
+          },
+        ],
+      },
+    };
+    writeFileSync(
+      path.join(root, "app/js/config.js"),
+      `export const appConfig = ${JSON.stringify(withRelation, null, 2)};`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /declares no target/);
+  });
+
+  it("rejects a relation whose target is not a Base in this app", () => {
+    const root = build("node");
+    const withBadTarget = {
+      ...APP_CONFIG,
+      schema: {
+        ...APP_CONFIG.schema,
+        bases: [
+          {
+            key: "items",
+            nodeId: "nod_a",
+            baseId: "bas_1",
+            slug: "fixture-items",
+            readLimit: 25,
+            views: [],
+            fields: [
+              { slug: "owner", name: "Owner", type: "relation", options: { targetBaseSlug: "fixture-absent" } },
+            ],
+          },
+        ],
+      },
+    };
+    writeFileSync(
+      path.join(root, "app/js/config.js"),
+      `export const appConfig = ${JSON.stringify(withBadTarget, null, 2)};`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not a Base in this app/);
+  });
+
   it("rejects an unknown runtime rather than falling back to Node's rules", () => {
     const root = build("python");
     writeFileSync(path.join(root, "airapp.json"), JSON.stringify({ runtime: "cobol" }));
