@@ -335,7 +335,12 @@ export const load = async (client, config) => {
             readLimit: 25,
             views: [],
             fields: [
-              { slug: "owner", name: "Owner", type: "relation", options: { targetBaseSlug: "fixture-absent" } },
+              {
+                slug: "owner",
+                name: "Owner",
+                type: "relation",
+                options: { targetBaseSlug: "fixture-absent" },
+              },
             ],
           },
         ],

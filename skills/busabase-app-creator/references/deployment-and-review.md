@@ -45,16 +45,16 @@ acceptance from merged HEAD in Busabase:
   "visibility": "workspace",
   "version": "0.1.0",
   "mergeMode": "replace",
-  "autoMerge": false,
   "files": [
     { "path": "package.json", "content": "..." }
   ]
 }
 ```
 
-Pass `autoMerge: false` explicitly; omitting it can merge immediately when the selected credential
-has write permission. The response must be a pending CR/materialized-false result. If live OpenAPI
-differs, follow it and update the payload without weakening review-first behavior.
+`autoMerge` is deliberately absent: the write is permission-aware, so a credential that can write
+to the Folder publishes the app outright and a weaker one yields a pending ChangeRequest. Read the
+response to find out which happened — `materialized` true means it is live, false means there is a
+CR id to report. Never assume one outcome. If live OpenAPI differs, follow it.
 
 ## Reinstalling An Already-Built Bundle
 
@@ -71,8 +71,8 @@ import { provisionDeclaredResources, publishAirApp } from "busabase-sdk/airapp";
 await provisionDeclaredResources(client, config); // Folder + Bases, autoMerge: true, unchanged
 const result = await publishAirApp(client, config, files); // files: [{ path, content, mimeType? }]
 // result.status is "created" (Space never had this AirApp) or "updated" (it already does);
-// result.changeRequestId is always pending — publishAirApp always passes autoMerge: false for
-// executable AirApp code, the same rule as the raw CR above, non-negotiable either way.
+// It omits autoMerge, like the raw CR above: `merged: true` means it is live, and
+// `merged: false` carries the changeRequestId a weaker credential's write parked.
 ```
 
 `files` is the caller's job to read from disk (the SDK module stays isomorphic, no `fs` access) —
@@ -80,10 +80,10 @@ walk `<skill-root>/app/`, excluding `node_modules`, lockfiles that are regenerat
 anything `.gitignore`d. `publishAirApp` diffs against the deployed node's file list (path only, not
 content) to choose `create` vs `update` per file; it never deletes a remote-only path. It cannot skip
 a no-op publish (no cheap way to compare content without a per-file fetch), so a rerun with nothing
-changed still proposes a CR — a reviewer sees an empty diff and merges or ignores it, which is a
-review-noise cost, not a correctness one. Same review-first rule as every other AirApp change: report
-the CR id and wait for merge or explicit chat authorization; never claim the reinstall is done before
-that CR is merged.
+changed still writes — landing as a no-op merge, or as a CR whose diff is empty for a reviewer to
+merge or ignore. That is a noise cost, not a correctness one. Either way, report what actually
+happened: the node id when it merged, the CR id when it did not, and never claim the reinstall is
+done while a CR for it is still open.
 
 ## CR Review Summary
 

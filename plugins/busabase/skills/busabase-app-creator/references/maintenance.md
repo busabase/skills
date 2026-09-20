@@ -105,20 +105,24 @@ prove the existing UI still loads and the request plan stays within every config
 `readLimit` and the 20-item pending-CR cap. Local real-data validation does not prove the deployed
 ambient session.
 
-## Review-First Resource And File Changes
+## Scoped Resource And File Changes
 
 Create purpose-scoped ChangeRequests for the approved structure, schema, content/data, and AirApp
-file changes. Target every existing resource by exact id, use the live OpenAPI shape, and pass
-`autoMerge: false` on every maintenance CR; omission can merge immediately when the selected
-credential has write permission. Include the intended complete or patch AirApp file set explicitly.
-Report each CR id, its resource/record/file diff, SDK version, procedures, budgets, security facts,
-ordering dependencies, and whether it is destructive.
+file changes. Target every existing resource by exact id, use the live OpenAPI shape, and omit
+`autoMerge` so the write lands according to the credential's own permission — merged outright when
+it can write, held as a ChangeRequest when it cannot. What is scoped here is *what* the change may
+touch, not whether a human sees it first. Include the intended complete or patch AirApp file set
+explicitly.
+Report what each write actually did — the merged node/record ids when it landed, or the CR id plus
+its resource/record/file diff when the credential could not merge it — along with SDK version,
+procedures, budgets, security facts, ordering dependencies, and whether it is destructive.
 
-Wait for either manual merge or explicit chat authorization naming each CR. Maintenance-blueprint
-approval, prior CR authorization, or a general request to maintain the AirApp does not authorize
-merging a new CR.
+**When the server holds a write for review, leave it held.** A CR you did not merge is one the
+credential was not allowed to merge, and approving it yourself would defeat the permission that
+produced it. Maintenance-blueprint approval, prior authorization, or a general request to maintain
+the AirApp is not authorization to merge such a CR — only the user asking for that specific CR is.
 
-After each authorized merge, read changed resources, records, and AirApp files back and compare them
+Afterwards, read changed resources, records, and AirApp files back and compare them
 with the accepted maintenance blueprint and local manifest. Respect ordering dependencies before
 submitting or merging dependent CRs. Ask the user to Run merged HEAD in the target Busabase, then
 verify the ambient session, configured resources, bounded requests, and browser console. A pending

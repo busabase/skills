@@ -228,8 +228,8 @@ It goes in whichever sidecar describes the node:
   placeholder only controls where it sits.
 
 Install writes these onto the node right after creating it. One consequence worth
-knowing: on a review-first install a **Doc or File** node is still a pending
-change request and has no node id yet, so its prompts are reported as a warning
+knowing: when the installer's credential cannot merge, a **Doc or File** node is
+still a pending change request and has no node id yet, so its prompts are reported as a warning
 instead of applied — re-run `busabase-cli nodes set-agent-prompts` after merging,
 or install with `--auto-merge`. Folders, Bases, Skills, AirApps and Drives are
 materialized during install and are unaffected.
