@@ -2,7 +2,7 @@
 name: busabase-app-creator
 description: >-
   Create a complete isolated Busabase workspace app, author an installable Busabase template, or
-  continuously evolve an existing AirApp — all through one review-first workflow. Start either way:
+  continuously evolve an existing AirApp — all through one blueprint-approved workflow. Start either way:
   build in a live Space and export the result as a template, or write the template package on disk
   and install it to verify. Use for new Cloud/Desktop workspace apps, for authoring or contributing
   a busabase template or template skill, and for auditing, upgrading, extending, or migrating an
@@ -87,7 +87,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   user explicitly requests `pnpm dev`, a local URL, preview, or debugging. Standalone AirApp creation
   retains local-preview acceptance unless the user explicitly selects target-first. In `maintain`,
   apply the validation and acceptance gates in `references/maintenance.md`.
-- In `create`, allow `autoMerge` only for the exact Folder/Base/field/relation structure the user approved in the current conversation. In `maintain`, submit every approved file, structure, content, or data change with `autoMerge: false` so each iteration remains reviewable.
+- **Write the way `$busabase` says: omit `autoMerge` and read the response's `status`.** Review is a permission setting, not a step this skill imposes — a credential that can write publishes immediately, a weaker one gets a ChangeRequest, and either outcome is correct. Do not pass `autoMerge: false` to manufacture a review gate the workspace did not ask for; pass it only when *you* judge one specific change risky enough to deserve a second pair of eyes regardless of what the credential could do. What this skill does gate is **scope**: in `create`, only the exact Folder/Base/field/relation structure the user approved in the current conversation may be written at all, and in `maintain`, only the approved change set.
 - Submit AirApp code and create-mode seed data as reviewable ChangeRequests. Review or merge a CR only after the user explicitly authorizes that specific CR in chat.
 
 ## Two Ways To Bind
@@ -157,12 +157,13 @@ blueprint, the code is not changing? If so, skip the rest of this workflow and u
 `publishAirApp` from `busabase-sdk/airapp` (see `references/deployment-and-review.md` §
 "Reinstalling An Already-Built Bundle"). It resolves the Folder from `provisionDeclaredResources`'s
 declaration, creates the AirApp when the Space has never had it or proposes an update when it does,
-and always submits `autoMerge: false` — a human still merges it — but it removes hand-constructing
-that ChangeRequest file-by-file, which is what previously made every reinstall an agent session
+and lands permission-aware like every other write — merged outright when the credential can write
+to the Folder, a ChangeRequest when it cannot — but it removes hand-constructing that
+ChangeRequest file-by-file, which is what previously made every reinstall an agent session
 instead of a script. This is also the answer to "the setup script only made the Bases, not the
 AirApp": that script's data-layer provisioning was never supposed to include AirApp deployment in
 the same request (see the note on `AirAppNodeDeclaration` in `airapp.ts` — executable code is
-always a separate, always-review-first request from the data layer's `autoMerge: true` one), and it
+a separate request from the data layer's structural one), and it
 should call `publishAirApp` as its own explicit next step instead of leaving the AirApp for someone
 to notice is missing.
 
@@ -428,7 +429,7 @@ remain separate reviewable AirApp CRs.
 
 ### 8. Deploy The AirApp As A ChangeRequest
 
-Create a new AirApp under the new Folder with the complete validated file tree, `mergeMode: "replace"`, and review-first behavior. Pass `autoMerge: false` explicitly for executable AirApp code; omission can merge immediately when the selected credential has write permission. Record whether validation was `target-first` or `local-preview`.
+Create a new AirApp under the new Folder with the complete validated file tree and `mergeMode: "replace"`. Omit `autoMerge` and read the result: a credential that can write to the Folder publishes the app outright, a weaker one yields a pending ChangeRequest, and both are correct outcomes to report. Record whether validation was `target-first` or `local-preview`.
 
 Report the CR id and the main security facts:
 
@@ -539,7 +540,7 @@ For `create`, finish only when all are true:
 - approved Folder, Bases, Views, artifacts, and optional resources exist in the selected Cloud Space or Desktop workspace;
 - AirApp source passes its checks and either target-first acceptance in merged Busabase HEAD or an
   explicitly selected local-preview acceptance followed by target Run;
-- AirApp code CR is merged with explicit human authority;
+- the AirApp write landed — merged outright, or left as a ChangeRequest the credential could not merge — and the result was read back rather than assumed;
 - canonical seed records are read back;
 - the Folder has a `skill` node named after the app, and every node this run created carries
   scenario agent prompts whose bodies name that skill, each traceable to a scenario in the approved blueprint (steps 4–5, shape in step 10);
