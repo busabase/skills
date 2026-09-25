@@ -2,22 +2,61 @@
 
 Use this reference while generating the project and implementing the Busabase provider.
 
-## Fixed Stack
+## Default Scaffold Stack
+
+What this skill **scaffolds for a new app**. It is a default for code this skill writes, not a
+platform limit and not a conformance test to apply to an existing app — see "Which Stack Is Allowed"
+below before judging one:
 
 - Hono server with `@hono/node-server`.
 - Vanilla HTML/CSS/JavaScript browser code.
 - No runtime build step, React, Vite, JSX, SWC, native binary, subprocess, browser automation, or server-side secret.
 - `busabase-sdk` pinned to the exact latest version resolved during scaffolding.
 
-AirApp runs inside Nodepod, a browser Worker/Service Worker Node runtime. Pure JavaScript generally works; native binaries and real OS processes do not.
-
 These constraints are authoritative for higher-level App-in-Skill creators too. They may define the
 product workflow and UI requirements, but must not replace this runtime with a conflicting language,
 framework, package, authentication, or deployment model.
 
-### Why "no Vite" is not a style preference
+## Which Stack Is Allowed
 
-This was verified against real boots, not assumed — real `onServerReady` events and real 200
+The list above is this skill's **default for new apps**, chosen to keep generated AirApps boring and
+reviewable as plain file diffs. It is not a statement about what the platform can run, and it is not a
+rule to enforce against an app someone else built. Before judging an existing app — especially in
+`maintain` mode — know which engine it targets, because they differ sharply.
+
+Busabase starts an AirApp with `npm install` then `npm run dev` by default; an `airapp.json` may
+override `runtime` (`node` | `python`), `install`, `start`, `port`, and `preferredEngine` /
+`requiredEngine`. Engine values are `browser`, `local`, `remote` (older manifests may carry the
+retired aliases `nodepod`, `local-node`, `sandock`, accepted only in `preferredEngine`).
+
+| Engine | Where it runs | What it can run |
+| --- | --- | --- |
+| `browser` (Nodepod) | the viewer's tab, a browser Worker/Service Worker Node runtime | Pure JavaScript generally works; **native binaries and real OS processes do not**. Of the bundler dev servers, only `vite@7.3.1` is verified to boot — see below. Python is ineligible by construction. |
+| `local` | a bare OS process on the machine hosting Busabase | the host's own Node/Python toolchain, no bundler restriction of its own. Offered only where the host *is* the user's machine (Self-hosted / Desktop / Local). |
+| `remote` (Sandock) | a container provisioned per run | an ordinary Debian + Node 24 + Python image with a shell — **frameworks and native deps run normally**. Next.js 16 + React 19 + Tailwind 4 is a shipped demo (`requiredEngine: "remote"`). |
+
+So: **a React/Vite/Next AirApp is not a defect.** On `browser` it must pin `vite@7.3.1` exactly; on
+`local` or `remote` it is ordinary work. Do not propose rewriting a working framework app into vanilla
+JS, and do not treat a framework dependency as evidence of a contract violation. (What *is* a problem
+is a deployed tree containing only build output with no source that could produce it — a different
+question entirely, handled in `references/maintenance.md`.)
+
+Two things to know before promising a framework app will run:
+
+- **The write gate is engine-blind.** `assertAirAppRunnable` rejects a `dev` script starting `vite`,
+  `webpack`, `next`, `parcel`, `rollup`, `react-scripts`, `nuxt`, `astro`, or `remix` with
+  `AIRAPP_NOT_RUNNABLE` unless the exact pin is allowlisted (today: `vite@7.3.1` only) — *regardless of
+  which engine the app targets*. Declaring `start` (or a non-`node` `runtime`) in `airapp.json` exempts
+  the app from that check entirely, which is how the Next.js demo ships. That exemption is the
+  mechanism, not a loophole to reach for: use it when the app genuinely declares its own commands.
+- **`remote` does not forward WebSocket upgrades** (they get a `501`), so framework HMR over WS does
+  not work through the preview proxy. Assets must use relative paths, install has a 10-minute budget,
+  and the sandbox has a wall-clock deadline.
+
+### Why the `browser` engine pins Vite so tightly
+
+This applies to the `browser` (Nodepod) engine only — on `local` and `remote` a bundler is just a
+bundler. It was verified against real boots, not assumed — real `onServerReady` events and real 200
 responses through the SW proxy, using Nodepod's own `examples/issue-44-react-dev-server` and
 `examples/vite-dev-exit-1` regression pages run against the currently published `@scelar/nodepod`
 (the exit-code-only check that page's own summary uses is a false-positive trap: a `npm run dev`
@@ -30,14 +69,16 @@ port — check for a real `onServerReady`/200, not a clean exit code):
 - **Vite 8's default bundler, rolldown**, ships a native `.node`-class WASM binding Nodepod's
   browser-emulated npm cannot resolve (`Cannot find native binding`), traced back to
   `SharedArrayBuffer is not defined` breaking rolldown's own WASI random-data syscall. This is a
-  structural mismatch (the "native binaries... do not [work]" line above), not something a config
+  structural mismatch (the `browser` row's "native binaries... do not" above), not something a config
   tweak fixes. Confirmed broken even with zero CSP/CORS restrictions on the host page.
-- **The one exception: `vite@7.3.1` exactly**, esbuild JSX transform (no `@vitejs/plugin-react`
-  Babel, or the Babel Fast Refresh variant — both real-boot; the SWC variant
-  [`@vitejs/plugin-react-swc`] does not, same native-binary class of failure as rolldown). This is
-  the exact pin `packages/busabase-core/src/logic/airapp-runnable.ts`'s `assertAirAppRunnable`
-  write gate allows through as `KNOWN_RUNNABLE_BUNDLER_VERSIONS` — every other bundler version is
-  rejected at write time with `AIRAPP_NOT_RUNNABLE`, precisely because it isn't runnable.
+- **The one exception: `vite@7.3.1` exactly.** The plain esbuild JSX transform boots. So does
+  `@vitejs/plugin-react` (Babel), and so does its Babel Fast Refresh variant — all three were
+  real-booted, so **`@vitejs/plugin-react` is permitted, not prohibited**. Only the SWC variant,
+  `@vitejs/plugin-react-swc`, fails, for the same native-binary reason as rolldown. `7.3.1` is the
+  exact pin `packages/busabase-core/src/logic/airapp-runnable.ts`'s `assertAirAppRunnable` write gate
+  allows through as `KNOWN_RUNNABLE_BUNDLER_VERSIONS`; every other bundler version is rejected at
+  write time with `AIRAPP_NOT_RUNNABLE`, precisely because it isn't runnable. Note the gate reads the
+  *bundler* pin only — it never inspects which React plugin is installed.
 - **Even the verified `7.3.1` pin needs host cooperation**: Nodepod lazy-loads `esbuild-wasm` from
   `esm.sh` and (for the SQLite demo) `wa-sqlite`/`brotli-wasm` from `cdn.jsdelivr.net`. A host CSP
   without those origins in `script-src` blocks the fetch and produces the exact same
@@ -53,7 +94,10 @@ doesn't need, not about Vite being unable to run at all. If a blueprint has an e
 user-authorized reason to need Vite/React (e.g. porting an existing Vite app in `maintain` mode),
 pin exactly `vite@7.3.1` with the esbuild JSX transform, and confirm the target Busabase's AirApp
 CSP allows `esm.sh`/`cdn.jsdelivr.net` before promising it will run — do not scaffold `vite@8` or
-an unpinned `vite` range on the assumption a newer version is safer.
+an unpinned `vite` range on the assumption a newer version is safer. None of that applies if the app
+targets `remote`: there a bundler runs in an ordinary container, and the constraints that bite are
+the ones listed under "Which Stack Is Allowed" (no WebSocket upgrade, relative assets, install
+budget).
 
 ## Canonical Local Source
 
