@@ -57,7 +57,18 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   second AirApp implementation, and never leave a remote-only edit: read it back, back-port it to the
   canonical local project, and re-run checks before continuing.
 - **Pick a runtime first: `node` (default) or `python`.** The browser half of an AirApp — everything under `app/` — is identical either way; only the process serving it differs. Choose `python` when the app's own work is Python's (data, scraping, ML), and `node` otherwise. See "Python AirApps" below for the one thing they cannot do.
-- Use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one. Do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
+- **When scaffolding a new app**, use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one; do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
+- **That is a scaffolding default, not a verdict on an app you did not write.** A framework AirApp is
+  valid: `vite@7.3.1` boots under the in-browser engine, and the `remote` engine is an ordinary
+  container where Next/React is a shipped demo. In `maintain`, read "Which Stack Is Allowed" in
+  `references/runtime-and-sdk.md` before judging an existing app; never treat a framework dependency
+  as a violation, and never propose rewriting a working framework app into vanilla JS. Also do not run
+  `airapp-kit check` against a project this skill did not scaffold — it fails with
+  `React/Vite are forbidden.`, which is a false red, not a finding.
+- In `maintain`, before reading the canonical tree as a normal target, check whether the deployed tree
+  could produce itself — see "Is There Source Here At All?" in `references/maintenance.md`. A `dist`-only
+  push with no producer in the tree and no source findable anywhere is a Stop Condition, not a base to
+  build on: never patch a minified bundle to satisfy a requested change.
 - Resolve the latest published `busabase-sdk`, verify that it exports `createBusabaseClient`, the
   local AirApp OAuth gateway, `describeBusabaseAirAppRuntime`, and the Node credential-store entry,
   then pin the exact version in the generated app.
@@ -614,4 +625,6 @@ Stop and ask for direction when:
 - a requested action would bypass ChangeRequests;
 - live API behavior conflicts with this Skill;
 - the SDK lacks `createBusabaseClient` or fails Nodepod validation;
-- Cloud/Desktop Run cannot be verified after merge.
+- Cloud/Desktop Run cannot be verified after merge;
+- in `maintain`, the deployed tree is build output with no producer in it and no source findable
+  anywhere — see "Is There Source Here At All?" in `references/maintenance.md`.
