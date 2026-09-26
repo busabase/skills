@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Teach the bundled Claude Code and Codex `busabase` skills to look for a playbook first: on every
+  instruction, call `playbooks_search` with a few phrasings of the user's intent, then
+  `playbooks_get` the skill or custom prompt that fits and follow it. Bump the Claude Code plugin to
+  `0.4.1` and the Codex plugin to `0.3.3` so cached installs pick the guidance up.
+- Fail validation if either bundled skill drops the playbook-first rule.
 - Add an Agent Plugins v1.0.0 portable package at the repository root with canonical
   `plugin.json`, `mcp.json`, and existing `skills/` discovery.
 - Preserve the dedicated Claude Code, Codex, and general-client MCP configurations unchanged.
@@ -22,8 +27,8 @@
 
 - Replace the removed `createBusabaseRpcClient` AirApp runtime with
   `createBusabaseClient` against same-origin `/api/v1`.
-- Sync the public app creator with the canonical kapps skill, including local
-  real-data proxying and continuous AirApp maintenance.
+- Update the app creator skill with local real-data proxying and continuous AirApp
+  maintenance.
 - Refresh the bundled Codex skill and bump its version so existing `0.3.1`
   caches receive the corrected scaffold.
 - Replace the plugin's raster artwork and green accent with Busabase's canonical
@@ -40,7 +45,7 @@
 - Add the public `busabase-app-creator` skill for guided workspace and AirApp creation.
 - Bundle app creator in the Codex plugin beside its MCP-first `busabase` dependency.
 - Document native Busabase resources, bounded reads, Vault requirements, and trusted execution boundaries.
-- Refresh the public `busabase` skill from the kapps source of truth.
+- Refresh the `busabase` skill.
 
 ## 0.2.1 - 2026-07-22
 
