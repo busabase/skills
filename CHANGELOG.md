@@ -27,8 +27,8 @@
 
 - Replace the removed `createBusabaseRpcClient` AirApp runtime with
   `createBusabaseClient` against same-origin `/api/v1`.
-- Sync the public app creator with the canonical kapps skill, including local
-  real-data proxying and continuous AirApp maintenance.
+- Update the app creator skill with local real-data proxying and continuous AirApp
+  maintenance.
 - Refresh the bundled Codex skill and bump its version so existing `0.3.1`
   caches receive the corrected scaffold.
 - Replace the plugin's raster artwork and green accent with Busabase's canonical
@@ -45,7 +45,7 @@
 - Add the public `busabase-app-creator` skill for guided workspace and AirApp creation.
 - Bundle app creator in the Codex plugin beside its MCP-first `busabase` dependency.
 - Document native Busabase resources, bounded reads, Vault requirements, and trusted execution boundaries.
-- Refresh the public `busabase` skill from the kapps source of truth.
+- Refresh the `busabase` skill.
 
 ## 0.2.1 - 2026-07-22
 
