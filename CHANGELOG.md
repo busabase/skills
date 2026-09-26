@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Teach the bundled Claude Code and Codex `busabase` skills to look for a playbook first: on every
+  instruction, call `playbooks_search` with a few phrasings of the user's intent, then
+  `playbooks_get` the skill or custom prompt that fits and follow it. Bump the Claude Code plugin to
+  `0.4.1` and the Codex plugin to `0.3.3` so cached installs pick the guidance up.
+- Fail validation if either bundled skill drops the playbook-first rule.
 - Add an Agent Plugins v1.0.0 portable package at the repository root with canonical
   `plugin.json`, `mcp.json`, and existing `skills/` discovery.
 - Preserve the dedicated Claude Code, Codex, and general-client MCP configurations unchanged.

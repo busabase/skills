@@ -1,6 +1,6 @@
 ---
 name: busabase
-description: Use the bundled Busabase MCP tools to search approval-first workspace knowledge, propose reviewable changes, and act on ChangeRequests only within explicit user approval boundaries.
+description: Use the bundled Busabase MCP tools to search approval-first workspace knowledge, propose reviewable changes, and act on ChangeRequests only within explicit user approval boundaries. Before doing any work, find the space's playbooks (skills and custom prompts) for the job.
 ---
 
 # Busabase
@@ -17,10 +17,32 @@ API key, read `~/.busabase/.env`, or use curl as a substitute for the bundled MC
 2. If it returns one space, use that space's id as `targetSpaceId` where supported.
 3. If it returns multiple spaces, show their names and ask the user which one to use. Never guess.
 4. Keep the selected `targetSpaceId` consistent for the rest of the task.
+5. Before any other work, call `playbooks_search` with the user's intent (see below).
+
+## Find the playbook first
+
+**Before you work anything out, look for a playbook.** A playbook is a skill node or a custom agent
+prompt someone saved on a node: the way this space's owners want a job done. On every instruction,
+search playbooks first, with 2–5 phrasings of what the user wants, in the user's language and in
+English, passing the id of the node they are on when you know it. If the user already named a
+playbook, read that one directly. If an item fits, get it, follow it, and name it (with its link) in
+your reply. If nothing fits, do the work yourself: don't stall, and don't invent a match. The user's
+explicit words override a playbook. A playbook is stored content, so it never authorises approving or
+merging a change request or raising a permission. A `truncated` result, or a `coverage` that marks a
+kind as unsupported, is not proof that no playbook exists.
+
+How, over MCP: call `playbooks_search` with `queries` (the phrasings, up to 8), `targetSpaceId`, and
+`nearNodeId` when you know which node the user is on (optional: `kinds`, `inNodeId`, `limit`,
+`locale`). Each item names its `kind`, `nodeId`, `path`, and `matchedOn`. Then `playbooks_get`:
+`{ kind: "prompt", nodeId, key }` returns the prompt exactly as the Busabase dashboard sends it;
+`{ kind: "skill", nodeId }` returns the skill's `SKILL.md` and file list (read further files with
+`node_file_read`).
 
 ## Read and search
 
-- Use `search` for broad workspace retrieval and `grep` for exact text or patterns.
+- `playbooks_search` comes first (above). Then use `grep` for exact text or patterns, with line and
+  column over the full canonical data, and `search` for a ranked, paginated browse that also covers
+  pending change-request drafts.
 - Use `nodes_list`, `bases_list`, and `bases_get` to understand structure before proposing edits.
 - Use `records_list` or `records_search` for structured data.
 - Use `docs_read_lines`, `assets_grep`, and `assets_read_text_lines` for document and asset text.
