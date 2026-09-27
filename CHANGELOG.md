@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix nine MCP tool names in the bundled Claude Code and Codex `busabase` skills that the hosted
+  server does not publish (`records_search`, `docs_read_lines`, `change_requests_review`, …), so
+  an agent's first call no longer fails. Bump the Claude Code plugin to `0.4.2` and the Codex plugin
+  to `0.3.4`.
 - Teach the bundled Claude Code and Codex `busabase` skills to look for a playbook first: on every
   instruction, call `playbooks_search` with a few phrasings of the user's intent, then
   `playbooks_get` the skill or custom prompt that fits and follow it. Bump the Claude Code plugin to
