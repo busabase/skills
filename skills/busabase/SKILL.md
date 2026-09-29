@@ -1,6 +1,6 @@
 ---
 name: busabase
-description: Drive any Busabase workspace — the user's database, knowledge base, apps library, and skills registry for AI agents. Write through ChangeRequests, which merge immediately with write access and queue for review otherwise. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL, API key, and target space from ~/.busabase/.env.
+description: Manages Busabase records, knowledge, apps, and reusable skills through permission-aware ChangeRequests. Use when querying or updating a Busabase workspace via CLI, API, or MCP; writes may merge immediately or await review.
 ---
 
 # Busabase
