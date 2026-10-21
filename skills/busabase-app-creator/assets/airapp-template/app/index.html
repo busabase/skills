@@ -38,38 +38,48 @@
           <strong id="mobileTitle">AirApp</strong>
           <button class="icon-button" id="mobileSettings" type="button" aria-label="Open settings" title="Open settings">i</button>
         </header>
-        <section class="workspace-header">
-          <div>
-            <span class="eyebrow" id="viewEyebrow"></span>
-            <h1 id="viewTitle"></h1>
-            <p id="viewSummary"></p>
-          </div>
-          <label class="search">
-            <span class="sr-only" id="searchLabel"></span>
-            <input id="searchInput" type="search" autocomplete="off">
-          </label>
+        <div class="state-message" id="loadingState" role="status"></div>
+        <div class="state-message error" id="errorState" role="alert" hidden></div>
+        <!-- Overview is the only page with a hero and a metrics band. Record views
+             get one toolbar row so the table starts near the top of the screen. -->
+        <section class="overview-page" id="overviewPage" hidden>
+          <header class="page-hero">
+            <div>
+              <h1 id="overviewTitle"></h1>
+              <p id="overviewSummary"></p>
+            </div>
+          </header>
+          <section class="metrics" id="metrics" aria-label="Summary metrics"></section>
+          <div class="overview-sections" id="overviewSections"></div>
         </section>
-        <section class="metrics" id="metrics" aria-label="Summary metrics"></section>
-        <section class="content-split">
-          <section class="list-panel" id="listPanel">
-            <div class="panel-heading">
-              <div><span class="eyebrow" id="listEyebrow"></span><h2 id="listTitle"></h2></div>
+        <section class="view-page" id="viewPage" hidden>
+          <header class="view-toolbar">
+            <div class="view-title">
+              <h1 id="viewTitle"></h1>
               <span class="count" id="recordCount"></span>
             </div>
-            <div class="state-message" id="loadingState" role="status"></div>
-            <div class="state-message error" id="errorState" role="alert" hidden></div>
-            <div class="record-list" id="recordList"></div>
-            <button class="load-more" id="loadMore" type="button" hidden></button>
+            <label class="search">
+              <span class="sr-only" id="searchLabel"></span>
+              <input id="searchInput" type="search" autocomplete="off">
+            </label>
+          </header>
+          <section class="content-workspace">
+            <section class="list-panel" id="listPanel">
+              <div class="record-list" id="recordList"></div>
+              <button class="load-more" id="loadMore" type="button" hidden></button>
+            </section>
+            <section class="detail-panel" id="detailPanel">
+              <header class="detail-bar">
+                <button class="back-button" id="backButton" type="button"></button>
+                <a class="detail-expand" id="detailExpand" hidden></a>
+              </header>
+              <div class="detail-empty" id="detailEmpty"></div>
+              <article id="detailContent" hidden>
+                <h2 id="detailTitle"></h2>
+                <div class="detail-fields" id="detailFields"></div>
+              </article>
+            </section>
           </section>
-          <aside class="detail-panel" id="detailPanel">
-            <button class="back-button" id="backButton" type="button"></button>
-            <div class="detail-empty" id="detailEmpty"></div>
-            <article id="detailContent" hidden>
-              <span class="eyebrow" id="detailEyebrow"></span>
-              <h2 id="detailTitle"></h2>
-              <div class="detail-fields" id="detailFields"></div>
-            </article>
-          </aside>
         </section>
       </main>
     </div>

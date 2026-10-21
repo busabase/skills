@@ -89,7 +89,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   procedure allowlists, limits, schema versions, and non-secret readiness metadata only. Do not use
   local JSON, SQLite, browser storage, or a demo provider as a second persistent source of truth.
 - In `create`, after structure creation, write every materialized Folder, Node, Base, View, and resource id back into the blueprint. Generated runtime code must then reach those resources by a stable handle rather than by listing the workspace and matching a name or slug. Which handle depends on how the artifact binds — see § "Two Ways To Bind" below; both are correct, and the wrong one for the route produces an app that cannot work.
-- Give every data-reading workflow an explicit budget. Default interactive pages to at most 50 records per Base and 20 relevant pending ChangeRequests, use server-side filters/sorts, run independent reads in parallel, preserve `nextCursor`, and fetch only one page per user action. Never hide a full scan behind loading, search, filtering, refresh, navigation, or detail opening; full exports and offline analysis require a separate, explicit batched workflow.
+- Give every data-reading workflow an explicit budget. Default interactive pages to at most 50 records per Base and 20 relevant pending ChangeRequests, use server-side filters/sorts, run independent reads in parallel, preserve `nextCursor`, and fetch only one page per user action. Never hide a full scan behind loading, search, filtering, refresh, navigation, detail opening, "jump to page N", a capped `while (cursor && n < 4)` loop, a `Promise.all` over `totalPages`, or a "fallback" for a filter that seemed not to apply — see `references/runtime-and-sdk.md` § A full scan in disguise. Full exports and offline analysis require a separate, explicit batched workflow.
 - Generate the UI in the user's conversation language. Keep messages centralized so a later iteration can add locales.
 - In `create`, generate three to five realistic seed records by default and submit them as ChangeRequests; do not auto-merge records.
 - In delegated App-in-Skill `create` mode, use `target-first` validation by default: run deterministic
@@ -289,6 +289,9 @@ Follow the choice-first interaction contract in `references/interview-and-bluepr
 - native artifacts: Views, Docs, files, Whiteboards, Forms, Workflows, or HTML;
 - lifecycle/status values and important dates;
 - first screen, list/detail views, metrics, filters, and search;
+- the detail mode per Base (`ui.detail_modes`): `page` when the record is a workplace of its own
+  (related lists, long content, shared links), `drawer` when people scan many records
+  and touch one or two fields, `split` when the view is a queue worked one record at a time;
 - human-attention states;
 - whether any small ChangeRequest-producing action is required;
 - whether an external integration needs a trusted Workflow/Agent and named Vault requirements;
@@ -331,6 +334,12 @@ After approval:
 1. Re-read the target Space/workspace and check for slug collisions.
 2. Generate unique slugs; never reuse matching existing nodes.
 3. Create the Folder, Bases, fields, relations, native Views, Docs, Drives, and approved optional resources represented by the blueprint.
+   A new Base comes with a default "Grid view" (every record and field) unless you skip it, and a
+   Base opens on its leftmost View. So when the blueprint gives a Base its own Views, create that
+   Base with `--skip-default-view` (`node_create` `skipDefaultView`, REST `defaultView: false`) and
+   then its Views in blueprint order — the first one is what the Base opens on, and a later
+   `export --template` ships exactly these. When the blueprint gives a Base no Views, keep the
+   default Grid view and record its `view_id` like any other. A Base must always keep one View.
 4. Use `autoMerge` only because the user approved this exact structure.
 5. Read the materialized resources back and write every Folder/Node/Base/View/resource id into `blueprint.json` before scaffolding.
 6. **Write each node's `agentPrompts` the moment that node exists**, from its scenario list in the
@@ -509,17 +518,15 @@ belong on its parent; more than five usually means field-level operations crept 
 Every body opens by naming the skill:
 
 ```
-{target}
-
 Read the `crm-visits` skill in this folder and follow its workflow, then add a visit record with
 today's date, the contact I name, and a one-line summary.
 ```
 
-`{target}` expands to a COMPLETE SENTENCE — `Target: the Busabase Base "Visits" (nodeId: nod_…),
-in space "Acme" (spaceId: spc_…).` — so give it its own line, the way the built-in prompts do.
-Dropped mid-sentence ("add a visit to {target} today") it reads as a run-on with two full stops.
-Omit it entirely and that same line is prepended as the body's first paragraph: the placeholder
-chooses the sentence's PLACEMENT, it does not decide whether the prompt names its target.
+Write only the task. Busabase opens every prompt with the sentence that names its node —
+`Target: the Busabase Base "Visits" (nodeId: nod_…), in space "Acme" (spaceId: spc_…).` — the same
+one the built-in prompts open with, so do not write `{target}`. Older bodies that still contain it
+keep working: a line that is only `{target}` is dropped, and one inside a sentence reads as the
+node's name.
 
 Write them with the CLI, which validates before it sends:
 
@@ -528,8 +535,8 @@ npx busabase-cli nodes set-agent-prompts --node-id <nodeId> --file prompts.json
 ```
 
 `prompts.json` is a list of `{ key, label, body, intent? }`. `label` is what the user picks from
-the list (≤80 chars); `body` is what the agent receives, with `{target}` substituted at render
-time for the node/space target line; `intent` is `read-only` or `change` (default `change`).
+the list (≤80 chars); `body` is the task the agent receives, after the node/space target line
+Busabase adds ahead of it; `intent` is `read-only` or `change` (default `change`).
 Limits: 50 prompts per node, 8 KiB per body per locale. Both `label` and `body` accept an
 i18n object (`{ "en": "…", "zh-CN": "…" }`) when the app is multilingual.
 

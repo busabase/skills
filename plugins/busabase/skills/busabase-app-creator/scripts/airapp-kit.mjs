@@ -314,6 +314,23 @@ export function validateBlueprint(blueprint) {
         error(`ui.screens[${screenIndex}].data_sources references unknown resource ${source}.`);
     }
   }
+  // How a record opens, per Base: a full page, a drawer over the list, or a
+  // split pane beside it. It is a decision about the business, so every Base
+  // declares one; the app falls back to the drawer only so it never breaks.
+  for (const key of baseKeys) {
+    if (!isObject(ui.detail_modes) || !(key in ui.detail_modes))
+      warn(`ui.detail_modes.${key} is not declared; choose page, drawer, or split from the task.`);
+  }
+  if (ui.detail_modes !== undefined) {
+    if (!isObject(ui.detail_modes)) error("ui.detail_modes must be an object keyed by Base key.");
+    for (const [key, mode] of Object.entries(isObject(ui.detail_modes) ? ui.detail_modes : {})) {
+      if (!baseKeys.has(key)) error(`ui.detail_modes.${key} does not reference a Base key.`);
+      if (!["page", "drawer", "split"].includes(mode))
+        error(`ui.detail_modes.${key} must be page, drawer, or split; received ${mode}.`);
+    }
+  }
+  if (ui.density !== undefined && !["default", "compact"].includes(ui.density))
+    error(`ui.density must be default or compact; received ${ui.density}.`);
   const actions = asArray(ui.actions);
   for (const [actionIndex, action] of actions.entries()) {
     if (!["read", "change_request"].includes(action?.kind)) {
@@ -583,6 +600,27 @@ export async function scaffoldProject({
   return { output, sdkVersion: version, warnings: result.warnings };
 }
 
+// A full scan rarely looks like `while (cursor)`. See
+// references/runtime-and-sdk.md § A full scan in disguise.
+export const FULL_SCAN_SHAPES = [
+  // A cursor-walking loop awaits a read each turn; a date "cursor" stepping
+  // through a calendar does not, and is not a scan.
+  [
+    /\bwhile\s*\([^;{}]*\b(?:cursor|nextCursor)\b[^;{}]*\)\s*\{(?:(?!\bwhile\b)[\s\S]){0,400}?\bawait\b/,
+    "a loop whose condition walks a cursor",
+  ],
+  [
+    /\bdo\s*\{(?:(?!\bdo\s*\{)[\s\S]){0,600}?\bawait\b(?:(?!\bdo\s*\{)[\s\S]){0,600}?\}\s*while\s*\([^;{}]*\b(?:cursor|nextCursor)\b/,
+    "a loop whose condition walks a cursor",
+  ],
+  [/Array\.from\(\s*\{\s*length\s*:[^}]*\btotalPages\b/, "a fan-out sized by totalPages"],
+  [/\bfor\s*\([^)]*<=?\s*[\w.]*\btotalPages\b/, "a loop up to totalPages"],
+  [
+    /\bwhile\s*\([^;{}]*?\)\s*\{(?:(?!\bwhile\b)[\s\S]){0,400}?\bawait\s+[\w.]*load(?:More|Page|Next)\w*\s*\(/,
+    "a loop that awaits load-more until a target is reached",
+  ],
+];
+
 const collectTextFiles = async (root, current = root) => {
   const files = [];
   for (const entry of await readdir(current, { withFileTypes: true })) {
@@ -676,8 +714,12 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   if (!/limit:\s*base\.readLimit/.test(providerSource)) {
     throw new Error("Busabase provider must consume each configured Base readLimit.");
   }
-  if (/while\s*\(\s*cursor\s*\)/.test(source))
-    throw new Error("Automatic cursor exhaustion is forbidden during initial loading.");
+  // Same shapes as the generated scripts/check.mjs (which runs standalone in
+  // the app and cannot import this module): one page per user action.
+  for (const [pattern, shape] of FULL_SCAN_SHAPES) {
+    if (pattern.test(source))
+      throw new Error(`Automatic cursor exhaustion is forbidden: found ${shape}.`);
+  }
   if (/client\.bases\.list\s*\(/.test(source))
     throw new Error("Runtime Base discovery is forbidden; use materialized Base ids.");
   // The app talks to its own origin in every environment — same-origin inside

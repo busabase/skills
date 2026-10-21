@@ -1,22 +1,103 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { SessionId } from "@deepseek-ai/dsh-client-runtime/client";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ISessions } from "@deepseek-ai/dsh-api-session-controller/client";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apply, busabaseRefFromLink, extractToolPayload } from "./client.js";
 import { BusabaseInspectorStore } from "./client-store.js";
 
+type SessionId = Parameters<ISessions["binding"]>[0];
+
 const effectDisposers: Array<() => void> = [];
 
-function setup(config: Parameters<typeof apply>[1] = {}) {
+function cloudBlock(id: string, spaceId = "org_original", previewUrl?: string) {
+  return {
+    kind: "tool-result",
+    call: {
+      name: "mcp__busabase__change_requests_get",
+      argsRaw: JSON.stringify({ targetSpaceId: spaceId }),
+    },
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          id,
+          type: "change-request",
+          status: "in_review",
+          operations: [],
+          name: id,
+          ...(previewUrl
+            ? {
+                typeId: id,
+                targetName: id,
+                url: previewUrl,
+                iframeUrl: previewUrl,
+                autoPreview: true,
+              }
+            : {}),
+        }),
+      },
+    ],
+    isError: false,
+  };
+}
+
+function desktopServices(session: () => string | undefined = () => "session_1") {
+  vi.stubGlobal("dshDesktop", { protocolVersion: 1, browser: { acquire: vi.fn() } });
+  return {
+    sidebarRight: {
+      mounted: { getSnapshot: session },
+      openTab: vi.fn(),
+      isExpanded: vi.fn(() => false),
+      toggleExpanded: vi.fn(),
+    },
+    sidebarRightTabs: { get: () => ({ id: "@deepseek-ai/dsh-client-ui-sidebar-browser" }) },
+    workspaces: {},
+  };
+}
+
+function dispatchLinkClick(link: HTMLAnchorElement, options: MouseEventInit = {}): boolean {
+  let intercepted = false;
+  // Observe the plugin first, then cancel jsdom's unsupported default navigation.
+  document.addEventListener(
+    "click",
+    (event) => {
+      intercepted = event.defaultPrevented;
+      event.preventDefault();
+    },
+    { once: true },
+  );
+  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...options }));
+  return intercepted;
+}
+
+function setup(
+  config: Parameters<typeof apply>[1] = {},
+  services: {
+    sidebarRight?: Record<string, unknown>;
+    sidebarRightTabs?: Record<string, unknown>;
+    workspaces?: unknown;
+  } = {},
+) {
   const registrations: Array<{
     config: Record<string, unknown>;
     component: React.ComponentType<any>;
   }> = [];
-  const layout = { openDetails: vi.fn(), closeDetails: vi.fn() };
+  const layout = { openRightbar: vi.fn(), closeRightbar: vi.fn() };
   const prompt = vi.fn(async () => ({ ok: true, value: { accepted: true } }));
   const binding = vi.fn((sessionId: SessionId) => ({ sessionId, session: { prompt } }));
+  const serviceMap: Record<string, unknown> = {
+    sidebarRight: services.sidebarRight
+      ? {
+          isExpanded: () => true,
+          toggleExpanded: vi.fn(),
+          ...services.sidebarRight,
+        }
+      : undefined,
+    sidebarRightTabs: services.sidebarRightTabs,
+    workspaces: services.workspaces,
+  };
   const ctx = {
     effect: vi.fn((execute: () => unknown) => {
       const dispose = execute();
@@ -27,6 +108,7 @@ function setup(config: Parameters<typeof apply>[1] = {}) {
     sessions: {
       binding,
     },
+    get: (name: string) => serviceMap[name],
     slots: {
       inject: (_name: string, factory: () => unknown) => factory(),
       register: (registration: Record<string, unknown>, component: React.ComponentType<any>) => {
@@ -35,12 +117,19 @@ function setup(config: Parameters<typeof apply>[1] = {}) {
       },
     },
   };
-  apply(ctx as never, { ...config, liveRefresh: { enabled: false, ...config.liveRefresh } });
-  const card = (key: string) =>
-    registrations.find(({ config: registration }) => registration.key === key)!.component;
-  const Details = registrations.find(
-    ({ config: registration }) => registration.name === "details",
-  )!.component;
+  apply(ctx as never, {
+    baseUrl: "http://localhost:15419",
+    ...config,
+    liveRefresh: { enabled: false, ...config.liveRefresh },
+  });
+  const card = (key: string) => {
+    const registration = registrations.find(({ config: value }) => value.key === key);
+    if (!registration) throw new Error(`Missing card registration: ${key}`);
+    return registration.component;
+  };
+  const Details =
+    registrations.find(({ config: registration }) => registration.name === "rightbar")?.component ??
+    (() => null);
   return { registrations, layout, prompt, binding, card, Details };
 }
 
@@ -52,6 +141,384 @@ afterEach(() => {
 });
 
 describe("client plugin", () => {
+  it("retains browser-native CR recovery when native dispatch throws", () => {
+    const services = desktopServices();
+    services.sidebarRight.openTab.mockImplementation(() => {
+      throw new Error("host unavailable");
+    });
+    const { card } = setup({ baseUrl: "https://busabase.com" }, services);
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <Card
+        toolName="mcp__busabase__change_requests_get"
+        sessionId={"session_1" as SessionId}
+        block={cloudBlock("crq1")}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /crq1/ });
+    expect(fireEvent.click(link)).toBe(true);
+    expect(link.getAttribute("href")).toBe(
+      "https://busabase.com/dashboard/org_original/inbox/crq1",
+    );
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("renders Desktop entities without a valid destination as metadata, not dead buttons", () => {
+    const { card } = setup({ baseUrl: "https://busabase.com" }, desktopServices());
+    const Card = card("mcp__busabase__search");
+    render(
+      <Card
+        toolName="mcp__busabase__search"
+        block={{
+          kind: "tool-result",
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ type: "base", id: "bse1", name: "Metadata only" }),
+            },
+          ],
+          isError: false,
+        }}
+      />,
+    );
+    expect(screen.getByText("Metadata only")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it.each(["protocol", "browser", "workspaces", "provider", "throw"])(
+    "never registers a Desktop Inspector/root fallback (%s), and permits retry",
+    (reason) => {
+      const services = desktopServices();
+      if (reason === "protocol") vi.stubGlobal("dshDesktop", { protocolVersion: 2 });
+      if (reason === "browser") vi.stubGlobal("dshDesktop", { protocolVersion: 1 });
+      if (reason === "workspaces") services.workspaces = undefined as never;
+      if (reason === "provider") services.sidebarRightTabs.get = () => ({ id: "replacement" });
+      if (reason === "throw")
+        services.sidebarRight.openTab.mockImplementationOnce(() => {
+          throw new Error("host unavailable");
+        });
+      const { card, registrations } = setup({ baseUrl: "https://busabase.com" }, services);
+      expect(registrations.some(({ config }) => config.name === "rightbar")).toBe(false);
+      const Card = card("mcp__busabase__change_requests_get");
+      render(
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={cloudBlock(
+            "crq1",
+            "org_original",
+            "https://busabase.com/embed/change-request/crq1?token=test",
+          )}
+        />,
+      );
+      expect(document.querySelector("iframe")).toBeNull();
+      const recovery = screen.getByRole("link", { name: /crq1/ });
+      expect(recovery.getAttribute("href")).toBe(
+        "https://busabase.com/dashboard/org_original/inbox/crq1",
+      );
+      if (["protocol", "browser", "provider"].includes(reason))
+        expect(fireEvent.click(recovery)).toBe(true);
+      expect(services.sidebarRight.openTab).toHaveBeenCalledTimes(
+        ["throw", "workspaces"].includes(reason) ? 1 : 0,
+      );
+      if (reason === "workspaces")
+        expect(services.sidebarRight.toggleExpanded).not.toHaveBeenCalled();
+      if (reason === "throw") {
+        const link = screen.getByRole("link", { name: /crq1/ });
+        expect(link.getAttribute("href")).toBe(
+          "https://busabase.com/dashboard/org_original/inbox/crq1",
+        );
+        fireEvent.click(link);
+        expect(services.sidebarRight.openTab).toHaveBeenCalledTimes(2);
+        expect(services.sidebarRight.toggleExpanded).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("retries a failed Cloud preview fetch only on deliberate Reload", async () => {
+    const services = desktopServices();
+    vi.stubGlobal("dshDesktop", undefined);
+    const fetchPreview = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              type: "change-request",
+              typeId: "crq1",
+              url: "https://busabase.com/embed/emb1?token=test",
+              iframeUrl: "https://busabase.com/embed/emb1?token=test",
+              autoPreview: true,
+            }),
+          ),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchPreview);
+    const { card, Details } = setup({ baseUrl: "https://busabase.com" }, services);
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={cloudBlock("crq1")}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /crq1/ }));
+    await screen.findByText("Could not load the Cloud ChangeRequest preview.");
+    expect(fetchPreview).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reload preview" }));
+    await screen.findByTitle("crq1 Change Request");
+    expect(services.sidebarRight.openTab).not.toHaveBeenCalled();
+    expect(fetchPreview).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens the canonical Cloud link without fetching when rich previews are disabled on Desktop", () => {
+    const services = desktopServices();
+    const fetchPreview = vi.fn();
+    vi.stubGlobal("fetch", fetchPreview);
+    const { card, Details } = setup(
+      { baseUrl: "https://busabase.com", changeRequestIframe: { enabled: false } },
+      services,
+    );
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={cloudBlock("crq1")}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: /crq1/ }));
+    expect(fetchPreview).not.toHaveBeenCalled();
+    expect(services.sidebarRight.openTab).toHaveBeenCalledWith("browser", {
+      params: { url: "https://busabase.com/dashboard/org_original/inbox/crq1" },
+    });
+  });
+
+  it("opens local Desktop CRs in the official Browser without replacing its root", () => {
+    const services = desktopServices();
+    const { card, registrations } = setup({}, services);
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <Card
+        toolName="mcp__busabase__change_requests_get"
+        sessionId={"session_1" as SessionId}
+        block={cloudBlock("crq_local")}
+      />,
+    );
+    fireEvent.click(screen.getByRole("link", { name: /crq_local/ }));
+    expect(services.sidebarRight.openTab).toHaveBeenCalledWith("browser", {
+      params: { url: "http://localhost:15419/dashboard/local/inbox/crq_local" },
+    });
+    expect(registrations.some(({ config }) => config.name === "rightbar")).toBe(false);
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it.each([
+    "https://attacker.example/dashboard/org_original/inbox/crq1",
+    "https://busabase.com/dashboard/org_other/inbox/crq1",
+    "https://busabase.com/dashboard/org_original/inbox/crq_other",
+  ])("does not follow a canonical result link outside the originating CR/Space (%s)", (href) => {
+    const services = desktopServices();
+    const { card } = setup({ baseUrl: "https://busabase.com", spaceId: "org_default" }, services);
+    const Card = card("mcp__busabase__change_requests_get");
+    const block = cloudBlock("crq1");
+    block.content[0].text = JSON.stringify({ ...JSON.parse(block.content[0].text), href });
+    render(
+      <Card
+        toolName="mcp__busabase__change_requests_get"
+        sessionId={"session_1" as SessionId}
+        block={block}
+      />,
+    );
+    fireEvent.click(screen.getByRole("link", { name: /crq1/ }));
+    expect(services.sidebarRight.openTab).toHaveBeenCalledWith("browser", {
+      params: { url: "https://busabase.com/dashboard/org_original/inbox/crq1" },
+    });
+  });
+
+  it.each([
+    "https://busabase.com/dashboard/org/inbox/%",
+    "https://busabase.com/dashboard/%/inbox/crq1",
+    "https://user:fake@busabase.com/dashboard/org/inbox/crq1",
+    "https://attacker.example/dashboard/org/inbox/crq1",
+  ])("rejects malformed or unsafe Desktop canonical links (%s)", (href) => {
+    desktopServices();
+    expect(busabaseRefFromLink(href, "CR", "https://busabase.com")).toBeNull();
+  });
+  it.each(["change-request/crq1?token=test", "emb1?token=test"])(
+    "hands off recognized Cloud links (%s) only after native dispatch",
+    (path) => {
+      const services = desktopServices();
+      setup({ baseUrl: "https://busabase.com", spaceId: "org_original" }, services);
+      const link = document.createElement("a");
+      link.href = `https://busabase.com/embed/${path}`;
+      document.body.append(link);
+      expect(dispatchLinkClick(link)).toBe(true);
+      expect(services.sidebarRight.openTab).toHaveBeenCalledWith("browser", {
+        params: { url: expect.stringContaining("https://busabase.com/embed/") },
+      });
+      services.sidebarRight.openTab.mockImplementationOnce(() => {
+        throw new Error("unloaded");
+      });
+      expect(dispatchLinkClick(link)).toBe(false);
+      link.remove();
+    },
+  );
+
+  it("leaves unsafe origins and disabled Cloud previews alone", () => {
+    const services = desktopServices();
+    vi.stubGlobal("dshDesktop", undefined);
+    setup({ baseUrl: "https://busabase.com", changeRequestIframe: { enabled: false } }, services);
+    for (const href of [
+      "https://busabase.com/embed/change-request/crq1",
+      "https://attacker.example/embed/change-request/crq1",
+    ]) {
+      const link = document.createElement("a");
+      link.href = href;
+      document.body.append(link);
+      expect(dispatchLinkClick(link)).toBe(false);
+      link.remove();
+    }
+    expect(services.sidebarRight.openTab).not.toHaveBeenCalled();
+  });
+
+  it("keeps modified Desktop clicks alone and routes Web Cloud links to Inspector", () => {
+    const services = desktopServices();
+    setup({ baseUrl: "https://busabase.com" }, services);
+    const link = document.createElement("a");
+    link.href = "https://busabase.com/embed/change-request/crq1?token=test";
+    document.body.append(link);
+    expect(dispatchLinkClick(link, { ctrlKey: true })).toBe(false);
+    vi.stubGlobal("dshDesktop", undefined);
+    expect(dispatchLinkClick(link)).toBe(true);
+    expect(services.sidebarRight.openTab).not.toHaveBeenCalled();
+    link.remove();
+  });
+
+  it("auto-dispatches once and deliberately reopens a Cloud card without duplicate inspector dispatch", async () => {
+    const services = desktopServices();
+    const { card, Details } = setup({ baseUrl: "https://busabase.com" }, services);
+    const Card = card("mcp__busabase__change_requests_get");
+    const view = render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={cloudBlock(
+            "crq1",
+            "org_original",
+            "https://busabase.com/embed/change-request/crq1?token=test",
+          )}
+        />
+        <Details />
+      </>,
+    );
+    await waitFor(() => expect(services.sidebarRight.openTab).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTitle("crq1 Change Request")).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: /crq1/ }));
+    expect(services.sidebarRight.openTab).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
+
+  it.each([
+    "session",
+    "unmounted-session",
+    "selection",
+    "space",
+    "reload",
+    "unmount",
+    "wrong-cr",
+    "wrong-space",
+  ])("rejects a late or mismatched Cloud response (%s)", async (scenario) => {
+    let session: string | undefined = "session_1";
+    const services = desktopServices(() => session);
+    vi.stubGlobal("dshDesktop", undefined);
+    let resolvePreview!: (response: Response) => void;
+    const fetchPreview = vi.fn().mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchPreview);
+    const { card, Details } = setup(
+      { baseUrl: "https://busabase.com", spaceId: "org_default" },
+      services,
+    );
+    const Card = card("mcp__busabase__change_requests_get");
+    const view = render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={cloudBlock("crq1")}
+        />
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={(scenario === "space" ? "session_1" : "session_2") as SessionId}
+          block={cloudBlock(scenario === "space" ? "crq1" : "crq2", "org_other")}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /crq1/ })[0]);
+    await waitFor(() => expect(fetchPreview).toHaveBeenCalledOnce());
+    const originatingResolve = resolvePreview;
+    if (scenario === "session") session = "session_2";
+    if (scenario === "unmounted-session") session = undefined;
+    if (scenario === "selection" || scenario === "space") {
+      if (scenario === "selection") session = "session_2";
+      fireEvent.click(
+        scenario === "space"
+          ? screen.getAllByRole("button", { name: /crq1/ })[1]
+          : screen.getByRole("button", { name: /crq2/ }),
+      );
+      await waitFor(() => expect(fetchPreview).toHaveBeenCalledTimes(2));
+      expect(String(fetchPreview.mock.calls[1][0])).toContain("spaceId=org_other");
+    }
+    if (scenario === "reload") {
+      fireEvent.click(screen.getByRole("button", { name: "More" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Reload preview" }));
+      await waitFor(() => expect(fetchPreview).toHaveBeenCalledTimes(2));
+    }
+    if (scenario === "unmount") view.unmount();
+    if (["selection", "space", "reload", "unmount"].includes(scenario))
+      expect(fetchPreview.mock.calls[0][1].signal.aborted).toBe(true);
+    await act(async () =>
+      originatingResolve(
+        new Response(
+          JSON.stringify({
+            type: "change-request",
+            typeId: scenario === "wrong-cr" ? "crqOther" : "crq1",
+            targetSpaceId: scenario === "wrong-space" ? "org_other" : "org_original",
+            url: "https://busabase.com/embed/emb1?token=test",
+            iframeUrl: "https://busabase.com/embed/emb1?token=test",
+            autoPreview: true,
+          }),
+        ),
+      ),
+    );
+    await waitFor(() => {
+      if (scenario.startsWith("wrong"))
+        expect(screen.getByText("Cloud returned no valid ChangeRequest preview.")).toBeTruthy();
+      else expect(screen.queryByTitle("crq1 Change Request")).toBeNull();
+    });
+    expect(services.sidebarRight.openTab).not.toHaveBeenCalled();
+    if (scenario === "selection" || scenario === "space")
+      expect(
+        screen.getByRole("heading", { name: scenario === "space" ? "crq1" : "crq2" }),
+      ).toBeTruthy();
+  });
   it("loads an existing Cloud ChangeRequest preview in its original Space", async () => {
     const fetchPreview = vi.fn().mockResolvedValue(
       new Response(
@@ -103,9 +570,224 @@ describe("client plugin", () => {
     expect(String(fetchPreview.mock.calls[0][0])).toContain("spaceId=org_original");
     expect(fetchPreview).toHaveBeenCalledOnce();
   });
+
+  it("opens a Cloud ChangeRequest preview through the host's native Sidebar browser instead of an iframe", async () => {
+    vi.stubGlobal("dshDesktop", { protocolVersion: 1, browser: { acquire: vi.fn() } });
+    const fetchPreview = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "change-request",
+          typeId: "cr_1",
+          url: "https://busabase.com/embed/emb_1?token=test",
+          iframeUrl: "https://busabase.com/embed/emb_1?token=test&view=iframe",
+          autoPreview: true,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchPreview);
+    const openTab = vi.fn();
+    const { card, Details } = setup(
+      { baseUrl: "https://busabase.com", spaceId: "org_default" },
+      {
+        sidebarRight: { mounted: { getSnapshot: () => "session_1" }, openTab },
+        sidebarRightTabs: {
+          get: (kind: string) =>
+            kind === "browser" ? { id: "@deepseek-ai/dsh-client-ui-sidebar-browser" } : undefined,
+        },
+        workspaces: {},
+      },
+    );
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={{
+            kind: "tool-result",
+            call: {
+              name: "mcp__busabase__change_requests_get",
+              argsRaw: JSON.stringify({ targetSpaceId: "org_original" }),
+            },
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  id: "cr_1",
+                  status: "in_review",
+                  operations: [],
+                  name: "Reading Progress",
+                }),
+              },
+            ],
+            isError: false,
+          }}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: /Reading Progress/ }));
+    await waitFor(() => expect(openTab).toHaveBeenCalledTimes(1));
+    expect(openTab).toHaveBeenCalledWith("browser", {
+      params: { url: "https://busabase.com/dashboard/org_original/inbox/cr_1" },
+    });
+    expect(screen.queryByTitle("Reading Progress Change Request")).toBeNull();
+    expect(fetchPreview).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("link", { name: /Reading Progress/ }));
+    expect(openTab).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the iframe fallback when the host has no registered browser Sidebar tab", async () => {
+    const fetchPreview = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "change-request",
+          typeId: "cr_1",
+          url: "https://busabase.com/embed/emb_1?token=test",
+          iframeUrl: "https://busabase.com/embed/emb_1?token=test&view=iframe",
+          autoPreview: true,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchPreview);
+    const openTab = vi.fn();
+    const { card, Details } = setup(
+      { baseUrl: "https://busabase.com", spaceId: "org_default" },
+      {
+        sidebarRight: { mounted: { getSnapshot: () => "session_1" }, openTab },
+        sidebarRightTabs: { get: () => undefined },
+      },
+    );
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={{
+            kind: "tool-result",
+            call: {
+              name: "mcp__busabase__change_requests_get",
+              argsRaw: JSON.stringify({ targetSpaceId: "org_original" }),
+            },
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  id: "cr_1",
+                  status: "in_review",
+                  operations: [],
+                  name: "Reading Progress",
+                }),
+              },
+            ],
+            isError: false,
+          }}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Reading Progress/ }));
+    const frame = await screen.findByTitle("Reading Progress Change Request");
+    expect(frame.getAttribute("src")).toBe(
+      "https://busabase.com/embed/emb_1?token=test&view=iframe",
+    );
+    expect(openTab).not.toHaveBeenCalled();
+  });
+
+  it("does not open a native preview for a session the user already switched away from", async () => {
+    const fetchPreview = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "change-request",
+          typeId: "cr_1",
+          url: "https://busabase.com/embed/emb_1?token=test",
+          iframeUrl: "https://busabase.com/embed/emb_1?token=test&view=iframe",
+          autoPreview: true,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchPreview);
+    const openTab = vi.fn();
+    const { card, Details } = setup(
+      { baseUrl: "https://busabase.com", spaceId: "org_default" },
+      {
+        sidebarRight: { mounted: { getSnapshot: () => "session_other" }, openTab },
+        sidebarRightTabs: { get: (kind: string) => (kind === "browser" ? {} : undefined) },
+      },
+    );
+    const Card = card("mcp__busabase__change_requests_get");
+    render(
+      <>
+        <Card
+          toolName="mcp__busabase__change_requests_get"
+          sessionId={"session_1" as SessionId}
+          block={{
+            kind: "tool-result",
+            call: {
+              name: "mcp__busabase__change_requests_get",
+              argsRaw: JSON.stringify({ targetSpaceId: "org_original" }),
+            },
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  id: "cr_1",
+                  status: "in_review",
+                  operations: [],
+                  name: "Reading Progress",
+                }),
+              },
+            ],
+            isError: false,
+          }}
+        />
+        <Details />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Reading Progress/ }));
+    expect(screen.queryByTitle("Reading Progress Change Request")).toBeNull();
+    expect(fetchPreview).not.toHaveBeenCalled();
+    expect(openTab).not.toHaveBeenCalled();
+  });
+  it.each(["base", "airapp", "folder", "file"])(
+    "keeps Desktop %s cards usable as canonical links without Inspector",
+    (type) => {
+      const services = desktopServices();
+      const { card } = setup({ baseUrl: "https://busabase.com" }, services);
+      const Card = card("mcp__busabase__search");
+      render(
+        <Card
+          toolName="mcp__busabase__search"
+          sessionId={"session_1" as SessionId}
+          block={{
+            kind: "tool-result",
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  type,
+                  id: "entity1",
+                  name: "Destination",
+                  href: "https://busabase.com/dashboard/org_original",
+                }),
+              },
+            ],
+            isError: false,
+          }}
+        />,
+      );
+      const link = screen.getByRole("link", { name: /Destination/ });
+      expect(link.getAttribute("href")).toBe("https://busabase.com/dashboard/org_original");
+      expect(fireEvent.click(link)).toBe(true);
+      expect(services.sidebarRight.openTab).not.toHaveBeenCalled();
+      expect(document.querySelector("iframe")).toBeNull();
+    },
+  );
+
   it("registers keyed Busabase cards and opens the right panel on selection", () => {
     const { registrations, layout, card } = setup();
-    expect(registrations.find(({ config }) => config.name === "details")?.config.priority).toBe(
+    expect(registrations.find(({ config }) => config.name === "rightbar")?.config.priority).toBe(
       -10,
     );
     const Card = card("mcp__busabase__bases_get");
@@ -123,7 +805,7 @@ describe("client plugin", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /CRM/i }));
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
     expect(
       registrations.filter(
         ({ config }) =>
@@ -176,7 +858,7 @@ describe("client plugin", () => {
       </>,
     );
 
-    await waitFor(() => expect(layout.openDetails).toHaveBeenCalledOnce());
+    await waitFor(() => expect(layout.openRightbar).toHaveBeenCalledWith(true, false));
     expect(screen.getByTitle("Sales Console embed").getAttribute("src")).toBe(
       "http://localhost:15419/embed/emb_1?token=secret&view=iframe",
     );
@@ -215,7 +897,7 @@ describe("client plugin", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Docs" })).toBeTruthy();
     expect(screen.queryByText("Busabase Inspector")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close details" }));
-    expect(layout.closeDetails).toHaveBeenCalledOnce();
+    expect(layout.closeRightbar).toHaveBeenCalledOnce();
   });
 
   it("opens a conversation embed link in the right panel using the iframe view", () => {
@@ -230,7 +912,7 @@ describe("client plugin", () => {
     );
 
     expect(fireEvent.click(screen.getByRole("link"))).toBe(false);
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
     expect(
       screen.getByRole("heading", { name: "Open DSH AirApp E2E embedding link" }),
     ).toBeTruthy();
@@ -297,7 +979,7 @@ describe("client plugin", () => {
       </>,
     );
 
-    await waitFor(() => expect(layout.openDetails).toHaveBeenCalledOnce());
+    await waitFor(() => expect(layout.openRightbar).toHaveBeenCalledWith(true, false));
     expect(document.querySelector(".bb-change-request-frame")?.getAttribute("src")).toBe(
       "http://localhost:15419/embed/emb_cr_1?token=secret&view=iframe",
     );
@@ -334,7 +1016,7 @@ describe("client plugin", () => {
     );
 
     await Promise.resolve();
-    expect(layout.openDetails).not.toHaveBeenCalled();
+    expect(layout.openRightbar).not.toHaveBeenCalled();
   });
 
   it("does not render a forged external preview from an allowlisted tool", async () => {
@@ -375,7 +1057,7 @@ describe("client plugin", () => {
       </>,
     );
 
-    await waitFor(() => expect(layout.openDetails).toHaveBeenCalledOnce());
+    await waitFor(() => expect(layout.openRightbar).toHaveBeenCalledWith(true, false));
     expect(document.querySelector(".bb-change-request-frame")).toBeNull();
     expect(
       screen.getByText("Rich Change Request preview is unavailable for this Busabase instance."),
@@ -445,7 +1127,7 @@ describe("client plugin", () => {
         "http://localhost:15419/embed/emb_upgrade?token=secret&view=iframe",
       ),
     );
-    expect(layout.openDetails).toHaveBeenCalledTimes(2);
+    expect(layout.openRightbar).toHaveBeenCalledTimes(2);
   });
 
   it("does not re-open the panel when the same ChangeRequest preview is already selected", async () => {
@@ -479,7 +1161,7 @@ describe("client plugin", () => {
         <Details />
       </>,
     );
-    await waitFor(() => expect(layout.openDetails).toHaveBeenCalledOnce());
+    await waitFor(() => expect(layout.openRightbar).toHaveBeenCalledWith(true, false));
     view.rerender(
       <>
         <Card callId="call_2" toolName="mcp__busabase__change_requests_get" block={block} />
@@ -487,7 +1169,7 @@ describe("client plugin", () => {
       </>,
     );
     await Promise.resolve();
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
   });
 
   it("opens a dashboard AirApp link as node details with a fullscreen preview", () => {
@@ -502,7 +1184,7 @@ describe("client plugin", () => {
     );
 
     expect(fireEvent.click(screen.getByRole("link"))).toBe(false);
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
     const frame = screen.getByTitle("Open DSH AirApp E2E embedding link AirApp");
     expect(frame.getAttribute("src")).toBe(
       "http://localhost:15419/dashboard/local/airapp/dsh-airapp-e2e-20260824?fullscreen=1",
@@ -527,7 +1209,7 @@ describe("client plugin", () => {
     );
 
     expect(fireEvent.click(screen.getByRole("link"))).toBe(false);
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
     const frame = screen.getByTitle("Open Change Request Change Request");
     expect(frame.getAttribute("src")).toBe(
       "http://localhost:15419/embed/change-request/crqmt8fi2t5lw83zgx",
@@ -588,7 +1270,7 @@ describe("client plugin", () => {
       fireEvent.click(screen.getByRole("link", { name: "Local embed" }), { metaKey: true }),
     ).toBe(true);
     expect(fireEvent.click(screen.getByRole("link", { name: "Foreign embed" }))).toBe(true);
-    expect(layout.openDetails).not.toHaveBeenCalled();
+    expect(layout.openRightbar).not.toHaveBeenCalled();
   });
 
   it("renders a created Base without inventing an embed URL", () => {
@@ -623,7 +1305,7 @@ describe("client plugin", () => {
       name: /Customers.*base.*customers.*active.*Details/i,
     });
     fireEvent.click(baseCard);
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
     expect(screen.getByText("Base embedding is disabled.")).toBeTruthy();
     expect(screen.queryByTitle("Customers Base")).toBeNull();
     expect(screen.getByText("customers")).toBeTruthy();
@@ -929,16 +1611,16 @@ describe("client plugin", () => {
     );
     expect(sessionPrompt.mock.calls[0]?.[0]?.[0]?.text).not.toContain("Quick proposal");
     expect(window.confirm).toHaveBeenCalledWith("Approve only ChangeRequest crqquick?");
-    expect(layout.openDetails).not.toHaveBeenCalled();
+    expect(layout.openRightbar).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Reject" }));
     await waitFor(() => expect(review).toHaveBeenCalledWith("rejected", "Needs revision"));
     expect(sessionPrompt).toHaveBeenCalledOnce();
     expect(window.confirm).toHaveBeenCalledWith("Reject only ChangeRequest crqquick?");
-    expect(layout.openDetails).not.toHaveBeenCalled();
+    expect(layout.openRightbar).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /Quick proposal/i }));
-    expect(layout.openDetails).toHaveBeenCalledOnce();
+    expect(layout.openRightbar).toHaveBeenCalledWith(true, false);
   });
 
   it("queues one continuation when ToolCard and Inspector approvals race", async () => {

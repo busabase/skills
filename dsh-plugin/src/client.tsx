@@ -1,14 +1,24 @@
 import type { Context } from "@deepseek-ai/cordis";
-import type { ISessions, SessionId } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ISessions } from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
+import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ToolCallOwnerProps, ToolCallViewProps } from "@deepseek-ai/dsh-client-ui-tool/client";
 import { Busabase } from "busabase-sdk";
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { resolveBusabaseClientConfig } from "./client-config.js";
+import {
+  loadBusabaseHostConfig,
+  readBusabaseHostConfig,
+  resolveBusabaseClientConfig,
+} from "./client-config.js";
 import { BusabaseInspectorStore } from "./client-store.js";
 import type { BusabasePluginConfig } from "./config.js";
+import {
+  isDesktopHost,
+  NativeChangeRequestPreview,
+  type NativePreviewResult,
+} from "./native-preview.js";
 import {
   BUILT_IN_NODE_TYPES,
   type BusabaseEntityRef,
@@ -17,8 +27,30 @@ import {
 import { isAutoPreviewToolName } from "./preview-link.js";
 import styles from "./styles.css";
 
+type SessionId = Parameters<ISessions["binding"]>[0];
+
 export const name = "@busabase/dsh-plugin/client";
 export const inject = ["slots", "layout", "sessions"];
+const INSPECTOR_ID = "@busabase/dsh-plugin/inspector";
+const INSPECTOR_KIND = "busabase-inspector";
+
+function inspectorSidebar(ctx: Context) {
+  try {
+    const sidebar = ctx.get?.("sidebarRight");
+    const tabs = ctx.get?.("sidebarRightTabs");
+    return sidebar && typeof tabs?.register === "function" ? { sidebar, tabs } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function revealInspector(ctx: Context): void {
+  if (isDesktopHost()) return;
+  const services = inspectorSidebar(ctx);
+  if (services?.tabs.get(INSPECTOR_KIND)?.id === INSPECTOR_ID)
+    services.sidebar.openTab(INSPECTOR_KIND);
+  else ctx.layout.openRightbar(true, false);
+}
 
 const RAW_TOOL_NAMES = [
   "activity_list_for_node",
@@ -118,7 +150,14 @@ const RAW_TOOL_NAMES = [
   "webhooks_update",
 ] as const;
 
-export function apply(ctx: Context, input: BusabasePluginConfig = {}): void {
+export function apply(ctx: Context, input: BusabasePluginConfig = {}): void | Promise<void> {
+  if (!input.baseUrl && !readBusabaseHostConfig()) {
+    return loadBusabaseHostConfig().then(() => registerClient(ctx, input));
+  }
+  registerClient(ctx, input);
+}
+
+function registerClient(ctx: Context, input: BusabasePluginConfig): void {
   ensureStyles();
   const config = resolveBusabaseClientConfig(input);
   const inspectorClient = config.server.manageable
@@ -133,6 +172,7 @@ export function apply(ctx: Context, input: BusabasePluginConfig = {}): void {
     undefined,
     config.server.manageable ? requestNodePreview : undefined,
   );
+  const nativePreview = new NativeChangeRequestPreview();
   ctx.effect(() => () => store.dispose(), "busabase: inspector store");
   ctx.effect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -150,11 +190,20 @@ export function apply(ctx: Context, input: BusabasePluginConfig = {}): void {
       if (!target || target.hasAttribute("download")) return;
       const ref = busabaseRefFromLink(target.href, target.textContent, config.baseUrl);
       if (!ref) return;
-      if (config.connection.mode === "remote") return;
+      if (ref.type === "change-request" && !config.changeRequestIframe.enabled && !isDesktopHost())
+        return;
+      const sessionId = mountedSession(ctx);
+      const nativeResult = openNativePreview(ctx, store, nativePreview, ref, sessionId, true);
+      if (nativeResult === "stale") return;
+      if (isDesktopHost()) {
+        if (nativeResult === "opened") event.preventDefault();
+        return;
+      }
       event.preventDefault();
-      if (ref.type === "embed") store.selectPreview(ref);
-      else store.select(ref);
-      ctx.layout.openDetails();
+      if (ref.type === "embed" || config.connection.mode === "remote")
+        store.selectPreview(ref, sessionId);
+      else store.select(ref, sessionId);
+      if (nativeResult !== "opened") revealInspector(ctx);
     };
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
@@ -163,13 +212,73 @@ export function apply(ctx: Context, input: BusabasePluginConfig = {}): void {
   for (const rawName of RAW_TOOL_NAMES) {
     const toolName = `mcp__${config.serverName}__${rawName}`;
     ctx.slots.inject("tool.call.toolview", () =>
-      ctx.slots.register({ name: "tool.call.toolview", key: toolName }, createToolCard(store, ctx)),
+      ctx.slots.register(
+        { name: "tool.call.toolview", key: toolName },
+        createToolCard(store, ctx, nativePreview),
+      ),
     );
   }
 
-  ctx.slots.register(
-    { name: "details", priority: -10 } as never,
-    createDetailsPanel(store, ctx) as never,
+  if (isDesktopHost()) return;
+  const Panel = createDetailsPanel(store, ctx, nativePreview);
+  let alive = true;
+  let fallback: (() => unknown) | undefined;
+  const restoreFallback = () => {
+    if (alive && !fallback)
+      fallback = ctx.effect(
+        () => ctx.slots.register({ name: "rightbar", priority: -10 }, Panel),
+        "busabase: inspector root fallback",
+      );
+  };
+  const registerSidebar = (sidebarCtx: Context) => {
+    const services = inspectorSidebar(sidebarCtx);
+    if (!services) return;
+    sidebarCtx.effect(
+      () =>
+        services.tabs.register({
+          id: INSPECTOR_ID,
+          kind: INSPECTOR_KIND,
+          title: () => "Busabase Inspector",
+          guide: [{ id: "inspector", order: 50, title: () => "Busabase Inspector" }],
+        }),
+      "busabase: inspector tab type",
+    );
+    sidebarCtx.effect(
+      () =>
+        sidebarCtx.slots.inject("sidebar.right.pane.tab", () =>
+          sidebarCtx.slots.register(
+            { name: "sidebar.right.pane.tab", key: INSPECTOR_ID },
+            function InspectorTab(props) {
+              const info = props.useTabInfo();
+              return (
+                <Panel
+                  inspectorSessionId={props.sessionId}
+                  closeInspector={() => info.tab.actions.close()}
+                />
+              );
+            },
+          ),
+        ),
+      "busabase: inspector tab body",
+    );
+    fallback?.();
+    fallback = undefined;
+    sidebarCtx.effect(() => restoreFallback, "busabase: restore inspector fallback");
+  };
+  if (typeof ctx.inject === "function") {
+    restoreFallback();
+    ctx.inject(["sidebarRight", "sidebarRightTabs"], registerSidebar);
+  } else if (inspectorSidebar(ctx)) {
+    registerSidebar(ctx);
+  } else {
+    restoreFallback();
+  }
+  // Child-service teardown must not re-register a root during plugin disposal.
+  ctx.effect(
+    () => () => {
+      alive = false;
+    },
+    "busabase: inspector lifecycle",
   );
 }
 
@@ -192,7 +301,8 @@ function ensureStyles(): void {
 }
 
 export function extractToolPayload(block: ToolCallOwnerProps["block"]): unknown {
-  if (!("content" in block)) {
+  if (!("kind" in block)) {
+    if (block.phase === "preparing") return {};
     try {
       return block.argsRaw ? JSON.parse(block.argsRaw) : {};
     } catch {
@@ -217,12 +327,87 @@ export function extractToolPayload(block: ToolCallOwnerProps["block"]): unknown 
   return { content: texts.join("\n"), isError: block.isError };
 }
 
-function createToolCard(store: BusabaseInspectorStore, ctx: Context): React.FC<ToolCallViewProps> {
+function mountedSession(ctx: Context): string | null {
+  try {
+    return ctx.get?.("sidebarRight")?.mounted.getSnapshot() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionMatches(ctx: Context, sessionId: string | null): boolean {
+  try {
+    const sidebar = ctx.get?.("sidebarRight");
+    return !sidebar || sidebar.mounted.getSnapshot() === sessionId;
+  } catch {
+    return false;
+  }
+}
+
+function previewSpace(store: BusabaseInspectorStore, ref: BusabaseEntityRef): string | null {
+  return typeof ref.metadata.targetSpaceId === "string"
+    ? ref.metadata.targetSpaceId
+    : (store.config.spaceId ?? null);
+}
+
+function canonicalCardUrl(
+  store: BusabaseInspectorStore,
+  ref: BusabaseEntityRef,
+): string | undefined {
+  if (ref.type === "embed") return store.embedUrl(ref);
+  const canonicalUrl = store.nodeUrl(ref);
+  if (ref.type !== "change-request")
+    return canonicalUrl ?? (ref.type === "airapp" ? store.airAppUrl(ref) : undefined);
+  const id = ref.changeRequestId ?? ref.id;
+  if (!id) return undefined;
+  const spaceId = previewSpace(store, ref);
+  const spacePrefix = isDesktopOrigin(store.config.baseUrl)
+    ? "/local"
+    : spaceId
+      ? `/${encodeURIComponent(spaceId)}`
+      : "";
+  const path = `/dashboard${spacePrefix}/inbox/${encodeURIComponent(id)}`;
+  return canonicalUrl && new URL(canonicalUrl).pathname === path
+    ? canonicalUrl
+    : new URL(path, store.config.baseUrl).toString();
+}
+
+function openNativePreview(
+  ctx: Context,
+  store: BusabaseInspectorStore,
+  adapter: NativeChangeRequestPreview,
+  ref: BusabaseEntityRef,
+  sessionId: string | null,
+  deliberate = false,
+): NativePreviewResult {
+  const id = ref.type === "embed" ? `embed:${ref.id}` : (ref.changeRequestId ?? ref.id);
+  if (!id) return "unavailable";
+  const spaceId = previewSpace(store, ref);
+  const url =
+    ref.type === "change-request"
+      ? (store.config.changeRequestIframe.enabled && store.changeRequestEmbedUrl(ref)) ||
+        canonicalCardUrl(store, ref)
+      : ref.type === "embed" && store.embedUrl(ref);
+  if (!url) return "unavailable";
+  if (deliberate) adapter.forget(sessionId, spaceId, id);
+  return adapter.open(ctx, { sessionId, spaceId, changeRequestId: id, url });
+}
+
+function createToolCard(
+  store: BusabaseInspectorStore,
+  ctx: Context,
+  nativePreview: NativeChangeRequestPreview,
+): React.FC<ToolCallViewProps> {
   return function BusabaseToolCard({ block, toolName, sessionId }) {
     const refs = useMemo(() => {
       let targetSpaceId: unknown;
       try {
-        const argsRaw = "argsRaw" in block ? block.argsRaw : block.call?.argsRaw;
+        const argsRaw =
+          "kind" in block
+            ? block.call?.argsRaw
+            : block.phase === "start"
+              ? block.argsRaw
+              : undefined;
         targetSpaceId = asRecord(JSON.parse(argsRaw ?? "{}")).targetSpaceId;
       } catch {
         /* Incomplete tool arguments may not be JSON yet. */
@@ -247,12 +432,22 @@ function createToolCard(store: BusabaseInspectorStore, ctx: Context): React.FC<T
       : undefined;
     useEffect(() => {
       if (!preview) return;
+      if (!sessionMatches(ctx, sessionId ?? null)) return;
+      const nativeResult = openNativePreview(ctx, store, nativePreview, preview, sessionId ?? null);
+      if (nativeResult === "stale") return;
+      if (isDesktopHost()) return;
       const selected = store.getSnapshot().selected;
       if (
-        (preview.type === "embed" && selected?.type === "embed" && selected.id === preview.id) ||
+        (preview.type === "embed" &&
+          selected?.type === "embed" &&
+          selected.id === preview.id &&
+          store.getSnapshot().selectedSessionId === (sessionId ?? null) &&
+          previewSpace(store, selected) === previewSpace(store, preview)) ||
         (preview.type === "change-request" &&
           selected?.type === "change-request" &&
           selected.id === preview.id &&
+          store.getSnapshot().selectedSessionId === (sessionId ?? null) &&
+          previewSpace(store, selected) === previewSpace(store, preview) &&
           selected.metadata.autoPreview === true &&
           selected.metadata.previewUrl === preview.metadata.previewUrl)
       )
@@ -260,38 +455,62 @@ function createToolCard(store: BusabaseInspectorStore, ctx: Context): React.FC<T
       if (preview.type === "change-request" && store.config.connection.mode === "local")
         store.select(preview, sessionId ?? null);
       else store.selectPreview(preview, sessionId ?? null);
-      ctx.layout.openDetails();
-    }, [
-      preview,
-      sessionId,
-      store.getSnapshot,
-      store.select,
-      store.selectPreview,
-      store.config.connection.mode,
-      ctx.layout.openDetails,
-    ]);
+      if (nativeResult !== "opened") revealInspector(ctx);
+    }, [preview, sessionId, store, ctx, nativePreview]);
     return (
       <div className="bb-card-stack">
         {refs.slice(0, 8).map((ref, index) => {
-          const selectedChangeRequest = sameChangeRequest(snapshot.selected, ref)
-            ? snapshot.selected
-            : null;
+          const selectedChangeRequest =
+            sameChangeRequest(snapshot.selected, ref) &&
+            snapshot.selectedSessionId === (sessionId ?? null) &&
+            snapshot.selected !== null &&
+            previewSpace(store, snapshot.selected) === previewSpace(store, ref)
+              ? snapshot.selected
+              : null;
           const displayRef = selectedChangeRequest ?? ref;
           const data = selectedChangeRequest ? snapshot.data : ref.raw;
           const status =
             ref.type === "change-request"
               ? changeRequestStatus(data, displayRef.status)
               : ref.status;
+          const desktop = isDesktopHost();
+          const href = desktop ? canonicalCardUrl(store, ref) : undefined;
+          const CardOpen = desktop ? (href ? "a" : "span") : "button";
           return (
             <div className="bb-card" key={`${ref.type}:${ref.id ?? ref.slug ?? index}`}>
-              <button
-                type="button"
+              <CardOpen
+                href={href}
+                target={href ? "_blank" : undefined}
+                rel={href ? "noopener noreferrer" : undefined}
+                type={desktop ? undefined : "button"}
                 className="bb-card-open"
-                onClick={() => {
+                onClick={(event) => {
+                  if (desktop && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))
+                    return;
+                  if (!sessionMatches(ctx, sessionId ?? null)) {
+                    event.preventDefault();
+                    return;
+                  }
+                  const nativeResult = openNativePreview(
+                    ctx,
+                    store,
+                    nativePreview,
+                    ref,
+                    sessionId ?? null,
+                    true,
+                  );
+                  if (nativeResult === "stale") {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (desktop) {
+                    if (nativeResult === "opened") event.preventDefault();
+                    return;
+                  }
                   if (store.config.connection.mode === "local")
                     store.select(ref, sessionId ?? null);
                   else store.selectPreview(ref, sessionId ?? null);
-                  ctx.layout.openDetails();
+                  if (nativeResult !== "opened") revealInspector(ctx);
                 }}
               >
                 <span className="bb-card-icon">{entityIcon(ref.type)}</span>
@@ -305,8 +524,10 @@ function createToolCard(store: BusabaseInspectorStore, ctx: Context): React.FC<T
                 {ref.type === "change-request" && status !== "merged" ? (
                   <span className="bb-pill">Review</span>
                 ) : null}
-                <span className="bb-card-action">Details</span>
-              </button>
+                <span className="bb-card-action">
+                  {desktop ? (href ? "Open in Busabase" : "") : "Details"}
+                </span>
+              </CardOpen>
               {ref.type === "change-request" ? (
                 <ChangeRequestActions
                   refValue={displayRef}
@@ -338,18 +559,25 @@ function createToolCard(store: BusabaseInspectorStore, ctx: Context): React.FC<T
 function createDetailsPanel(
   store: BusabaseInspectorStore,
   ctx: Context,
-): React.FC<PropsRuntime<"details">> {
-  return function BusabaseDetailsPanel() {
+  nativePreview: NativeChangeRequestPreview,
+): React.FC<
+  Partial<PropsRuntime<"rightbar">> & { inspectorSessionId?: string; closeInspector?: () => void }
+> {
+  return function BusabaseDetailsPanel({ inspectorSessionId, closeInspector }) {
     const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
     const [fullscreen, setFullscreen] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
     const [changeRequestFrameVersion, setChangeRequestFrameVersion] = useState(0);
-    const ref = snapshot.selected;
+    const ref =
+      inspectorSessionId === undefined || snapshot.selectedSessionId === inspectorSessionId
+        ? snapshot.selected
+        : null;
     const status =
       ref?.type === "change-request" ? changeRequestStatus(snapshot.data, ref.status) : ref?.status;
     const closePanel = () => {
       setFullscreen(false);
-      ctx.layout.closeDetails();
+      if (closeInspector) closeInspector();
+      else ctx.layout.closeRightbar();
     };
     useEffect(() => {
       if (!fullscreen) return;
@@ -413,6 +641,14 @@ function createDetailsPanel(
                         role="menuitem"
                         onClick={() => {
                           setMoreOpen(false);
+                          openNativePreview(
+                            ctx,
+                            store,
+                            nativePreview,
+                            ref,
+                            snapshot.selectedSessionId,
+                            true,
+                          );
                           setChangeRequestFrameVersion((value) => value + 1);
                         }}
                       >
@@ -483,10 +719,20 @@ function createDetailsPanel(
             ) : null}
             {snapshot.error ? <div className="bb-error">{snapshot.error}</div> : null}
             <InspectorBody
+              key={JSON.stringify([
+                snapshot.selectedSessionId,
+                previewSpace(store, ref),
+                ref.type,
+                ref.id ?? ref.slug,
+                ref.type === "change-request" ? changeRequestFrameVersion : 0,
+              ])}
               refValue={ref}
               data={snapshot.data}
               store={store}
               changeRequestFrameVersion={changeRequestFrameVersion}
+              ctx={ctx}
+              nativePreview={nativePreview}
+              sessionId={snapshot.selectedSessionId}
             />
           </>
         )}
@@ -500,13 +746,28 @@ function InspectorBody({
   data,
   store,
   changeRequestFrameVersion = 0,
+  ctx,
+  nativePreview,
+  sessionId,
 }: {
   refValue: BusabaseEntityRef;
   data: unknown;
   store: BusabaseInspectorStore;
   changeRequestFrameVersion?: number;
+  ctx: Context;
+  nativePreview: NativeChangeRequestPreview;
+  sessionId: string | null;
 }) {
-  if (refValue.type === "embed") return <EmbedInspector refValue={refValue} store={store} />;
+  if (refValue.type === "embed")
+    return (
+      <EmbedInspector
+        refValue={refValue}
+        store={store}
+        ctx={ctx}
+        nativePreview={nativePreview}
+        sessionId={sessionId}
+      />
+    );
   if (refValue.type === "base")
     return <BaseInspector refValue={refValue} data={data} store={store} />;
   if (refValue.type === "airapp")
@@ -518,6 +779,9 @@ function InspectorBody({
         data={data}
         store={store}
         frameVersion={changeRequestFrameVersion}
+        ctx={ctx}
+        nativePreview={nativePreview}
+        sessionId={sessionId}
       />
     );
   const record = asRecord(data);
@@ -546,14 +810,38 @@ function InspectorBody({
 function EmbedInspector({
   refValue,
   store,
+  ctx,
+  nativePreview,
+  sessionId,
 }: {
   refValue: BusabaseEntityRef;
   store: BusabaseInspectorStore;
+  ctx: Context;
+  nativePreview: NativeChangeRequestPreview;
+  sessionId: string | null;
 }) {
   const url = store.embedUrl(refValue);
+  const [nativeResult, setNativeResult] = useState<NativePreviewResult>("unavailable");
+  useEffect(() => {
+    setNativeResult(openNativePreview(ctx, store, nativePreview, refValue, sessionId));
+  }, [ctx, store, nativePreview, refValue, sessionId]);
   return (
     <div className="bb-inspector bb-embed-inspector">
-      {url ? (
+      {url && nativeResult === "opened" ? (
+        <div className="bb-empty">
+          Sent to the Sidebar Browser.{" "}
+          <button
+            type="button"
+            onClick={() =>
+              setNativeResult(
+                openNativePreview(ctx, store, nativePreview, refValue, sessionId, true),
+              )
+            }
+          >
+            Reopen
+          </button>
+        </div>
+      ) : url ? (
         <iframe
           className="bb-airapp-frame bb-embed-frame"
           src={url}
@@ -657,16 +945,32 @@ function ChangeRequestInspector({
   data,
   store,
   frameVersion,
+  ctx,
+  nativePreview,
+  sessionId,
 }: {
   refValue: BusabaseEntityRef;
   data: unknown;
   store: BusabaseInspectorStore;
   frameVersion: number;
+  ctx: Context;
+  nativePreview: NativeChangeRequestPreview;
+  sessionId: string | null;
 }) {
   const value = asRecord(data);
   const previewUrl = store.changeRequestEmbedUrl(refValue);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const changeRequestId = refValue.changeRequestId ?? refValue.id;
+  const spaceId = previewSpace(store, refValue);
+  const [nativeResult, setNativeResult] = useState<NativePreviewResult>("unavailable");
+  useEffect(() => {
+    if (!previewUrl || !changeRequestId || !store.config.changeRequestIframe.enabled) {
+      setNativeResult("unavailable");
+      return;
+    }
+    setNativeResult(openNativePreview(ctx, store, nativePreview, refValue, sessionId));
+  }, [ctx, nativePreview, refValue, previewUrl, changeRequestId, sessionId, store]);
   useEffect(() => {
     const changeRequestId = refValue.changeRequestId ?? refValue.id;
     if (
@@ -677,6 +981,19 @@ function ChangeRequestInspector({
     )
       return;
     const abort = new AbortController();
+    const originatingRef = store.getSnapshot().selected;
+    const originatingSessionId = sessionId;
+    const stillCurrent = () => {
+      const snapshot = store.getSnapshot();
+      return (
+        !abort.signal.aborted &&
+        snapshot.selected === originatingRef &&
+        snapshot.selectedSessionId === originatingSessionId &&
+        sessionMatches(ctx, originatingSessionId) &&
+        snapshot.selected !== null &&
+        previewSpace(store, snapshot.selected) === spaceId
+      );
+    };
     setLoadingPreview(true);
     setPreviewError(null);
     const load = async () => {
@@ -685,36 +1002,61 @@ function ChangeRequestInspector({
           `/busabase-api/previews/change-requests/${encodeURIComponent(changeRequestId)}`,
           window.location.origin,
         );
-        const spaceId =
-          typeof refValue.metadata.targetSpaceId === "string"
-            ? refValue.metadata.targetSpaceId
-            : store.config.spaceId;
         if (spaceId) url.searchParams.set("spaceId", spaceId);
         const response = await fetch(url, { method: "POST", signal: abort.signal });
         if (!response.ok) throw new Error("Could not load the Cloud ChangeRequest preview.");
-        const preview = normalizeBusabaseResult(await response.json()).find(
-          (ref) => ref.type === "change-request",
-        );
-        if (!preview || !store.changeRequestEmbedUrl(preview))
+        const body: unknown = await response.json();
+        const responseSpaceId = asRecord(body).targetSpaceId ?? asRecord(body).spaceId;
+        const preview = normalizeBusabaseResult(body).find((ref) => ref.type === "change-request");
+        if (
+          !preview ||
+          (typeof responseSpaceId === "string" && responseSpaceId !== spaceId) ||
+          (preview.changeRequestId ?? preview.id) !== changeRequestId ||
+          (typeof preview.metadata.targetSpaceId === "string" &&
+            preview.metadata.targetSpaceId !== spaceId) ||
+          !store.changeRequestEmbedUrl(preview)
+        )
           throw new Error("Cloud returned no valid ChangeRequest preview.");
-        if (!abort.signal.aborted)
+        if (stillCurrent())
           store.selectPreview(
-            { ...refValue, metadata: { ...refValue.metadata, ...preview.metadata } },
-            store.getSnapshot().selectedSessionId,
+            {
+              ...refValue,
+              metadata: {
+                ...refValue.metadata,
+                ...preview.metadata,
+                ...(spaceId ? { targetSpaceId: spaceId } : {}),
+              },
+            },
+            originatingSessionId,
           );
       } catch (error) {
-        if (!abort.signal.aborted)
+        if (stillCurrent())
           setPreviewError(error instanceof Error ? error.message : "Could not load preview.");
       } finally {
-        if (!abort.signal.aborted) setLoadingPreview(false);
+        if (stillCurrent()) setLoadingPreview(false);
       }
     };
     void load();
     return () => abort.abort();
-  }, [refValue, previewUrl, store]);
+  }, [refValue, previewUrl, store, sessionId, spaceId, ctx]);
   return (
     <div className="bb-inspector bb-change-request-inspector">
-      {previewUrl && store.config.changeRequestIframe.enabled ? (
+      {previewUrl && store.config.changeRequestIframe.enabled && nativeResult === "opened" ? (
+        <div className="bb-empty bb-change-request-native-notice">
+          Sent to the Sidebar Browser.{" "}
+          <button
+            type="button"
+            onClick={() => {
+              if (!changeRequestId) return;
+              setNativeResult(
+                openNativePreview(ctx, store, nativePreview, refValue, sessionId, true),
+              );
+            }}
+          >
+            Reopen
+          </button>
+        </div>
+      ) : previewUrl && store.config.changeRequestIframe.enabled ? (
         <section className="bb-change-request-preview">
           <iframe
             key={frameVersion}
@@ -768,7 +1110,7 @@ async function resumeApprovedChangeRequest(
   }
   store.clearResumeNotice(sessionId, changeRequestId);
   try {
-    // This client bundle runs with dsh-client-runtime's ISessions service. The
+    // This client bundle runs with the session controller's ISessions service.
     // The shared type graph also declares the server SessionStore on Context, so
     // narrow explicitly at this browser-only boundary.
     const sessions = ctx.sessions as unknown as ISessions;
@@ -1119,8 +1461,37 @@ export function busabaseRefFromLink(
   } catch {
     return null;
   }
-  if (url.origin !== configuredOrigin) return null;
+  if (!["http:", "https:"].includes(url.protocol) || url.origin !== configuredOrigin) return null;
   const title = label?.trim() || "Busabase node";
+  const canonicalChangeRequest = url.pathname.match(
+    /^\/dashboard\/(?:([^/]+)\/)?inbox\/([^/]+)\/?$/,
+  );
+  if (isDesktopHost() && canonicalChangeRequest) {
+    if (url.username || url.password) return null;
+    let id: string;
+    let spaceId: string | undefined;
+    try {
+      id = decodeURIComponent(canonicalChangeRequest[2]);
+      spaceId = canonicalChangeRequest[1]
+        ? decodeURIComponent(canonicalChangeRequest[1])
+        : undefined;
+    } catch {
+      return null;
+    }
+    return {
+      type: "change-request",
+      id,
+      changeRequestId: id,
+      title,
+      href: url.toString(),
+      metadata: {
+        linkPreview: true,
+        openUrl: url.toString(),
+        ...(spaceId ? { targetSpaceId: spaceId } : {}),
+      },
+      raw: { type: "change-request", id },
+    };
+  }
   const changeRequestEmbedMatch = url.pathname.match(/^\/embed\/change-request\/([^/]+)\/?$/);
   if (changeRequestEmbedMatch) {
     const id = decodeURIComponent(changeRequestEmbedMatch[1]);

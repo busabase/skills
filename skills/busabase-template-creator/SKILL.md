@@ -156,8 +156,8 @@ this bar, not as breakage.
 
 Same writing rules as `busabase-app-creator` step 10 — say what the person wants in their words
 ("log a customer visit"), not which column to write ("update the status field"); open the body by
-telling the agent to read the folder's skill; and give `{target}` its own line, because it expands
-to a complete sentence.
+telling the agent to read the folder's skill; and write only the task, because Busabase opens every
+prompt with the line naming its node — do not write `{target}`.
 
 Fastest way to add them to an existing template: install it into a scratch Space, write the prompts
 against the real nodes with `busabase-cli nodes set-agent-prompts`, click through them once to see

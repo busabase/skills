@@ -3,7 +3,8 @@ import { createServer, type Server } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
 import type { CredentialKey, CredentialRecord } from "@deepseek-ai/dsh-credentials";
 import { credentialKey } from "@deepseek-ai/dsh-credentials";
-import type { JsonValue, ToolDefinition, ToolRunContext } from "@deepseek-ai/dsh-tools";
+import type { ToolDefinition, ToolRunContext } from "@deepseek-ai/dsh-tools";
+import type { JsonValue } from "@deepseek-ai/dsh-util-values";
 import {
   type OAuthClientProvider,
   UnauthorizedError,

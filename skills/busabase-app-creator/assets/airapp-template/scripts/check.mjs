@@ -203,11 +203,54 @@ if (metricCount > 3)
     `At most 3 metrics; found ${metricCount}. Move the rest into a nav item or a filter.`,
   );
 
+// Metrics live on the overview, never above a record table. Every row of
+// summary over a list is a row of records the reader cannot see, and the
+// overview is where "how are we doing" gets asked. The nearest page container
+// opened before the band must therefore be the overview page.
+const indexSource = contents["app/index.html"];
+const metricsAt = indexSource.search(/class="metrics"|id="metrics"/);
+if (metricsAt >= 0) {
+  const before = indexSource.slice(0, metricsAt);
+  if (before.lastIndexOf('id="overviewPage"') <= before.lastIndexOf('id="viewPage"'))
+    throw new Error(
+      "The metrics band must sit inside #overviewPage, not above a record view. Record views get one toolbar row.",
+    );
+}
+
 const providerSource = contents["app/js/providers/busabase-provider.js"];
 if (!/limit:\s*base\.readLimit/.test(providerSource))
   throw new Error("Busabase provider must consume each configured Base readLimit.");
-if (/while\s*\(\s*cursor\s*\)|client\.bases\.list\s*\(/.test(browserSource))
-  throw new Error("Unbounded loading or runtime Base discovery found.");
+if (/client\.bases\.list\s*\(/.test(browserSource))
+  throw new Error("Runtime Base discovery found.");
+// One page per user action. A full scan rarely looks like `while (cursor)`:
+// it is a capped loop (`while (cursor && pages < 4)`), a fan-out sized by
+// `totalPages`, or "jump to page N" built by loading forward until page N
+// arrives. Each of these shipped in a real AirApp with a plausible reason.
+// See references/runtime-and-sdk.md § A full scan in disguise.
+const FULL_SCAN_SHAPES = [
+  // A cursor-walking loop awaits a read each turn; a date "cursor" stepping
+  // through a calendar does not, and is not a scan.
+  [
+    /\bwhile\s*\([^;{}]*\b(?:cursor|nextCursor)\b[^;{}]*\)\s*\{(?:(?!\bwhile\b)[\s\S]){0,400}?\bawait\b/,
+    "a loop whose condition walks a cursor",
+  ],
+  [
+    /\bdo\s*\{(?:(?!\bdo\s*\{)[\s\S]){0,600}?\bawait\b(?:(?!\bdo\s*\{)[\s\S]){0,600}?\}\s*while\s*\([^;{}]*\b(?:cursor|nextCursor)\b/,
+    "a loop whose condition walks a cursor",
+  ],
+  [/Array\.from\(\s*\{\s*length\s*:[^}]*\btotalPages\b/, "a fan-out sized by totalPages"],
+  [/\bfor\s*\([^)]*<=?\s*[\w.]*\btotalPages\b/, "a loop up to totalPages"],
+  [
+    /\bwhile\s*\([^;{}]*?\)\s*\{(?:(?!\bwhile\b)[\s\S]){0,400}?\bawait\s+[\w.]*load(?:More|Page|Next)\w*\s*\(/,
+    "a loop that awaits load-more until a target is reached",
+  ],
+];
+for (const [pattern, shape] of FULL_SCAN_SHAPES) {
+  if (pattern.test(browserSource))
+    throw new Error(
+      `Unbounded loading: found ${shape}. Read one page per user action — use records.count / records.groupBy for totals and records.listPage for numbered pages.`,
+    );
+}
 // Asset references must be RELATIVE. Under the Local Node engine the app is
 // reverse-proxied onto a sub-path of busabase's origin, so `src="/js/app.js"`
 // resolves against the origin root (busabase itself) and 404s — the app renders

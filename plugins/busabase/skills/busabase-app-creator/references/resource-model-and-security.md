@@ -32,6 +32,10 @@ Supported View types are `table`, `gallery`, `kanban`, `calendar`, and `gantt`.
 - A gallery View may name its attachment field with `coverFieldSlug`.
 - A table View states the useful fields, filter, and sort rather than exposing every column.
 - Materialization must write each `view_id` back into the blueprint.
+- View order is shared by everyone and the leftmost View is what the Base opens on; a Base always
+  keeps at least one View. A Base with blueprint Views is created with `--skip-default-view`
+  (`defaultView: false`) and its Views follow in blueprint order; a Base with none keeps the
+  default "Grid view". To change which View opens later, move it with `position: 0`.
 
 ## Blueprint Resource Shape
 
