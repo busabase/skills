@@ -12,12 +12,59 @@ Every generated app starts from the same operational shell:
 
 - compact brand and app identity;
 - human-attention summary;
-- workflow navigation;
-- overview metrics;
-- list/detail workspace;
+- workflow navigation, with **Overview** as its first item;
+- an Overview page that owns the hero and the metrics band;
+- record views that are one toolbar row over a full-bleed table;
+- a detail mode per Base that follows the recurring task;
 - loading, empty, error, and provider-not-ready states;
 - Help & Settings with sanitized provider information;
 - mobile top bar, off-canvas navigation, and back-to-list behavior.
+
+### Two Kinds Of Page
+
+The pattern is the one Linear, Attio, Airtable and GitHub Issues share: summary on its own page,
+records edge to edge everywhere else.
+
+- **Overview** (`#/overview`, the default route). The only page with a `.page-hero` and the
+  `.metrics` band. It answers "how are we doing" and links into each view. It scrolls on its own.
+- **Record view** (`#/base/<key>`). One `.view-toolbar` row — the view's name, then search and
+  actions — and the table directly under it. No eyebrow (the app name is in the sidebar), no
+  description (it belongs on Overview or in Help), no metrics, and no panel heading that repeats the
+  page title. The table is full-bleed: a hairline on top, no inset card, no shadow.
+
+The reason is measured, not taste: a shipped app that stacked an eyebrow, a title, a description,
+a metrics band and a card heading over its table started the first row at 42% of the viewport and
+showed 5 rows. One toolbar row starts it under 100px and shows 18.
+
+### Choose The Detail Mode
+
+The mode follows the business, so declare one for **every** Base in `ui.detail_modes` —
+`validate-blueprint` warns for each Base left out. The scaffold falls back to `drawer` only so an
+undeclared Base still works; that fallback is not a recommendation.
+
+| Mode | Use when | Examples |
+| --- | --- | --- |
+| `page` | the record is a workplace of its own: it owns related lists, long content, or people link to it and stay for minutes | campaign, customer, project |
+| `drawer` | the record is a fact people scan many of, read or change one or two fields, and return to the list | account, contact, log entry |
+| `split` | the view is a queue worked top to bottom, one record after the next | follow-ups due, review inbox |
+
+- All three render the same detail markup. Drawer and split carry **Open full page**, so a record
+  that turns out to need room is one click from it — never a second detail implementation.
+- Every mode is addressable. A page is `#/base/<key>/<record>`; a drawer or split selection is
+  `#/base/<key>?peek=<record>`. Refresh and shared links restore the same state, and Back returns to
+  the same list context, including search, filters, sort, and page when used.
+- The drawer leaves the list usable behind it: clicking another row switches the record, Escape
+  and Close dismiss it.
+- On a phone every mode is a page: the record replaces the list, with Back to list.
+
+Record the choice in the blueprint. Do not copy the scaffold's default into every Base without
+checking the user's task.
+
+### Density
+
+Rows are one line: 40px by default, 32px with `ui.density: "compact"`. A second line per row is
+the exception — when width allows, give that information its own column instead. The first column
+names the record and is wider than the rest; the header row is sticky.
 
 Customize information architecture, labels, metrics, filters, fields, badges, and details to the domain. Do not ship generic `Items`, `Status`, or placeholder copy when the blueprint supplies real concepts.
 
@@ -90,6 +137,8 @@ Cheap in code, and their absence is what makes a tool look unfinished:
 ### Composition
 
 - Page sits on `--canvas`; content sits in white cards with a hairline border and `--shadow-card`.
+- Metrics live on **Overview only**, never above a record table. `scripts/check.mjs` fails a
+  band placed outside `#overviewPage`.
 - Metrics are a **band, not a row of cards**: one line that never wraps, hairline dividers between
   cells, no per-cell border/radius/shadow, label muted at `--text-sm` and value at `--text-xl` with
   `tabular-nums`. Use `grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr)` — never
@@ -100,7 +149,12 @@ Cheap in code, and their absence is what makes a tool look unfinished:
   in the sidebar's attention block. A band that restates them is a second navigation that cannot be
   clicked. Put subsets that take a computation to know — "repos owned by no product", "merged but
   not accepted" — and move the fourth idea into a nav item or a filter.
-- The list/detail workspace is one card, not two floating panels.
+- The record workspace is full-bleed under the toolbar; do not inset it in a card, nest cards, or
+  frame list and detail as competing floating panels.
+- **Nothing on screen says the same thing twice.** The view name is in the nav, so the toolbar
+  names it once and the detail does not add an eyebrow repeating it; the per-view total is next to
+  the nav item, so the toolbar shows a count only while a search narrows it (and on phones, where
+  the nav is off-canvas).
 - **Resource ids never reach the screen.** A relation field comes back as the bare id string of the
   target record, so anything that prints the raw value renders `recmtu6jct9xgoq405` where a name
   belongs. Resolve a relation to the target record's primary field; when that record is not in the
@@ -114,8 +168,8 @@ Cheap in code, and their absence is what makes a tool look unfinished:
 - Numbers that sit in a column — counts, currency, percentages — get `tabular-nums` so rows align.
 - One accent per app. A `.badge` takes its dot, its 9% background wash, and its text color from a
   single `--dot` token, so a status can never end up half-colored. Keep the wash that light.
-- A greeting/overview page uses `.page-hero`: muted context line, one `--text-3xl` title,
-  a supporting sentence, and `.page-actions` on the right.
+- The Overview page uses `.page-hero`: one `--text-3xl` title, a supporting sentence, and
+  `.page-actions` on the right. No other page has a hero.
 
 ### Do Not
 
@@ -193,7 +247,8 @@ Static checks must verify:
 - only non-secret Vault requirements exist in config; no value or browser secret API exists;
 - every Base config has an integer `readLimit` from 1–50 matching blueprint `read_limit` (default 50), providers consume it, and interactive reads contain no automatic cursor-exhaustion or per-record request loop;
 - Demo records exist;
-- `.metrics` uses neither `auto-fit` nor `auto-fill`, and the app renders at most three metrics;
+- `.metrics` uses neither `auto-fit` nor `auto-fill`, the app renders at most three metrics, and
+  the band sits inside `#overviewPage`;
 - required files exist.
 
 ## Validation Modes
@@ -220,9 +275,14 @@ Start the server, report the actual `127.0.0.1` URL, and open `?demo=1`.
 Verify desktop around `1440x900`, and again at `1280x820` — the smaller one is where a summary
 band starts costing the list its rows:
 
-- the work surface is above the fold: the metrics band is **one row** and no taller than 56px, the
-  list panel shows at least three records, and the page itself does not scroll vertically
+- on every record view: the first data row's top is **≤ 120px** from the viewport top, the
+  workspace is **≥ 80%** of the viewport height, at `1280x820` at least **10** single-line rows
+  are visible when the data has them, and the page itself does not scroll vertically
   (`document.documentElement.scrollHeight <= window.innerHeight`);
+- on Overview: the metrics band is **one row** and no taller than 56px;
+- every Base opens its record in its declared mode: `page` replaces the list, `drawer` overlays it
+  and switching rows keeps it open, Escape closes it, `split` shows the queue and the record side by
+  side; **Open full page** and a reloaded `?peek=` / `/record` URL land on the same record;
 - navigation, metrics, filters, list, and detail work;
 - no overlap or page-level overflow;
 - loading/empty/error states render;
@@ -233,9 +293,9 @@ band starts costing the list its rows:
 
 Verify phone at `390x844`:
 
-- drawer opens/closes with scrim;
-- list and detail use separate panes;
-- back returns to list;
+- the navigation drawer opens/closes with scrim;
+- list and detail each use the full available width, whatever the Base's detail mode;
+- back returns to the same list context;
 - sticky controls do not cover content;
 - modal fits;
 - `document.documentElement.scrollWidth <= window.innerWidth`.

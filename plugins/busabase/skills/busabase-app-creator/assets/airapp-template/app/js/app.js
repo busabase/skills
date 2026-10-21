@@ -8,11 +8,21 @@ const state = {
   provider: null,
   payload: null,
   runtime: null,
+  // "overview" or "base". Overview is the only page that carries the hero and
+  // the metrics band; a record view is one toolbar row and the table.
+  page: "overview",
   activeBase: appConfig.ui.primary_base,
   selectedRecordId: null,
+  // How the selected record is presented: "page" replaces the list, "drawer"
+  // slides over its right edge, "split" sits in a fixed pane beside it.
+  detailPresentation: null,
+  detailRecord: null,
   query: "",
+  detailError: "",
   authStatus: null,
 };
+let routeSerial = 0;
+let previousRouteWasList = false;
 
 const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) =>
@@ -42,6 +52,12 @@ const displayValue = (value) => {
 // the loaded records; when the target has not been paged in yet, say that rather
 // than showing the id.
 const cellText = (field, value) => {
+  // A select cell stores the choice id ("recommended"); people read its name.
+  if (field?.type === "select" || field?.type === "multiselect") {
+    const choices = field.options?.choices || [];
+    const label = (item) => choices.find((choice) => choice.id === item)?.name ?? item;
+    return displayValue(Array.isArray(value) ? value.map(label) : label(value));
+  }
   if (field?.type !== "relation") return displayValue(value);
   const targetKey = appConfig.schema.bases.find(
     (base) => base.slug === field.options?.targetBaseSlug,
@@ -69,6 +85,14 @@ const recordsForBase = () =>
 const pageInfoForBase = () => state.payload?.pageInfo?.[baseConfig()?.key] || {};
 const loadedCount = (count, hasMore) => `${count}${hasMore ? "+" : ""}`;
 const primaryField = () => baseConfig()?.fields?.[0]?.slug || "name";
+// Declared per Base in the blueprint (`ui.detail_modes`). The mode decides what
+// a row click does; an explicit `/record` path always opens the full page, which
+// is how a drawer's "Open full page" and a shared link both land.
+const DETAIL_MODES = ["page", "drawer", "split"];
+const detailMode = (baseKey = state.activeBase) => {
+  const mode = appConfig.ui.detail_modes?.[baseKey];
+  return DETAIL_MODES.includes(mode) ? mode : "drawer";
+};
 const filteredRecords = () => {
   const query = state.query.trim().toLowerCase();
   return query
@@ -82,7 +106,6 @@ const setMobileSidebar = (open) => {
   document.body.classList.toggle("sidebar-open", open);
   byId("sidebarScrim").hidden = !open;
 };
-const setMobileDetail = (open) => document.body.classList.toggle("mobile-detail-open", open);
 const setText = (id, value) => {
   const element = byId(id);
   if (element) element.textContent = value;
@@ -102,16 +125,22 @@ function navCount(base) {
 }
 
 function renderNavigation() {
-  byId("baseNav").innerHTML = appConfig.schema.bases
-    .map(
-      (base) => `
-    <button class="nav-item ${base.key === state.activeBase ? "active" : ""}" type="button" data-base="${escapeHtml(base.key)}">
+  const overview = `
+    <button class="nav-item ${state.page === "overview" ? "active" : ""}" type="button" data-overview>
+      <span>${escapeHtml(messages.overview)}</span>
+    </button>`;
+  byId("baseNav").innerHTML =
+    overview +
+    appConfig.schema.bases
+      .map(
+        (base) => `
+    <button class="nav-item ${state.page === "base" && base.key === state.activeBase ? "active" : ""}" type="button" data-base="${escapeHtml(base.key)}">
       <span>${escapeHtml(base.name)}</span>
-      <span>${navCount(base)}</span>
+      <span class="nav-count">${navCount(base)}</span>
     </button>
   `,
-    )
-    .join("");
+      )
+      .join("");
 }
 
 // A sum of exact per-Base counts (records.count) is itself exact -- unlike a
@@ -150,18 +179,53 @@ function renderMetrics() {
   setText("attentionCopy", pending ? messages.attentionPending : messages.attentionEmpty);
 }
 
+function listColumns(base) {
+  const configured = appConfig.ui.list_columns?.[base?.key];
+  return configured?.length
+    ? configured.map((slug) => base.fields.find((field) => field.slug === slug)).filter(Boolean)
+    : (base?.fields || []).slice(0, 4);
+}
+
+// One table markup for the record view and the overview previews, so a row
+// reads the same wherever it appears.
+function recordsTable(base, records, columns) {
+  return `
+    <table class="records-table">
+      <thead><tr>${columns.map((field) => `<th scope="col">${escapeHtml(field.name)}</th>`).join("")}</tr></thead>
+      <tbody>${records
+        .map(
+          (record) => `
+        <tr data-base="${escapeHtml(base.key)}" data-record="${escapeHtml(record.id)}" class="${record.id === state.selectedRecordId ? "selected" : ""}">${columns
+          .map(
+            (field, index) => `
+          <td>${
+            index === 0
+              ? `<a class="record-link" href="${escapeHtml(recordUrl(record.id, base.key))}">${escapeHtml(displayValue(record.fields?.[field.slug]))}</a>`
+              : escapeHtml(cellText(field, record.fields?.[field.slug]))
+          }</td>
+        `,
+          )
+          .join("")}</tr>
+      `,
+        )
+        .join("")}</tbody>
+    </table>`;
+}
+
 function renderList() {
   const base = baseConfig();
   const records = filteredRecords();
-  setText("listTitle", base?.name || messages.records);
   const baseTotal = base ? state.payload?.totalCount?.[base.key] : null;
+  // The sidebar already prints this Base's total, so on desktop the toolbar
+  // count only appears while a search narrows it (see `.searching` in CSS).
   setText(
     "recordCount",
-    baseTotal != null
-      ? String(baseTotal)
-      : loadedCount(records.length, pageInfoForBase().nextCursor),
+    state.query
+      ? String(records.length)
+      : baseTotal != null
+        ? String(baseTotal)
+        : loadedCount(records.length, pageInfoForBase().nextCursor),
   );
-  setText("mobileTitle", base?.name || appConfig.appName);
   byId("loadMore").hidden = !pageInfoForBase().nextCursor || Boolean(state.query);
   setText("loadMore", messages.loadMore);
   if (!records.length) {
@@ -169,29 +233,62 @@ function renderList() {
       `<div class="empty-list">${escapeHtml(state.query ? messages.noMatches : messages.noRecords)}</div>`;
     return;
   }
-  const secondaryFields = (base?.fields || []).slice(1, 4);
-  byId("recordList").innerHTML = records
-    .map(
-      (record) => `
-    <button class="record-row ${record.id === state.selectedRecordId ? "selected" : ""}" type="button" data-record="${escapeHtml(record.id)}">
-      <strong>${escapeHtml(displayValue(record.fields?.[primaryField()]))}</strong>
-      <span>${secondaryFields.map((field) => escapeHtml(cellText(field, record.fields?.[field.slug]))).join(" / ")}</span>
-    </button>
-  `,
-    )
+  byId("recordList").innerHTML = recordsTable(base, records, listColumns(base));
+}
+
+// Overview previews read only what the initial page already loaded: a few rows
+// per Base and a way into the full view. No extra request, no count that the
+// sidebar already shows.
+function renderOverview() {
+  setText("overviewTitle", appConfig.appName);
+  setText("overviewSummary", appConfig.ui.summary);
+  byId("overviewSections").innerHTML = appConfig.schema.bases
+    .map((base) => {
+      const records = (state.payload?.records || [])
+        .filter((record) => record.baseKey === base.key)
+        .slice(0, 5);
+      return `
+    <section class="card flush overview-section">
+      <header class="overview-section-head">
+        <h2>${escapeHtml(base.name)}</h2>
+        <a href="#/base/${encodeURIComponent(base.key)}">${escapeHtml(messages.viewAll)}</a>
+      </header>
+      ${
+        records.length
+          ? recordsTable(base, records, listColumns(base).slice(0, 3))
+          : `<div class="empty-list">${escapeHtml(messages.noRecords)}</div>`
+      }
+    </section>`;
+    })
     .join("");
 }
 
 function renderDetail() {
-  const record = recordsForBase().find((item) => item.id === state.selectedRecordId);
+  const record =
+    recordsForBase().find((item) => item.id === state.selectedRecordId) || state.detailRecord;
   byId("detailEmpty").hidden = Boolean(record);
   byId("detailContent").hidden = !record;
+  const overlay = state.detailPresentation === "drawer" || state.detailPresentation === "split";
+  // On a phone every mode is a page, so the control reads as a way back.
+  const phone = window.matchMedia("(max-width: 720px)").matches;
+  setText("backButton", overlay && !phone ? messages.close : messages.back);
+  byId("backButton").hidden = state.detailPresentation === "split" && !state.selectedRecordId;
+  // Drawer and split render the same detail as the full page; this is the way
+  // up to it, for a record that turns out to need more room.
+  const expand = byId("detailExpand");
+  expand.hidden = !overlay || !state.selectedRecordId;
+  if (!expand.hidden) {
+    expand.href = detailUrl(state.selectedRecordId);
+    expand.textContent = messages.openFullPage;
+  }
   if (!record) {
-    setText("detailEmpty", messages.selectRecord);
+    setText(
+      "detailEmpty",
+      state.selectedRecordId ? state.detailError || messages.loading : messages.selectRecord,
+    );
     return;
   }
   const base = baseConfig();
-  setText("detailEyebrow", base?.name || messages.record);
   setText("detailTitle", displayValue(record.fields?.[primaryField()]));
   byId("detailFields").innerHTML = (base?.fields || [])
     .slice(1)
@@ -254,27 +351,106 @@ const gate = createAirAppConnectGate({
 });
 
 function render() {
+  const onBase = state.page === "base";
+  const presentation = onBase ? state.detailPresentation : null;
+  document.body.classList.toggle("detail-open", onBase && Boolean(state.selectedRecordId));
+  document.body.classList.toggle("detail-page", presentation === "page");
+  document.body.classList.toggle("detail-drawer", presentation === "drawer");
+  document.body.classList.toggle(
+    "layout-split",
+    onBase && detailMode() === "split" && presentation !== "page",
+  );
+  document.body.classList.toggle("searching", Boolean(state.query));
+  document.body.classList.toggle("density-compact", appConfig.ui.density === "compact");
+  byId("overviewPage").hidden = onBase;
+  byId("viewPage").hidden = !onBase;
   document.documentElement.lang = appConfig.locale;
   document.documentElement.style.setProperty("--accent", appConfig.brand?.accent || "#176B5B");
   document.title = appConfig.appName;
   setText("brandName", appConfig.appName);
   setText("brandDescription", appConfig.description);
-  setText("viewEyebrow", messages.overview);
-  setText("viewTitle", appConfig.appName);
-  setText("viewSummary", appConfig.ui.summary);
+  setText("viewTitle", baseConfig()?.name || appConfig.appName);
+  setText("mobileTitle", onBase ? baseConfig()?.name || appConfig.appName : appConfig.appName);
   setText("attentionTitle", messages.attentionTitle);
-  setText("listEyebrow", messages.records);
   setText("searchLabel", messages.search);
   byId("searchInput").placeholder = messages.searchPlaceholder;
   setText("settingsOpen", messages.settings);
   setText("settingsEyebrow", messages.settingsEyebrow);
   setText("settingsTitle", messages.settingsTitle);
-  setText("backButton", messages.back);
   renderNavigation();
   renderMetrics();
-  renderList();
-  renderDetail();
+  if (onBase) {
+    renderList();
+    renderDetail();
+  } else {
+    renderOverview();
+  }
   renderSettings();
+}
+
+const routeQuery = (extra = {}) => {
+  const params = new URLSearchParams();
+  if (state.query) params.set("q", state.query);
+  for (const [key, value] of Object.entries(extra)) if (value) params.set(key, value);
+  const text = params.toString();
+  return text ? `?${text}` : "";
+};
+const listUrl = () => `#/base/${encodeURIComponent(state.activeBase)}${routeQuery()}`;
+// The full page: `/record` in the path. Always a page, whatever the Base's mode.
+const detailUrl = (recordId, baseKey = state.activeBase) =>
+  `#/base/${encodeURIComponent(baseKey)}/${encodeURIComponent(recordId)}${routeQuery()}`;
+// What a row opens: the full page for a `page` Base, otherwise the list with
+// `?peek=` so the drawer or split pane is just as linkable as the page.
+const recordUrl = (recordId, baseKey = state.activeBase) =>
+  detailMode(baseKey) === "page"
+    ? detailUrl(recordId, baseKey)
+    : `#/base/${encodeURIComponent(baseKey)}${routeQuery({ peek: recordId })}`;
+
+async function syncRoute() {
+  const serial = ++routeSerial;
+  const match = /^#\/base\/([^/?]+)(?:\/([^?]+))?(?:\?(.*))?$/.exec(window.location.hash);
+  const params = new URLSearchParams(match?.[3] || "");
+  let candidate = appConfig.ui.primary_base;
+  let pathRecord = null;
+  try {
+    if (match) candidate = decodeURIComponent(match[1]);
+    if (match?.[2]) pathRecord = decodeURIComponent(match[2]);
+  } catch {
+    candidate = appConfig.ui.primary_base;
+  }
+  // No Base in the hash (first load, `#/overview`, anything unknown) is the overview.
+  state.page = match ? "base" : "overview";
+  state.activeBase = appConfig.schema.bases.some((base) => base.key === candidate)
+    ? candidate
+    : appConfig.ui.primary_base;
+  const peek = detailMode() === "page" ? null : params.get("peek");
+  const recordId = pathRecord || peek || null;
+  state.selectedRecordId = state.page === "base" ? recordId : null;
+  state.detailPresentation = pathRecord ? "page" : detailMode() === "page" ? null : detailMode();
+  // Mark a detail entry opened from the list, so "Back to list" can step back
+  // to that entry instead of pushing a new one the browser's Back would undo.
+  if (recordId && previousRouteWasList) history.replaceState({ fromList: true }, "");
+  previousRouteWasList = state.page === "base" && !recordId;
+  state.detailRecord = null;
+  state.query = params.get("q") || "";
+  state.detailError = "";
+  byId("searchInput").value = state.query;
+  setMobileSidebar(false);
+  render();
+  if (
+    !state.selectedRecordId ||
+    recordsForBase().some((record) => record.id === state.selectedRecordId)
+  )
+    return;
+  try {
+    const record = await state.provider.getRecord(state.activeBase, state.selectedRecordId);
+    if (serial !== routeSerial) return;
+    state.detailRecord = record;
+  } catch {
+    if (serial !== routeSerial) return;
+    state.detailError = messages.recordUnavailable;
+  }
+  render();
 }
 
 async function load() {
@@ -294,7 +470,7 @@ async function load() {
     state.provider = await getProvider();
     state.payload = await state.provider.getState();
     setText("loadingState", "");
-    render();
+    await syncRoute();
   } catch (error) {
     setText("loadingState", "");
     byId("errorState").hidden = false;
@@ -323,30 +499,33 @@ async function loadMore() {
 }
 
 byId("baseNav").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-base]");
+  const button = event.target.closest("[data-base], [data-overview]");
   if (!button) return;
-  state.activeBase = button.dataset.base;
-  state.selectedRecordId = null;
-  state.query = "";
-  byId("searchInput").value = "";
-  window.location.hash = `#/base/${state.activeBase}`;
+  window.location.hash =
+    "overview" in button.dataset
+      ? "#/overview"
+      : `#/base/${encodeURIComponent(button.dataset.base)}`;
   setMobileSidebar(false);
-  setMobileDetail(false);
-  render();
 });
 
-byId("recordList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-record]");
-  if (!button) return;
-  state.selectedRecordId = button.dataset.record;
-  window.location.hash = `#/base/${state.activeBase}/${state.selectedRecordId}`;
-  setMobileDetail(true);
-  renderList();
-  renderDetail();
-});
+// The whole row opens the record, not just its first cell. The link inside the
+// first cell stays so keyboard, middle-click and "copy link" keep working.
+const openRow = (event) => {
+  const row = event.target.closest("tr[data-record]");
+  if (!row || event.target.closest("a, button, input")) return;
+  window.location.hash = recordUrl(row.dataset.record, row.dataset.base);
+};
+byId("recordList").addEventListener("click", openRow);
+byId("overviewSections").addEventListener("click", openRow);
 
 byId("searchInput").addEventListener("input", (event) => {
   state.query = event.target.value;
+  history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${window.location.search}${listUrl()}`,
+  );
+  document.body.classList.toggle("searching", Boolean(state.query));
   renderList();
 });
 byId("loadMore").addEventListener("click", loadMore);
@@ -354,11 +533,15 @@ byId("sidebarOpen").addEventListener("click", () => setMobileSidebar(true));
 byId("sidebarClose").addEventListener("click", () => setMobileSidebar(false));
 byId("sidebarScrim").addEventListener("click", () => setMobileSidebar(false));
 byId("backButton").addEventListener("click", () => {
-  state.selectedRecordId = null;
-  window.location.hash = `#/base/${state.activeBase}`;
-  setMobileDetail(false);
-  renderList();
-  renderDetail();
+  if (history.state?.fromList) history.back();
+  else window.location.hash = listUrl();
+});
+window.addEventListener("hashchange", () => {
+  if (state.payload) syncRoute();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !byId("settingsModal").hidden) return;
+  if (state.selectedRecordId && state.detailPresentation !== "page") byId("backButton").click();
 });
 
 const setSettings = (open) => {
@@ -374,7 +557,6 @@ byId("settingsModal").addEventListener("click", (event) => {
 window.addEventListener("resize", () => {
   if (!window.matchMedia("(max-width: 720px)").matches) {
     setMobileSidebar(false);
-    setMobileDetail(false);
   }
 });
 

@@ -7,10 +7,10 @@ A folder in the workspace may have been installed from a template: its tables, a
 field is for, and what the app must never do. **Read it before you act on that app's data.**
 Guessing a schema the app already documents is how records end up in the wrong Base.
 
-**Read any skill node in the folder you are working in** — that rule is in `SKILL.md` and applies
-whether or not a template put it there. The stamp below answers a narrower question: *which of
-these folders are installed apps*, which is what tells you a folder's Bases are an app's schema
-rather than someone's own tables.
+`playbooks search` (the first call on every instruction — see `SKILL.md`) finds an app's manual
+alongside hand-written skills and custom prompts, whether or not a template put it there. The
+stamp below answers a narrower question: *which of these folders are installed apps*, which is
+what tells you a folder's Bases are an app's schema rather than someone's own tables.
 
 ```bash
 # Which folders here are installed apps: skill nodes whose metadata.isTemplateSkill is true
@@ -75,8 +75,8 @@ paste in:
 | CRM Contacts | "Log a call with this contact"; "Who has gone quiet since last quarter" (read-only) |
 
 Same bar as everywhere else: the person's words, 2–5 per node, and none at all when you cannot
-name a job they will come back for — custom prompts replace the type's defaults, so a generic
-pair leaves them worse off. Write them with
+name a job they will come back for — custom prompts are appended after the type's built-ins, so a
+generic pair only repeats them and hands the next agent a vague playbook. Write them with
 `nodes create --agent-prompts-json @prompts.json`, or `nodes set-agent-prompts` afterwards
 (shape and limits: `references/cli-cookbook.md`).
 

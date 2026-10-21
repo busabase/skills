@@ -14,7 +14,8 @@ nothing to bypass, and the endpoint does not exist on the OSS server.
 
 **Cloud (the `401` probe)** — the dashboard URL needs a session the reader may not have. An
 embed link targets one of three polymorphic kinds, selected with `type` + `typeId` (not a bare
-`nodeId` — permission is still resolved down to a single `manage`-level node either way):
+`nodeId` — creation requires `manage` for a node, `write` on the owning Base node for a record,
+or `changeRequest` on every affected node for a proposal):
 
 | `type` | `typeId` is | Use when the result is… |
 | --- | --- | --- |

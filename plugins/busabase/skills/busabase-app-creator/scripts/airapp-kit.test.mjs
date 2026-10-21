@@ -120,6 +120,7 @@ const validBlueprint = () => ({
   },
   ui: {
     primary_base: "launches",
+    detail_modes: { launches: "page" },
     summary: "See launch health.",
     screens: [
       {
@@ -165,6 +166,29 @@ test("rejects direct mutation-shaped actions and bad relations", () => {
   const result = validateBlueprint(blueprint);
   assert.ok(result.errors.some((message) => message.includes("direct_mutation")));
   assert.ok(result.errors.some((message) => message.includes("target_base")));
+});
+
+test("warns when a Base has no declared detail mode", () => {
+  const blueprint = validBlueprint();
+  delete blueprint.ui.detail_modes;
+  const { errors, warnings } = validateBlueprint(blueprint);
+  assert.deepEqual(errors, []);
+  assert.ok(
+    warnings.some((message) => message.includes("ui.detail_modes.launches is not declared")),
+  );
+});
+
+test("accepts declared detail modes and rejects unknown ones", () => {
+  const blueprint = validBlueprint();
+  blueprint.ui.detail_modes = { launches: "split" };
+  blueprint.ui.density = "compact";
+  assert.deepEqual(validateBlueprint(blueprint).errors, []);
+  blueprint.ui.detail_modes = { launches: "modal", missing: "page" };
+  blueprint.ui.density = "tiny";
+  const { errors } = validateBlueprint(blueprint);
+  assert.ok(errors.some((message) => message.includes("ui.detail_modes.launches must be")));
+  assert.ok(errors.some((message) => message.includes("ui.detail_modes.missing does not")));
+  assert.ok(errors.some((message) => message.includes("ui.density must be")));
 });
 
 test("scaffolds and checks a project without network access", async () => {
@@ -237,6 +261,7 @@ test("emits and consumes custom per-Base read budgets", async () => {
     seed_records: [],
   });
   blueprint.ui.primary_base = "reports";
+  blueprint.ui.detail_modes = { reports: "page", issues: "drawer" };
   blueprint.ui.screens[0].data_sources = ["reports", "issues"];
   await writeFile(blueprintPath, JSON.stringify(blueprint, null, 2), "utf8");
   await scaffoldProject({

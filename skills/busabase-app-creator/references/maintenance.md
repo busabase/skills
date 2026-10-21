@@ -150,7 +150,9 @@ Before writing remotely, present a concise maintenance blueprint/diff for this i
 
 - AirApp files, UI behavior, procedures, and budgets that will change;
 - existing resources by exact id and the fields, Views, names, parents, or records to update;
-- new native resources, fields, Views, or seed/content records to create and where they belong;
+- new native resources, fields, Views, or seed/content records to create and where they belong
+  (a new Base follows the same default-view rule as a first build: `--skip-default-view` when the
+  diff gives it its own Views, the default "Grid view" otherwise; reorder existing Views with `position`);
 - resources, fields, or records to remove, including data-loss and recovery implications;
 - migrations or backfills, their ordering, and the old/new runtime compatibility window;
 - explicit exclusions: everything that will remain untouched.

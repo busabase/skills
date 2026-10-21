@@ -113,4 +113,12 @@ export const busabaseProvider = {
     if (!runtimeClient || !base || !cursor) throw new Error(`SCHEMA_INCOMPLETE: ${baseKey}`);
     return readPage(runtimeClient, base, cursor);
   },
+  async getRecord(baseKey, recordId) {
+    requireProcedure("records.get");
+    const base = runtimeBases.get(baseKey);
+    if (!runtimeClient || !base) throw new Error(`SCHEMA_INCOMPLETE: ${baseKey}`);
+    const record = await runtimeClient.records.get({ recordId });
+    if (record.baseId !== base.baseId) throw new Error("RECORD_NOT_FOUND");
+    return normalizeRecords([record], baseKey)[0];
+  },
 };

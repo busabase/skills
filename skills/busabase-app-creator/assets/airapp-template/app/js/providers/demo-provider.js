@@ -35,4 +35,11 @@ export const demoProvider = {
       changeRequestPageInfo: { nextCursor: null, limit: 20 },
     };
   },
+  async getRecord(baseKey, recordId) {
+    const record = appConfig.demoRecords.find(
+      (item) => item.baseKey === baseKey && item.id === recordId,
+    );
+    if (!record) throw new Error("RECORD_NOT_FOUND");
+    return { id: record.id, baseKey: record.baseKey, fields: record.fields };
+  },
 };

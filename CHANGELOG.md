@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Teach the bundled Claude Code and Codex `busabase` skills to name the playbook they follow on
+  every write (CLI `--playbook`, MCP `playbook` argument, `x-busabase-playbook` header) so the
+  change request records it, and to check `change_request_query` with `affectsNodeId` for
+  unfinished work on a resource before proposing a change to it. Bump the Claude Code plugin to
+  `0.4.3` and the Codex plugin to `0.3.5`.
+- `busabase` skill: look for a playbook before every task; custom prompts carry only the task,
+  because Busabase now opens every prompt with the line naming its node, so `{target}` is no longer
+  written; skill nodes always get custom prompts.
+- `busabase-app-creator`: AirApps default to a full-width table with a separate detail page,
+  metrics move to an overview page, and the detail page follows one of three layouts chosen by the
+  kind of business.
+- `dsh-plugin`: open Cloud previews in the Desktop browser, compose the Inspector inside the
+  sidebar tabs, and load Cloud configuration before registering tools.
 - Fix nine MCP tool names in the bundled Claude Code and Codex `busabase` skills that the hosted
   server does not publish (`records_search`, `docs_read_lines`, `change_requests_review`, …), so
   an agent's first call no longer fails. Bump the Claude Code plugin to `0.4.2` and the Codex plugin

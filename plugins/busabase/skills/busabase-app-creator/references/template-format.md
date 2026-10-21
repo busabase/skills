@@ -207,7 +207,7 @@ It goes in whichever sidecar describes the node:
     {
       "key": "triage-inbox",
       "label": "Triage today's inbox",
-      "body": "{target}\n\nRead the `email-desk` skill in this folder and follow its workflow, then triage everything received today.",
+      "body": "Read the `email-desk` skill in this folder and follow its workflow, then triage everything received today.",
       "intent": "change"
     }
   ],
@@ -220,12 +220,12 @@ It goes in whichever sidecar describes the node:
 - `intent` — `read-only` or `change`; omitted means `change`, so a prompt cannot
   quietly bypass the approval path.
 - `label` and `body` also accept an i18n object: `{ "en": "…", "zh-CN": "…" }`.
-- `{target}` is substituted with a COMPLETE SENTENCE naming the node and space
-  (`Target: the Busabase Base "Email Reviews" (nodeId: nod_…), in space "…"
-  (spaceId: …).`) — give it its own line, as the built-in prompts do. Inline, it
-  reads as a run-on with two full stops. A body with no `{target}` at all gets
-  that line prepended automatically, so the target is always present; the
-  placeholder only controls where it sits.
+- `body` is only the task. Every prompt opens with a sentence naming the node and
+  space (`Target: the Busabase Base "Email Reviews" (nodeId: nod_…), in space "…"
+  (spaceId: …).`), added at render time exactly as for the built-in prompts, so do
+  not write `{target}`. Older bodies that still contain it keep working: a line
+  that is only `{target}` is dropped, and one inside a sentence reads as the
+  node's name.
 
 Install writes these onto the node right after creating it. One consequence worth
 knowing: when the installer's credential cannot merge, a **Doc or File** node is

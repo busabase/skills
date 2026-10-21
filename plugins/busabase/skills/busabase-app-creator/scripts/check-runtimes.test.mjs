@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -50,7 +50,8 @@ const APP_CONFIG = {
  */
 const browserFiles = (opts) => ({
   "app/index.html": `<!doctype html><html><head><link rel="stylesheet" href="styles.css" /></head><body><script type="module" src="js/app.js"></script></body></html>`,
-  "app/styles.css": "body { margin: 0; }",
+  "app/styles.css":
+    "body { margin: 0; } .metrics { display: grid; grid-template-columns: repeat(3, 1fr); }",
   "app/js/config.js": `export const appConfig = ${JSON.stringify(APP_CONFIG, null, 2)};`,
   "app/js/messages.js": "export const messages = {};",
   "app/js/runtime.js": `export async function getRuntime() {
@@ -64,6 +65,9 @@ export const client = createBusabaseClient({ baseUrl: window.location.origin });
   "app/js/providers/demo-provider.js": "export const demo = [];",
   "app/js/app.js": `import { getRuntime } from "./runtime.js";
 ${opts.node ? 'import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";\n' : ""}export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
   const runtime = await getRuntime();
   ${opts.node ? "createAirAppConnectGate({ shouldGate: () => !runtime.hosted });" : "if (!runtime.hosted) throw new Error('hosted only');"}
 }`,
@@ -192,6 +196,9 @@ describe("airapp template check — runtimes", () => {
 import { getRuntime } from "./runtime.js";
 import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
 export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
   const runtime = await getRuntime();
   const hosted = location.hostname !== "localhost";
   createAirAppConnectGate({ shouldGate: () => !runtime.hosted && !hosted });
@@ -214,6 +221,9 @@ export const VERSION = 1;`,
 import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
 const DOCS = "https://example.com/docs";
 export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
   const runtime = await getRuntime();
   const hosted = location.hostname === "localhost"; // must still be caught
   createAirAppConnectGate({ shouldGate: () => !runtime.hosted && !hosted });
@@ -450,6 +460,85 @@ export async function getRuntime() {
     );
     const result = run(root);
     assert.equal(result.status, 0, `ordinary vocabulary rejected: ${result.stderr}`);
+  });
+
+  // Each shape below shipped in a real AirApp (2026-10 layout migration).
+  const fullScanShapes = {
+    "capped cursor loop":
+      "let cursor = null; let pageCount = 0;\n  do { const page = await load(cursor); cursor = page.nextCursor; pageCount += 1; } while (cursor && pageCount < 4);",
+    "plain cursor walk":
+      "let cursor = first.nextCursor;\n  while (cursor) {\n    const page = await client.records.list({ baseId, cursor });\n    cursor = page.nextCursor;\n  }",
+    "fan-out over totalPages":
+      "const pages = await Promise.all(Array.from({ length: Math.max(0, first.totalPages - 1) }, (_, i) => i + 2).map(load));",
+    "for loop to totalPages":
+      "for (let page = 2; page <= first.totalPages; page += 1) await load(page);",
+    "jump to page by loading forward":
+      "while (getLoadedCount() <= page * pageSize) {\n    const next = state.cursors[key];\n    if (!next) break;\n    await loadMoreBase(key);\n  }",
+  };
+  for (const [name, snippet] of Object.entries(fullScanShapes)) {
+    it(`rejects a full scan in disguise: ${name}`, () => {
+      const root = build("node");
+      const appPath = path.join(root, "app/js/app.js");
+      writeFileSync(
+        appPath,
+        `${readFileSync(appPath, "utf8")}\nexport async function scan() {\n  ${snippet}\n}\n`,
+      );
+      const result = run(root);
+      assert.notEqual(result.status, 0, `${name} was accepted`);
+      assert.match(result.stderr, /Unbounded loading/);
+    });
+  }
+
+  it("accepts one-page reads that merely mention a cursor or a page count", () => {
+    // The other side of the rule: Load More passing a cursor, a numbered pager
+    // reading exactly the requested page, and a loop that is not about paging.
+    const root = build("node");
+    const appPath = path.join(root, "app/js/app.js");
+    writeFileSync(
+      appPath,
+      `${readFileSync(appPath, "utf8")}
+export async function loadMore(cursor) {
+  const page = await client.records.list({ baseId, limit: 50, cursor });
+  const numbered = await client.records.listPage({ baseId, page: target, pageSize: 50 });
+  const label = \`\${numbered.page} / \${numbered.totalPages}\`;
+  while (queue.length) await render(queue.shift());
+  const cursor = new Date(start);
+  while (cursor <= last) cursor.setUTCDate(cursor.getUTCDate() + 1);
+  return { page, label };
+}
+`,
+    );
+    const result = run(root);
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it("rejects a metrics band above a record view", () => {
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/index.html"),
+      `<!doctype html><html><head><link rel="stylesheet" href="styles.css" /></head><body>
+<section id="overviewPage"></section>
+<section id="viewPage"><section class="metrics" id="metrics"></section><table></table></section>
+<script type="module" src="js/app.js"></script></body></html>`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must sit inside #overviewPage/);
+  });
+
+  it("accepts the metrics band on the overview page", () => {
+    // The other side of the rule above: the band itself is fine, only its
+    // placement over a list is not.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/index.html"),
+      `<!doctype html><html><head><link rel="stylesheet" href="styles.css" /></head><body>
+<section id="overviewPage"><header class="page-hero"></header><section class="metrics" id="metrics"></section></section>
+<section id="viewPage"><table></table></section>
+<script type="module" src="js/app.js"></script></body></html>`,
+    );
+    const result = run(root);
+    assert.equal(result.status, 0, result.stderr);
   });
 
   it("does not let a comment mentioning the SDK helper stand in for reading the variable", () => {

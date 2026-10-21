@@ -81,7 +81,8 @@ User Story
   As <audience>, I want <workflow>, so that <outcome>.
 
 Pages
-  Overview -> Entity list -> Entity detail -> Settings
+  Overview (hero + at most 3 metrics) -> Entity list (one toolbar row + table)
+    -> Entity detail (page | drawer | split, per Base) -> Settings
 
 Data graph
   Folder
@@ -183,6 +184,9 @@ Use JSON, schema version `1`. Keep secrets out.
   },
   "ui": {
     "primary_base": "launches",
+    "list_columns": { "launches": ["name", "status", "launch-date"] },
+    "detail_modes": { "launches": "page" },
+    "density": "default",
     "summary": "See launch health and open the details that need attention.",
     "screens": [
       {
@@ -194,7 +198,7 @@ Use JSON, schema version `1`. Keep secrets out.
       {
         "id": "launches",
         "name": "Launches",
-        "purpose": "Filterable list and detail",
+        "purpose": "Full-width filterable list with addressable detail",
         "data_sources": ["launches"]
       }
     ],
@@ -208,7 +212,7 @@ Use JSON, schema version `1`. Keep secrets out.
     "rationale": "This read-only tracker has no operator-specific configuration."
   },
   "permissions": {
-    "read_procedures": ["records.list", "changeRequests.list"],
+    "read_procedures": ["records.list", "records.get", "changeRequests.list"],
     "change_request_procedures": []
   }
 }
@@ -219,6 +223,17 @@ kebab-case `key`, references a declared workspace `resource`, names its `validat
 capabilities it `unlocks`. An intentionally configuration-free product keeps the array empty and
 supplies a concise `rationale`; omission is never interpreted as "no onboarding." Persist completion
 and version in `completion_resource`, not browser storage.
+
+Choose `ui.detail_modes` for every Base from the task, not by habit: `page` for a record that is
+a workplace of its own, `drawer` for records scanned in bulk, `split` for a queue worked one record
+after the next. Ask when the story does not make it clear; `validate-blueprint` warns for any Base
+left undeclared. `ui.density` is `default` (40px rows) or
+`compact` (32px). See `ui-and-validation.md` § Choose The Detail Mode.
+
+For a full-width list, choose `ui.list_columns` for the fields people compare. Include
+`records.get` when a detail URL must open a record outside the loaded list page; that read is
+limited to the record named by the URL. Preserve list search/filter/sort/page state in the
+detail URL or navigation history so Back returns to the same working context.
 
 During approval, materialized ids may be absent or empty because the structure does not exist yet. Immediately after structure creation, read canonical results back and populate every Folder/Node/Base/View/resource id before scaffolding. `scaffold` must reject a blueprint that still lacks them. Include `changeRequests.list` only when the UI actually renders a pending-review summary. See `resource-model-and-security.md` for optional resource and Vault shapes.
 

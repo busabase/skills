@@ -371,7 +371,7 @@ strong {
   white-space: nowrap;
 }
 /* Counts are reference, never the thing you read first. */
-.nav-item span:last-child {
+.nav-item .nav-count {
   flex: 0 0 auto;
   min-width: 22px;
   padding: 1px 6px;
@@ -391,7 +391,7 @@ strong {
   color: var(--accent);
   font-weight: 580;
 }
-.nav-item.active span:last-child {
+.nav-item.active .nav-count {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   color: var(--accent);
 }
@@ -413,8 +413,8 @@ strong {
 }
 
 .main {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   background: var(--canvas);
@@ -423,26 +423,57 @@ strong {
   display: none;
 }
 
-/* ── Page header ─────────────────────────────────────────────────────── */
-.workspace-header {
+/* ── Record view toolbar ─────────────────────────────────────────────────
+ * One row: the view's name, then search and actions. No eyebrow (the app name
+ * is in the sidebar), no description (it belongs on the overview or in Help),
+ * no metrics (the overview owns them). Every pixel above the table is a row
+ * of data the reader cannot see, so this row is the whole header budget. */
+.view-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.view-page[hidden],
+.overview-page[hidden] {
+  display: none;
+}
+.view-toolbar {
   display: flex;
   min-width: 0;
-  align-items: end;
+  min-height: 56px;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px 24px 16px;
+  gap: 16px;
+  padding: 10px 20px;
 }
-.workspace-header > div {
+.view-title {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 10px;
 }
-.workspace-header h1 {
-  margin-top: 4px;
+.view-title h1 {
+  overflow: hidden;
+  font-size: var(--text-xl);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.workspace-header p {
-  max-width: 720px;
-  margin-top: 6px;
+.count {
+  flex: 0 0 auto;
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
   color: var(--muted);
-  font-size: var(--text-base);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+/* The sidebar already shows this view's total; the toolbar repeats a number
+ * only when a search has narrowed it to something the sidebar does not know. */
+body:not(.searching) .view-title .count {
+  display: none;
 }
 .search {
   position: relative;
@@ -462,6 +493,48 @@ strong {
   color: var(--muted);
 }
 
+/* ── Overview ────────────────────────────────────────────────────────────
+ * The one page with a hero and a metrics band. It scrolls on its own, so the
+ * record views never have to make room for a summary. */
+.overview-page {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 20px;
+  min-height: 0;
+  overflow: auto;
+  padding: 28px 24px 32px;
+}
+.overview-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+}
+.overview-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.overview-section-head h2 {
+  font-size: var(--text-md);
+}
+.overview-section-head a {
+  color: var(--accent);
+  font-size: var(--text-base);
+  text-decoration: none;
+}
+/* The card clips the last row's divider instead of a selector reaching into
+ * the cell, so the table's own rules keep a single specificity. */
+.overview-section {
+  overflow: hidden;
+}
+.overview-section > table {
+  margin-bottom: -1px;
+}
+
 /* ── Metric cards ────────────────────────────────────────────────────── */
 /* A band, not a row of cards.
  *
@@ -477,7 +550,6 @@ strong {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  margin: 0 24px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -528,18 +600,26 @@ strong {
   color: var(--danger);
 }
 
-/* ── Workspace card (list + detail) ──────────────────────────────────── */
-.content-split {
-  display: grid;
-  grid-template-columns: minmax(300px, 36%) minmax(0, 1fr);
+/* ── Record workspace ────────────────────────────────────────────────────
+ * Full-bleed: the table runs edge to edge under the toolbar, with a hairline
+ * on top and nothing else. A card inset in the canvas spends 48px of width
+ * and a border on framing the one thing the page exists to show.
+ *
+ * Detail has three declared modes (`ui.detail_modes` in the blueprint):
+ *   page   (body.detail-page)  the record replaces the list;
+ *   drawer (body.detail-drawer) the record slides over the list's right edge,
+ *                               and the list stays usable behind it;
+ *   split  (body.layout-split)  a narrow queue on the left, the record beside it.
+ * All three render the same detail markup. */
+.content-workspace {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  margin: 0 24px 24px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-top: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: var(--shadow-card);
 }
 .list-panel,
 .detail-panel {
@@ -548,74 +628,71 @@ strong {
   overflow: auto;
 }
 .list-panel {
-  border-right: 1px solid var(--line);
+  height: 100%;
 }
-.panel-heading {
+/* Row height is a density decision, not a side effect of padding: 40px by
+ * default, 32px under `ui.density: "compact"`. One line per row — a second
+ * line belongs in its own column when there is width for it. */
+.records-table {
+  --row-height: 40px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+body.density-compact .records-table {
+  --row-height: 32px;
+}
+.records-table th,
+.records-table td {
+  height: var(--row-height);
+  overflow: hidden;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.records-table td {
+  font-size: var(--text-base);
+}
+/* The first column names the record; with `table-layout: fixed` every column
+ * would otherwise get an equal share and the name is the one that truncates.
+ * A plain percentage: Chromium treats `max(%, px)` on a table cell as auto. */
+.records-table th:first-child {
+  width: 30%;
+}
+.records-table th {
   position: sticky;
   top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--line);
+  z-index: 1;
+  height: 36px;
   background: var(--surface-blur);
   backdrop-filter: blur(10px);
-}
-.panel-heading h2 {
-  margin-top: 2px;
-}
-.count {
-  flex: 0 0 auto;
-  min-width: 24px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-soft);
   color: var(--muted);
   font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
+  font-weight: 600;
 }
-.record-list {
-  display: grid;
-}
-.record-row {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-  padding: 13px 20px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  text-align: left;
+.records-table tbody tr {
   cursor: pointer;
-  transition:
-    background var(--ease),
-    box-shadow var(--ease);
+  transition: background var(--ease);
 }
-.record-row:hover {
+.records-table tbody tr:hover {
   background: var(--surface-hover);
 }
-.record-row.selected {
+.records-table tbody tr.selected {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 var(--accent);
 }
-.record-row strong {
-  overflow: hidden;
-  font-size: var(--text-md);
-  font-weight: 580;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.record-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
 }
-.record-row span {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-base);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.record-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 .load-more {
+  display: block;
   min-height: 36px;
   margin: 16px auto;
   padding: 8px 16px;
@@ -626,6 +703,9 @@ strong {
   font-size: var(--text-base);
   font-weight: 580;
   cursor: pointer;
+}
+.load-more[hidden] {
+  display: none;
 }
 .load-more:hover {
   background: var(--surface-soft);
@@ -642,7 +722,8 @@ strong {
   text-align: center;
   text-wrap: balance;
 }
-.state-message:empty {
+.state-message:empty,
+.state-message[hidden] {
   display: none;
 }
 .state-message.error {
@@ -650,7 +731,9 @@ strong {
 }
 
 .detail-panel {
-  padding: 24px 28px;
+  display: none;
+  min-height: 100%;
+  padding: 0 28px 32px;
   background: var(--surface);
 }
 .detail-panel article {
@@ -659,6 +742,21 @@ strong {
 .detail-panel h2 {
   margin: 4px 0 20px;
   font-size: var(--text-xl);
+}
+.detail-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0 -28px 16px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-blur);
+  backdrop-filter: blur(10px);
 }
 .detail-fields {
   display: grid;
@@ -681,8 +779,54 @@ strong {
   font-size: var(--text-base);
   font-weight: 550;
 }
-.back-button {
+.back-button,
+.detail-expand {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-base);
+  text-decoration: none;
+  cursor: pointer;
+}
+.back-button[hidden],
+.detail-expand[hidden] {
   display: none;
+}
+
+/* page: the record takes the whole workspace. */
+body.detail-page .list-panel,
+body.detail-page .search {
+  display: none;
+}
+body.detail-page .detail-panel {
+  display: block;
+  height: 100%;
+}
+
+/* drawer: over the list's right edge, list still scrollable and clickable
+ * behind it, so moving to the next row is one click, not close-then-open. */
+body.detail-drawer.detail-open .detail-panel {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 5;
+  display: block;
+  width: min(560px, 100%);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-modal);
+}
+
+/* split: a fixed-width queue and the record beside it, always both. */
+body.layout-split .content-workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+}
+body.layout-split .list-panel {
+  border-right: 1px solid var(--line);
+}
+body.layout-split .detail-panel {
+  display: block;
+  height: 100%;
 }
 .sidebar-scrim {
   display: none;
@@ -1163,7 +1307,6 @@ strong {
     display: none;
   }
   .main {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
     height: 100dvh;
   }
   .mobile-bar {
@@ -1182,27 +1325,31 @@ strong {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .workspace-header {
-    align-items: stretch;
-    gap: 12px;
-    padding: 16px 14px 12px;
+  .view-toolbar {
+    min-height: 52px;
+    padding: 8px 14px;
   }
-  .workspace-header h1 {
-    font-size: var(--text-lg);
-  }
-  .workspace-header p {
-    font-size: var(--text-sm);
+  /* The mobile bar already names the view; the toolbar keeps the count and
+   * gives search the rest of the row. */
+  .view-title h1 {
+    display: none;
   }
   .search {
-    align-self: end;
+    flex: 1 1 auto;
+  }
+  /* Off-canvas nav means the sidebar's count is not on screen; show it here. */
+  body:not(.searching) .view-title .count {
+    display: inline-block;
   }
   .search input {
-    width: 120px;
+    width: 100%;
+  }
+  .overview-page {
+    padding: 18px 14px 24px;
   }
   /* Still one row on a phone, still no wrapping: the label stacks over the value
    * and the cells narrow. Wrapping here costs the scarcest screen its list. */
   .metrics {
-    margin: 0 14px 12px;
     border-radius: var(--radius-md);
   }
   .metric {
@@ -1216,55 +1363,42 @@ strong {
   .metric strong {
     font-size: var(--text-lg);
   }
-  /* Full-bleed: a rounded card inset inside a 390px viewport wastes the only
-   * horizontal space the list has. */
-  .content-split {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr);
-    margin: 0;
-    overflow: hidden;
-    border: 0;
-    border-top: 1px solid var(--line);
-    border-radius: 0;
-    box-shadow: none;
+  .records-table th,
+  .records-table td {
+    padding: 12px 14px;
   }
-  .list-panel {
-    height: 100%;
-    border-right: 0;
+  .records-table th:nth-child(n + 3),
+  .records-table td:nth-child(n + 3) {
+    display: none;
   }
-  .record-row {
-    padding: 13px 14px;
-  }
-  .panel-heading,
   .toolbar {
     padding: 14px;
   }
-  .detail-panel {
+  /* Every mode is a page on a phone: there is no width for a drawer beside the
+   * list or a queue beside the record, so the record replaces the list. */
+  body.layout-split .content-workspace {
+    display: block;
+  }
+  body.detail-open .list-panel,
+  body.detail-open .view-toolbar,
+  body.layout-split:not(.detail-open) .detail-panel {
     display: none;
+  }
+  body.detail-open .detail-panel {
+    position: static;
+    display: block;
+    width: auto;
     height: 100%;
     padding: 0 14px 24px;
+    border-left: 0;
+    box-shadow: none;
   }
-  body.mobile-detail-open .list-panel {
-    display: none;
-  }
-  body.mobile-detail-open .detail-panel {
-    display: block;
-  }
-  .back-button {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    display: block;
-    width: calc(100% + 28px);
+  .detail-bar {
     margin: 0 -14px 18px;
-    padding: 12px 14px;
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--accent);
-    font-size: var(--text-md);
-    text-align: left;
-    cursor: pointer;
+    padding: 0 14px;
+  }
+  .detail-expand {
+    display: none;
   }
   .modal-backdrop {
     padding: 0;
@@ -1280,6 +1414,16 @@ strong {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+}
+
+/* split: the queue is narrow, so it keeps the name and one more column.
+ * Last in the file so it follows the phone rule hiding the same cells. */
+body.layout-split .records-table th:nth-child(n + 3),
+body.layout-split .records-table td:nth-child(n + 3) {
+  display: none;
+}
+body.layout-split .records-table th:first-child {
+  width: 65%;
 }
 
 @media (prefers-reduced-motion: reduce) {

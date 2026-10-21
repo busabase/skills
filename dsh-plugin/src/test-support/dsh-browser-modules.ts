@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import * as cordis from "@deepseek-ai/cordis";
+import * as clientStore from "@deepseek-ai/dsh-client-store";
+import * as dockkit from "@deepseek-ai/dsh-client-ui-dockkit";
 import * as primitives from "@deepseek-ai/dsh-client-ui-primitives";
 import * as slots from "@deepseek-ai/dsh-client-ui-slots";
 import * as react from "react";
@@ -22,8 +24,10 @@ interface ModuleLoaderWindow extends Window {
 
 const externalModules = new Map<string, unknown>([
   ["@deepseek-ai/cordis", cordis],
+  ["@deepseek-ai/dsh-client-store", clientStore],
   ["@deepseek-ai/dsh-client-ui-primitives", primitives],
   ["@deepseek-ai/dsh-client-ui-slots", slots],
+  ["@deepseek-ai/dsh-client-ui-dockkit", dockkit],
   ["react", react],
   ["react-dom", reactDom],
   ["react-dom/client", reactDomClient],

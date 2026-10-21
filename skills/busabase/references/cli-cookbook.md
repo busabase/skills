@@ -20,11 +20,25 @@ npx busabase-cli change-requests list \
 npx busabase-cli auth status             # accounts, grouped by host, * = active
 npx busabase-cli space list              # spaces this credential can reach, * = targeted
 
-# Find where something lives before you act on it — one call searches files, Docs, AND
-# Base records (real line/column numbers, regex, honest per-source coverage):
+# First, on every instruction: is there already a playbook (a skill or a custom prompt) for
+# this job? Several phrasings, the user's language + English; nearest to --near-node-id first.
+npx busabase-cli playbooks search --query "做周报" --query "weekly report" \
+  --near-node-id <node-id> --output json
+# → { items: [{ kind, nodeId, nodeName, path, key?, label?, name?, description?, matchedOn }],
+#     total, truncated, coverage }   — truncated / "unsupported" coverage ≠ "none exist"
+npx busabase-cli playbooks search --kinds skill --limit 20 --output json   # no --query = browse
+npx busabase-cli playbooks get --kind prompt --node-id <node-id> --key <key>   # follow it
+npx busabase-cli playbooks get --kind skill --node-id <node-id>                # SKILL.md + files
+
+# Find where something lives before you act on it — one call searches files, Docs, Base
+# records AND custom prompts (real line/column numbers, regex, honest per-source coverage).
+# A file hit carries `owner` — the skill/drive it is in, with its folder path:
 npx busabase-cli grep --pattern "Termination" --context-lines 2 --output json
 # Scope to one source when you already know where to look (faster, narrower coverage report):
 npx busabase-cli grep --pattern "ACME Corp" --sources records --base-slugs contracts
+npx busabase-cli grep --pattern "weekly report" --flags i --sources prompts   # → nodeId, key, locale, field
+# `truncated: true` → narrow instead of raising --max-matches: --sources first, then
+# --base-slugs (records) or --drive-path (files).
 # Files-only, with the fuller missing/stale/unsearchable file reporting — same engine, `grep`
 # above composes this plus Docs plus records into one call:
 npx busabase-cli assets grep --pattern "Termination" --drive-path contracts/
@@ -54,6 +68,26 @@ npx busabase-cli nodes create-change-request --type folder \
   --name "客户关系管理 CRM" \
   --message "Create CRM folder"
 # ...same conditional review step as above if it comes back "in_review".
+
+# Base detail accepts either stable id or slug (use exactly one):
+npx busabase-cli bases get --base-id <base-id> --output json
+npx busabase-cli bases get --slug <base-slug> --output json
+
+# Change a node's human-facing description through a permission-aware ChangeRequest:
+npx busabase-cli nodes update-description --node-id <node-id> \
+  --description "Budget, creator roster and delivery history" \
+  --message "Clarify the influencer workspace purpose"
+
+# A View update changes only the supplied config keys. This keeps existing
+# filters/sorts/widths when adding a visible column; pass `sorts: []` to clear
+# the sort intentionally. Read the resulting View back after the CR lands.
+npx busabase-cli views change-request --action update --view-id <view-id> \
+  --patch-json '{"config":{"visibleFieldSlugs":["title","campaign","date"]}}' \
+  --message "Show Campaign on the Activity table"
+
+# The raw API helper accepts either a path below /api/v1 or a full API path:
+npx busabase-cli api --method get --path /bases
+npx busabase-cli api --method get --path /api/v1/bases
 
 # Force review even though your key could write directly — e.g. the change is risky, or
 # the human asked for a second pair of eyes:
@@ -105,9 +139,9 @@ malformed list never reaches the network.
 cat > prompts.json <<'JSON'
 [
   { "key": "log-visit", "label": "Log a customer visit",
-    "body": "{target}\n\nAdd a visit record with the date I give, the contact I name, and a one-line summary." },
+    "body": "Add a visit record with the date I give, the contact I name, and a one-line summary." },
   { "key": "quarter-recap", "intent": "read-only", "label": "What did we discuss this quarter",
-    "body": "{target}\n\nSummarize every visit to the account I name since the quarter started." }
+    "body": "Summarize every visit to the account I name since the quarter started." }
 ]
 JSON
 
@@ -123,8 +157,10 @@ and `body` each accept a plain string or an i18n object (`en`, `zh-CN`, `zh-TW`,
 
 Two things that bite:
 
-- **The list REPLACES the node type's default scenarios** (the capability prompts underneath are
-  untouched). Two generic lines are a downgrade from the defaults, not an addition to them.
+- **The list is APPENDED after the node type's built-in scenarios**, which always stay.
+  `set-agent-prompts` replaces the whole *custom* list (not a merge); it never touches the
+  built-ins. So a generic line only repeats a default — and becomes a vague playbook the next
+  agent's `playbooks search` matches on. Write the person's specific jobs, or none.
 - **Prompts are addressed by node id**, which does not exist until the node does. A review-first
   create returns a pending ChangeRequest, so `nodes create` reports
   `agentPromptsWrite: { written: false, … }` and writes nothing — finish the job with
