@@ -1,6 +1,6 @@
 {
   "name": "@busabase/dsh-plugin",
-  "version": "0.1.13",
+  "version": "0.1.19",
   "description": "Busabase MCP, cards, and live inspector for DeepSeek Harness",
   "license": "MIT",
   "homepage": "https://github.com/busabase/busabase-dsh-plugin#readme",
@@ -48,7 +48,7 @@
   },
   "busabaseSkills": {
     "repository": "https://github.com/busabase/skills.git",
-    "ref": "33c12ca5e716417b101812eb8a2d6601abd46fc3"
+    "ref": "91201e4fae164e2709cae1237c52ce4cf3cb1d9a"
   },
   "dsh": {
     "client": {
@@ -84,7 +84,25 @@
     "busabase-sdk": "0.95.1",
     "clsx": "2.1.1",
     "open": "11.0.1",
-    "simple-icons": "16.31.0"
+    "simple-icons": "16.31.0",
+    "@deepseek-ai/dsh-util-code-language": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-util-workspace-path": "0.2.0-rc.2",
+    "@shikijs/langs": "4.3.1",
+    "anser": "2.3.5",
+    "diff": "8.0.3",
+    "katex": "0.16.47",
+    "mdast-util-from-markdown": "2.0.3",
+    "mdast-util-gfm": "3.1.0",
+    "mdast-util-math": "3.0.0",
+    "micromark-core-commonmark": "2.0.3",
+    "micromark-extension-gfm": "3.0.0",
+    "micromark-extension-math": "3.1.0",
+    "micromark-factory-space": "2.0.1",
+    "micromark-util-character": "2.1.1",
+    "micromark-util-classify-character": "2.0.1",
+    "micromark-util-sanitize-uri": "2.0.1",
+    "micromark-util-symbol": "2.0.1",
+    "shiki": "4.3.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.19, which bundles the skills at `91201e4`, so
+  DeepSeek Harness agents also run `npx --yes busabase-cli@latest`. The manifest now declares the
+  rendering libraries the plugin's UI imports as runtime dependencies.
 - Run the CLI as `npx --yes busabase-cli@latest` everywhere the skills show a command. Plain
   `npx busabase-cli` reuses any `busabase-cli` it already finds (a global install, or a
   `node_modules` in a parent directory) without checking its version, so an agent could silently
