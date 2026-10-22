@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Run the CLI as `npx --yes busabase-cli@latest` everywhere the skills show a command. Plain
+  `npx busabase-cli` reuses any `busabase-cli` it already finds (a global install, or a
+  `node_modules` in a parent directory) without checking its version, so an agent could silently
+  run an old CLI; `--yes` also keeps the first run from stopping at an install prompt.
+- `busabase` skill: optionally send `x-busabase-agent` on writes so a change request records which
+  agent client made it.
+- `busabase-app-creator`: writes are permission-aware (omit `autoMerge`; they merge when the
+  credential can and wait for review otherwise), with the user gating scope rather than each write;
+  document what an attachment cell must contain; `records.listPage` takes `sort` directly instead
+  of needing a sorted View.
+- `busabase-template-creator`: each locale gets its own complete screenshot list under
+  `template.locales`, never mixed into the default list.
+- Bump the Claude Code plugin to `0.4.4` and the Codex plugin to `0.3.6`, which both bundle the
+  updated `busabase-app-creator`.
+
 - Teach the bundled Claude Code and Codex `busabase` skills to name the playbook they follow on
   every write (CLI `--playbook`, MCP `playbook` argument, `x-busabase-playbook` header) so the
   change request records it, and to check `change_request_query` with `affectsNodeId` for

@@ -52,10 +52,10 @@ Then use `grep` for exact locations (line and column, over the full canonical da
 `search` for a ranked, paginated browse that also covers pending change-request drafts.
 
 ```bash
-npx busabase-cli playbooks search --query "记录客户拜访" --query "log customer visit" \
+npx --yes busabase-cli@latest playbooks search --query "记录客户拜访" --query "log customer visit" \
   --near-node-id <nodeId> --output json      # [--kinds skill prompt] [--limit N]
-npx busabase-cli playbooks get --kind prompt --node-id <nodeId> --key <key>   # a custom prompt
-npx busabase-cli playbooks get --kind skill --node-id <nodeId>                # a skill's SKILL.md
+npx --yes busabase-cli@latest playbooks get --kind prompt --node-id <nodeId> --key <key>   # a custom prompt
+npx --yes busabase-cli@latest playbooks get --kind skill --node-id <nodeId>                # a skill's SKILL.md
 ```
 
 | The question | Use | What it gives you |
@@ -81,11 +81,11 @@ curl -s -o /dev/null -w '%{http_code}' "$BUSABASE_BASE_URL/api/v1/bases"   # no 
 
 ```bash
 # Turn 1 — returns verification_url + resume_code IMMEDIATELY, writes nothing:
-npm exec -y --package busabase-cli@latest -- busabase-cli login --no-wait --output json
+npx --yes busabase-cli@latest login --no-wait --output json
 # → send verification_url to the user VERBATIM (never re-encode/re-wrap it; pair it with
 #   `busabase-cli qrcode "<url>" --out-file qr.png` and show the image), then END YOUR TURN.
 # Turn 2 — after the user says they approved:
-npm exec -y --package busabase-cli@latest -- busabase-cli login --resume-code <resume_code>
+npx --yes busabase-cli@latest login --resume-code <resume_code>
 ```
 
 Do **not** restart login while a link is pending — a restart invalidates it. If the installed
@@ -99,7 +99,12 @@ On Cloud, confirm the target space before the first write of a session — full 
 ## Three ways to talk to it — pick per task
 
 1. **`busabase-cli`** — the everyday loop. Auto-loads `~/.busabase/.env`; add `--output json` to
-   parse. `npx busabase-cli --help` lists commands.
+   parse. `npx --yes busabase-cli@latest --help` lists commands. Always keep `@latest`: without
+   it, npx runs any `busabase-cli` it already finds (a global install, or a `node_modules` in a
+   parent directory) without checking its version, so you could silently run an old CLI.
+   `@latest` costs one registry check per call; for a long loop, run
+   `npm i -g busabase-cli@latest` once (rerun it each session, a global install goes stale too)
+   and then call plain `busabase-cli`.
 2. **`curl`** — zero install. On Cloud add `Authorization: Bearer` + `x-busabase-space` headers.
 3. **OpenAPI / MCP** — the complete live surface: `$BUSABASE_BASE_URL/api/v1/openapi.json`
    (browsable at `/api/v1/doc`), or MCP at `$BUSABASE_BASE_URL/api/mcp`.
@@ -110,9 +115,9 @@ endpoint's shape out of it costs roughly 234k tokens. `schema` answers from the 
 into the CLI: offline, no credential, one endpoint at a time.
 
 ```bash
-npx busabase-cli schema                              # every endpoint: id, method, path
-npx busabase-cli schema bases.list                   # input + output as JSON Schema
-npx busabase-cli schema records.changeRequest --io input   # just what to send
+npx --yes busabase-cli@latest schema                              # every endpoint: id, method, path
+npx --yes busabase-cli@latest schema bases.list                   # input + output as JSON Schema
+npx --yes busabase-cli@latest schema records.changeRequest --io input   # just what to send
 ```
 
 Worked examples for all three — grep/read-lines discovery, ChangeRequest loops, bulk updates,
@@ -125,14 +130,14 @@ would send and sends nothing — reads still run, so the plan is fully resolved.
 command has it; a read command does not offer it, because there would be nothing to suppress.
 
 ```bash
-npx busabase-cli bases create-change-request --base-id <id> --fields-json '{…}' --dry-run
+npx --yes busabase-cli@latest bases create-change-request --base-id <id> --fields-json '{…}' --dry-run
 ```
 
 ## Reading a playbook, and what the search does not tell you
 
 `playbooks get` is enough to follow one: a prompt comes back rendered exactly as Ask Agent sends
 it (opening with the line that names its node), a skill as its `SKILL.md` plus its file list — read the rest with
-`npx busabase-cli skills read-file --node-id <nodeId> --file-path references/<file>.md`. Guessing a
+`npx --yes busabase-cli@latest skills read-file --node-id <nodeId> --file-path references/<file>.md`. Guessing a
 schema a skill already documents is how records land in the wrong Base.
 
 - **A folder may hold N skills.** They are never merged. When two fit, the search ranks the
@@ -180,11 +185,11 @@ wanted it for. Write 2–5 prompts in their words, in the same breath as creatin
 
 ```bash
 # One call — the prompts land once the node is actually created:
-npx busabase-cli nodes create --type base --slug visits --name "Visits" \
+npx --yes busabase-cli@latest nodes create --type base --slug visits --name "Visits" \
   --field title:Title:text --agent-prompts-json @prompts.json
 
 # Node already exists (or the create went to review and has since merged):
-npx busabase-cli nodes set-agent-prompts --node-id <nodeId> --file prompts.json
+npx --yes busabase-cli@latest nodes set-agent-prompts --node-id <nodeId> --file prompts.json
 ```
 
 `prompts.json` is `[{ "key", "label", "body", "intent"? }]` — `label` is what the user picks from

@@ -260,13 +260,14 @@ target-first.
 
 ### Target First
 
-Run the Required Checks, submit the canonical source as a pending AirApp CR, and state that visual
-and interactive acceptance is deferred until merged HEAD can Run in Busabase. The blueprint approval
-and selected target-first path authorize creating the reviewable CR, never reviewing or merging it.
+Run the Required Checks, write the canonical source as an AirApp ChangeRequest (permission-aware:
+omit `autoMerge`), and state that visual and interactive acceptance is still to come until merged HEAD
+Runs in Busabase. If the server held the CR because the credential cannot merge it, wait for someone
+with write access; never approve it yourself unless the user asks for that specific CR.
 
-After explicit merge authority, perform every Target Verification check, including desktop and
-390px phone workflows. If acceptance finds a defect, update canonical local source and submit a new
-reviewable AirApp CR. Do not patch only the remote copy.
+Once it is merged, perform every Target Verification check, including desktop and 390px phone
+workflows. If acceptance finds a defect, update canonical local source and write a new AirApp
+ChangeRequest the same way. Do not patch only the remote copy.
 
 ### Explicit Local Preview
 
@@ -325,13 +326,13 @@ After the AirApp CR is merged, Run it inside the selected Busabase deployment an
 
 ## Acceptance Gates
 
-For local-preview there are three separate gates:
+The human gates are about scope and acceptance, not about each write:
 
-1. Blueprint approval authorizes exact structure autoMerge.
-2. Demo UI acceptance authorizes submitting code for review, not merging it.
-3. Named CR authorization allows the Agent to review/merge only that CR.
-
-For target-first, blueprint approval plus the selected AirApp-first delivery path authorizes
-submitting the pending code CR. Named CR authorization permits its merge, and the merged target Run
-is the UI acceptance gate. Never treat CR submission as merge authority or claim UI acceptance from
-static checks alone.
+1. Blueprint approval authorizes the exact structure, the AirApp code and the seed records. Every
+   write inside it is permission-aware: it merges when the credential can, and is held as a
+   ChangeRequest when it cannot.
+2. For local-preview, Demo UI acceptance comes before writing the code; for target-first, the merged
+   target Run is the UI acceptance gate. Never claim UI acceptance from static checks alone.
+3. A ChangeRequest the server held for review is approved only by a person with that permission, or
+   by the Agent when the user asks for that specific CR. Approval of the blueprint or the UI is not
+   that request.
