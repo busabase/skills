@@ -91,7 +91,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
 - In `create`, after structure creation, write every materialized Folder, Node, Base, View, and resource id back into the blueprint. Generated runtime code must then reach those resources by a stable handle rather than by listing the workspace and matching a name or slug. Which handle depends on how the artifact binds — see § "Two Ways To Bind" below; both are correct, and the wrong one for the route produces an app that cannot work.
 - Give every data-reading workflow an explicit budget. Default interactive pages to at most 50 records per Base and 20 relevant pending ChangeRequests, use server-side filters/sorts, run independent reads in parallel, preserve `nextCursor`, and fetch only one page per user action. Never hide a full scan behind loading, search, filtering, refresh, navigation, detail opening, "jump to page N", a capped `while (cursor && n < 4)` loop, a `Promise.all` over `totalPages`, or a "fallback" for a filter that seemed not to apply — see `references/runtime-and-sdk.md` § A full scan in disguise. Full exports and offline analysis require a separate, explicit batched workflow.
 - Generate the UI in the user's conversation language. Keep messages centralized so a later iteration can add locales.
-- In `create`, generate three to five realistic seed records by default and submit them as ChangeRequests; do not auto-merge records.
+- In `create`, generate three to five realistic seed records by default and write them through ChangeRequests like every other write: omit `autoMerge`, and they land or queue according to the credential's permission.
 - In delegated App-in-Skill `create` mode, use `target-first` validation by default: run deterministic
   static/project checks, submit the reviewed canonical tree as an AirApp CR, and obtain UI acceptance
   from merged HEAD inside the target Busabase. Use `local-preview` only when the delegating skill or
@@ -99,7 +99,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   retains local-preview acceptance unless the user explicitly selects target-first. In `maintain`,
   apply the validation and acceptance gates in `references/maintenance.md`.
 - **Write the way `$busabase` says: omit `autoMerge` and read the response's `status`.** Review is a permission setting, not a step this skill imposes — a credential that can write publishes immediately, a weaker one gets a ChangeRequest, and either outcome is correct. Do not pass `autoMerge: false` to manufacture a review gate the workspace did not ask for; pass it only when *you* judge one specific change risky enough to deserve a second pair of eyes regardless of what the credential could do. What this skill does gate is **scope**: in `create`, only the exact Folder/Base/field/relation structure the user approved in the current conversation may be written at all, and in `maintain`, only the approved change set.
-- Submit AirApp code and create-mode seed data as reviewable ChangeRequests. Review or merge a CR only after the user explicitly authorizes that specific CR in chat.
+- **The human gate is scope, not each write.** Several agents and people often work in the same Space at once; asking a human to click merge on every write the approved scope already covers only slows that down without adding safety. So once the scope is approved, write AirApp code and seed data the permission-aware way and carry on. Three things still stop for a human: anything outside the approved scope; a change you judge risky — deleting or overwriting data someone else wrote, a destructive schema change — which you send with explicit `autoMerge: false` and say why; and a write that came back as a pending ChangeRequest because the credential cannot merge it. Never approve or merge a pending ChangeRequest yourself — yours or another agent's — unless the user asks for that specific one.
 
 ## Two Ways To Bind
 
@@ -214,7 +214,7 @@ Which to pick is decided by what is being produced, not by preference:
   real trigger `description` in frontmatter, the fetch command below, and the Space/node table.
 
   ```bash
-  npx busabase-cli@latest skills read-file --node-id <id> --file-path SKILL.md --output json
+  npx --yes busabase-cli@latest skills read-file --node-id <id> --file-path SKILL.md --output json
   ```
 
   Both flags earn their place, for different reasons. `--output json` is what returns the body at
@@ -240,8 +240,13 @@ the manifest and frontmatter shapes, the record cap, and what disqualifies a tem
 package on disk, then install it into a scratch Space to verify:
 
 ```bash
-npx busabase-cli install <path-or-repo-url> --into-folder <scratch>
+npx --yes busabase-cli@latest install <path-or-repo-url> --into-folder <scratch>
 ```
+
+Keep `@latest` on every `npx` call: without it, npx runs any `busabase-cli` it already finds (a
+global install, or a `node_modules` in a parent directory), which can be an old
+`check`/`install`/`export`. For a long loop, `npm i -g busabase-cli@latest` once per session and
+call plain `busabase-cli`.
 
 **A package-first run is not finished until it has been installed and opened.** This is not
 ceremony. A package can satisfy every static rule — the validator green, the catalog listing it —
@@ -340,7 +345,7 @@ After approval:
    then its Views in blueprint order — the first one is what the Base opens on, and a later
    `export --template` ships exactly these. When the blueprint gives a Base no Views, keep the
    default Grid view and record its `view_id` like any other. A Base must always keep one View.
-4. Use `autoMerge` only because the user approved this exact structure.
+4. Omit `autoMerge`: the user approved this exact structure, so whatever the credential can merge lands now. Pass explicit `autoMerge: false` only for a step you judge risky (see the scope rule above).
 5. Read the materialized resources back and write every Folder/Node/Base/View/resource id into `blueprint.json` before scaffolding.
 6. **Write each node's `agentPrompts` the moment that node exists**, from its scenario list in the
    approved blueprint (step 4, item 5a) — see step 10 for the shape, the CLI call and the writing
@@ -420,9 +425,9 @@ credential, write it in `node`.
 Then follow the selected validation mode in `references/ui-and-validation.md`.
 
 For `target-first`, do not start `pnpm dev` and do not report a localhost URL. Static checks plus the
-approved blueprint authorize submitting a pending AirApp CR for in-target review, not merging it.
-Desktop, phone, interaction, ambient-session, and real-data acceptance happen from merged HEAD in
-step 9. State this deferred acceptance clearly in the CR summary.
+approved blueprint authorize writing the AirApp the permission-aware way (step 8). Desktop, phone,
+interaction, ambient-session, and real-data acceptance happen against merged HEAD in step 9 — say in
+the report that UI acceptance is still to come until that Run has happened.
 
 For an explicitly selected `local-preview`, run `pnpm dev`, open the actual local URL with
 `?demo=1`, and verify desktop and 390px mobile layouts before submission.
@@ -444,14 +449,15 @@ through a delegated API permission grant; the deployed AirApp instead uses the v
 session, so the target Run in step 9 still proves that distinct permission and embed path.
 
 In local-preview mode, iterate until the user explicitly accepts the UI before submission. In
-target-first mode, iterate after each explicitly authorized merge and target Run; later revisions
-remain separate reviewable AirApp CRs.
+target-first mode, iterate after each target Run; each revision is its own AirApp ChangeRequest,
+written the same permission-aware way.
 
-### 8. Deploy The AirApp As A ChangeRequest
+### 8. Deploy The AirApp Through A ChangeRequest
 
 Create a new AirApp under the new Folder with the complete validated file tree and `mergeMode: "replace"`. Omit `autoMerge` and read the result: a credential that can write to the Folder publishes the app outright, a weaker one yields a pending ChangeRequest, and both are correct outcomes to report. Record whether validation was `target-first` or `local-preview`.
 
-Report the CR id and the main security facts:
+Report what happened — the AirApp node id when it merged, the CR id when it is waiting for a
+human — and the main security facts:
 
 - the deployed app authenticates as the viewing user's browser session;
 - no API key is embedded;
@@ -459,13 +465,16 @@ Report the CR id and the main security facts:
 - listed ChangeRequest-producing procedures, if any;
 - no direct canonical mutation.
 
-Wait for manual UI merge or explicit chat authorization naming that CR. Authorization for one CR does not apply to later CRs.
+If it merged, go straight to step 9. If it is pending because the credential cannot merge it, tell
+the user it needs someone with write access on the Folder; do not approve it yourself unless the user
+asks for that specific CR. The seed records do not depend on the AirApp, so still write them (step 9)
+while it waits — only the target Run waits for the AirApp to merge.
 
 ### 9. Seed And Verify Real Data
 
-Submit three to five realistic records as ChangeRequests. Respect relation dependencies: merge/read back parent records before using their canonical ids in child relations unless the live API explicitly supports temporary record refs.
+Write three to five realistic records through ChangeRequests, permission-aware like everything else. Respect relation dependencies: read back merged parent records before using their canonical ids in child relations unless the live API explicitly supports temporary record refs.
 
-After the user merges or explicitly authorizes each relevant CR:
+Once the AirApp and the seed records are merged (by your write, or by a human for any that queued):
 
 1. Read canonical records back.
 2. Ask the user to Run the merged AirApp in the target Busabase.
@@ -531,7 +540,7 @@ node's name.
 Write them with the CLI, which validates before it sends:
 
 ```bash
-npx busabase-cli nodes set-agent-prompts --node-id <nodeId> --file prompts.json
+npx --yes busabase-cli@latest nodes set-agent-prompts --node-id <nodeId> --file prompts.json
 ```
 
 `prompts.json` is a list of `{ key, label, body, intent? }`. `label` is what the user picks from
@@ -589,7 +598,7 @@ Do not hand-write the package layout — export the app you just built and verif
 template is the thing that actually ran rather than a second description of it:
 
 ```bash
-npx busabase-cli export <folder-slug> -o ./<name> --template
+npx --yes busabase-cli@latest export <folder-slug> -o ./<name> --template
 ```
 
 That writes the layout the Template Center reads: the folder's Skill node lifted to the package root
@@ -602,8 +611,8 @@ what a table means is worse than an obvious blank. Fill them in with the user.
 Before opening the pull request, check it:
 
 ```bash
-npx busabase-cli check ./<name> --strict                                       # the contract
-npx busabase-cli index . --repo busabase/templates -o templates.json --check   # the catalog
+npx --yes busabase-cli@latest check ./<name> --strict                                       # the contract
+npx --yes busabase-cli@latest index . --repo busabase/templates -o templates.json --check   # the catalog
 cd templates/<name> && node scripts/sync-content.mjs --check                   # only if it has one
 ```
 

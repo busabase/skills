@@ -22,7 +22,7 @@ they cannot approve what they never saw, and the login silently times out. So sp
 
 ```bash
 # Turn 1 — start. Returns immediately; writes NO credential:
-npm exec -y --package busabase-cli@latest -- busabase-cli login --no-wait --output json
+npx --yes busabase-cli@latest login --no-wait --output json
 # → { "verification_url": "...", "user_code": "...", "resume_code": "...", "expires_in": "900", "hint": "..." }
 ```
 
@@ -37,7 +37,7 @@ Then, in this order:
 
 ```bash
 # Turn 2 — after the user says they approved (keep the same --base-url/--profile flags):
-npm exec -y --package busabase-cli@latest -- busabase-cli login --resume-code <resume_code>
+npx --yes busabase-cli@latest login --resume-code <resume_code>
 ```
 
 Rules that prevent the classic failures:
@@ -104,6 +104,10 @@ again. (`busabase-cli` handles this itself — `login` persists the chosen `BUSA
 and every CLI command auto-loads it and sends the header. MCP tools can target another
 authorized Space with `targetSpaceId`; use the confirmed Space ID on every multi-space MCP
 operation rather than silently relying on the default.)
+
+Optionally also send `-H "x-busabase-agent: <your client, e.g. codex>"` on writes, so the
+change request says which agent made it even when several agents share one key
+(`busabase-cli` detects and sends this automatically).
 
 ## Two auth facts worth knowing before you debug a 401
 

@@ -24,9 +24,9 @@ Every run creates an isolated workspace:
 
 ## Structure Gate
 
-The user's explicit approval of the displayed blueprint authorizes the exact Folder/resource/schema/View structure. In target-first mode, the same approved blueprint and selected AirApp-first delivery path also authorize submitting the generated AirApp code as a pending, reviewable CR so UI acceptance can occur in Busabase. Neither mode authorizes content, records, external side effects, reviews, or merges.
+The user's explicit approval of the displayed blueprint authorizes the exact Folder/resource/schema/View structure, the generated AirApp code, and the blueprint's seed records. That approval is the human gate: writes inside it go through permission-aware ChangeRequests and land whenever the credential can merge them. It does not authorize anything outside the blueprint, external side effects, or approving a ChangeRequest the server held for review.
 
-After approval, structure may use `autoMerge: true`. Read every result back; do not assume the server auto-merged because the request included the flag. Write every canonical Folder/Node/Base/View/resource id into the approved blueprint before scaffolding; runtime data access is pinned to these ids.
+After approval, omit `autoMerge` on these writes. Read every result back; do not assume a write merged — the response's `status` says whether it landed or is waiting for someone with more permission. Write every canonical Folder/Node/Base/View/resource id into the approved blueprint before scaffolding; runtime data access is pinned to these ids.
 
 Prefer the native resources described in `resource-model-and-security.md`. Use relation target slugs/ids supported by the live OpenAPI. If relation targets must exist first, create Bases in dependency order and add relation fields afterward. Create Vault requirements as documentation/readiness metadata only; never submit values in the blueprint or AirApp CR.
 
@@ -85,11 +85,11 @@ merge or ignore. That is a noise cost, not a correctness one. Either way, report
 happened: the node id when it merged, the CR id when it did not, and never claim the reinstall is
 done while a CR for it is still open.
 
-## CR Review Summary
+## Deployment Report
 
 Report:
 
-- CR id and target AirApp name;
+- what the write did: the AirApp node id when it merged, or the CR id when it is waiting for a human;
 - validation mode (`target-first` or `local-preview`) and any acceptance still deferred to target Run;
 - number of files and exact SDK version;
 - the Space the app targets;
@@ -102,16 +102,15 @@ Report:
 - confirmation that no API key or direct canonical mutation exists;
 - bridge privilege warning.
 
-Wait for one of:
-
-1. user merges in Busabase and says it is merged;
-2. user explicitly authorizes the Agent to review and merge that named CR.
-
-Do not infer merge permission from blueprint or Demo UI approval. Authorization is scoped to the named CR and expires after use.
+If it merged, continue to seeding and the target Run. If the server held it for review, the
+credential cannot merge it: still write the seed records (they do not depend on the AirApp), and hold
+the target Run until someone with write access merges the AirApp, or until the user asks the Agent to
+approve that specific CR. Blueprint or Demo UI approval is not that request — the hold
+came from a permission, and only a person can lift it.
 
 ## Seed ChangeRequests
 
-Use three to five records from the approved blueprint. Before proposing:
+Use three to five records from the approved blueprint. Before writing:
 
 1. list canonical records in the new Base;
 2. list pending CRs;
@@ -119,9 +118,7 @@ Use three to five records from the approved blueprint. Before proposing:
 4. write a human-readable primary field;
 5. use an imperative review message and idempotency key.
 
-Submit relation parents first. After explicit merge authorization or manual merge, read back `mergedRecordId`/canonical records before submitting children.
-
-Never auto-merge seed records. The user may explicitly authorize a specific seed CR or a clearly enumerated finite group.
+Write relation parents first and read back `mergedRecordId`/canonical records before writing children. Seed records are part of the approved blueprint, so write them permission-aware like the structure: omit `autoMerge`. If one is held for review, the children that depend on it wait until it merges.
 
 ## Read Back And Target Run
 

@@ -48,7 +48,7 @@ A template ships when all of these hold. Each is checkable; none is a matter of 
 ### 1. It passes the format gate
 
 ```bash
-npx busabase-cli check ./<name>
+npx --yes busabase-cli@latest check ./<name>
 ```
 
 Zero errors. Warnings are allowed only when the reason is written down in the PR — the format
@@ -86,9 +86,28 @@ product. Cover at least:
 - the human-attention state — what needs review, what is blocked. For a review-queue app this is
   the whole point; a gallery that never shows it is advertising the wrong product.
 
-Both locales when the app ships both. Uniform viewport across the catalog — mixing framed
-(window-chrome) and unframed shots produces a frame-inside-a-frame in the cover, with the template
-name printed twice.
+Both locales when the app ships both, and **each locale gets its own list, never a mixed one**.
+`template.screenshots` is the English/default gallery: it is what every language without its own
+entry sees, and the only list older servers read. Other languages go under `template.locales`, each
+a complete replacement list (cover first) named `<name>-<locale>.<ext>`:
+
+```json
+"screenshots": ["assets/screenshots/cover.webp", "assets/screenshots/overview.webp"],
+"locales": {
+  "zh-CN": { "screenshots": ["assets/screenshots/cover-zh-CN.webp", "assets/screenshots/overview-zh-CN.webp"] }
+}
+```
+
+A locale's list replaces the default whole, never merged per index. If its cover has nothing to
+translate, put the default `cover.webp` first in that locale's list. Leaving the cover out leaves
+that language with no cover. Appending `overview-zh-CN.webp` to the default list
+shows Chinese screenshots to Japanese viewers; `busabase-cli check` warns on it
+(`package/localized-default-media`) and errors on any localized path that is not on disk. Generate a
+localized cover from that locale's own screenshot. Full rule: `template-format.mdx` → "Localized
+screenshots and video".
+
+Uniform viewport across the catalog — mixing framed (window-chrome) and unframed shots produces a
+frame-inside-a-frame in the cover, with the template name printed twice.
 
 **Do not ship a "this is a mock image" disclosure baked into the app's own demo mode.** Some
 templates render a banner (e.g. a `demo-visuals.js`/`.css` panel gated on `?demo=1`) explaining that
@@ -107,7 +126,7 @@ Not every template needs one. When a workflow genuinely benefits from motion —
 approval, a state that visibly changes — a short clip earns its place ahead of static screenshots in
 the gallery order: cover (always first) → clip (if present) → screenshots.
 
-- Store at `assets/recordings/<name>.mp4`, tracked with Git LFS (`assets/recordings/**/*.mp4 filter=lfs diff=lfs merge=lfs -text` in `.gitattributes`).
+- Store at `assets/recordings/<name>.mp4` (the English/default clip, declared as `template.video`); a localized cut is `assets/recordings/<name>-<locale>.mp4` under `template.locales.<locale>.video`. Tracked with Git LFS by the repo's unanchored `*.mp4 filter=lfs diff=lfs merge=lfs -text` rule in `.gitattributes` (a pattern with a slash, like `assets/recordings/**/*.mp4`, is anchored to the repo root and matches no template's clip).
 - 1440×900, H.264, `yuv420p` (not `yuvj420p` — force `-color_range tv` in the ffmpeg encode, since JPEG-sourced frames default to full-range and produce the "j" variant, which some players flag).
 - Show real interaction — sidebar navigation between views, search/filter, a language toggle — not a static hold. Verify every clip frame-by-frame after recording; do not trust that a scripted click landed. A text-substring match against sidebar link text is not reliable when the same word appears elsewhere on the page (a stat-card label, a nav link) — `.find()` silently takes whichever matches first in DOM order. Use the app's `data-route` attribute for hash navigation instead: deterministic, and consistent across this catalog's templates.
 - Most templates in this catalog are display-only by architecture — the AirApp shows a review queue but the actual approve/reject decision happens in Busabase's native ChangeRequest review UI, not a button in the app. Do not fake a click on an approval control that does not exist; record the real interaction the app actually offers (navigation, filtering, the review-queue *reading* experience) and say so plainly rather than implying a write action the demo cannot perform.
@@ -166,7 +185,7 @@ they read right, then `busabase-cli export --template` and diff the sidecars bac
 ## Auditing an existing template
 
 ```bash
-npx busabase-cli check ./<name>                                      # 1
+npx --yes busabase-cli@latest check ./<name>                                      # 1
 python3 <cover-skill>/scripts/generate_cover.py --check ./<name>     # 2
 ```
 

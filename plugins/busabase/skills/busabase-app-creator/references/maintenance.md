@@ -25,7 +25,7 @@ Check the live `/api/v1/openapi.json` before relying on resource filtering. If
 so an existing update is not overwritten:
 
 ```bash
-npx busabase-cli change-requests list \
+npx --yes busabase-cli@latest change-requests list \
   --affects-node-id <airapp-node-id> \
   --status-json '["in_review","approved","conflict"]' --limit 1 --output json
 ```
@@ -61,9 +61,9 @@ Read the deployed tree with (the `--kind` is `airapp`, and `nodes get` already r
 list, so a separate listing call is usually unnecessary):
 
 ```bash
-npx busabase-cli nodes get --node-id <airapp-node-id> --output json          # identity, version, file list
-npx busabase-cli nodes read-file --kind airapp --node-id <id> --file-path package.json --output json
-npx busabase-cli nodes files --kind airapp --node-id <id>                    # listing only, if wanted
+npx --yes busabase-cli@latest nodes get --node-id <airapp-node-id> --output json          # identity, version, file list
+npx --yes busabase-cli@latest nodes read-file --kind airapp --node-id <id> --file-path package.json --output json
+npx --yes busabase-cli@latest nodes files --kind airapp --node-id <id>                    # listing only, if wanted
 ```
 
 **The decisive test, in one line:** is there any file in this tree that a person could edit by hand,
@@ -157,8 +157,8 @@ Before writing remotely, present a concise maintenance blueprint/diff for this i
 - migrations or backfills, their ordering, and the old/new runtime compatibility window;
 - explicit exclusions: everything that will remain untouched.
 
-Ask the user to approve, revise, or stop. Approval authorizes proposing only this exact change set as
-reviewable ChangeRequests; it does not authorize merging them. Use native Busabase resources for new
+Ask the user to approve, revise, or stop. Approval authorizes writing exactly this change set through
+permission-aware ChangeRequests (see "Scoped Resource And File Changes" below) — nothing outside it. Use native Busabase resources for new
 concerns, preserve exact ids when updating existing resources, materialize and record ids for newly
 created resources, and update the AirApp config only after those ids exist. Separate destructive
 changes so reviewers can accept or reject them independently.

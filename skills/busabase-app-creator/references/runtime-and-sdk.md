@@ -58,7 +58,8 @@ Two things to know before promising a framework app will run:
 This applies to the `browser` (Nodepod) engine only — on `local` and `remote` a bundler is just a
 bundler. It was verified against real boots, not assumed — real `onServerReady` events and real 200
 responses through the SW proxy, using Nodepod's own `examples/issue-44-react-dev-server` and
-`examples/vite-dev-exit-1` regression pages run against the currently published `@scelar/nodepod`
+`examples/vite-dev-exit-1` regression pages run against the Nodepod release current at the time
+(1.9.20, then published as `@scelar/nodepod`; not re-run on `@r1ck404/nodepod` 1.11.x)
 (the exit-code-only check that page's own summary uses is a false-positive trap: a `npm run dev`
 process can exit 0 *after* an unhandled rejection already killed the dev server before it bound a
 port — check for a real `onServerReady`/200, not a clean exit code):
@@ -353,7 +354,7 @@ Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on
 - Start independent Base and ChangeRequest reads together with `Promise.all`.
 - Preserve every `nextCursor` and choose the continuation UI by layout, not by habit — both of the following are compliant with "one page per user action"; the difference is purely interaction design:
   - **Load more (cumulative append)** — a button appends the next page to what's already showing. Fits a persistent list+detail split because paging away could orphan the open detail. The scaffold also uses it for its full-width list; `providers/busabase-provider.js`'s `loadMore()` and `app/js/app.js`'s `loadMore()` implement it.
-  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Prefer `records.listPage` here: it takes `page`/`pageSize` directly and returns `total`/`totalPages`, so jumping to page 7 is one request and the page numbers have an honest total behind them. `records.listPage` has no `sort` parameter — its order comes from the `viewId` you pass — so a pager whose order matters (newest follow-up first, say) needs a native View on that Base with that sort; create one in the blueprint rather than give up the order. `records.list` only exposes a forward keyset cursor with no offset/skip, so **never** build "jump to page N" on it by loading forward until page N arrives: that is a full scan behind a text box (see "A full scan in disguise" below). Without `records.listPage` and a View for the order you need, ship Prev/Next only. Degrade to Prev/Next-only (no page numbers) when neither `records.listPage` nor `records.count` is available — there is no honest total to show numbers against.
+  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Prefer `records.listPage` here: it takes `page`/`pageSize` directly and returns `total`/`totalPages`, so jumping to page 7 is one request and the page numbers have an honest total behind them. `records.listPage` takes the same `sort` as `records.list` (one number or date field, `asc`/`desc`, empty values last, ties broken by record id so pages never overlap or skip), so a pager whose order matters — newest follow-up first, say — passes `sort` directly; no View is needed. With both `viewId` and `sort`, the explicit `sort` replaces the View's order and the View's filters still apply. A server older than this option may drop the unknown `sort` and return the default order without an error, so before offering page numbers check that the first page actually comes back in the requested order; if it does not (or the call fails), fall back to Prev/Next — never to walking the cursor. `records.list` only exposes a forward keyset cursor with no offset/skip, so **never** build "jump to page N" on it by loading forward until page N arrives: that is a full scan behind a text box (see "A full scan in disguise" below). Without `records.listPage`, ship Prev/Next only. Degrade to Prev/Next-only (no page numbers) when neither `records.listPage` nor `records.count` is available — there is no honest total to show numbers against.
   - Don't default to one pattern out of habit; pick the one that matches the screen actually being built, and say which one and why in the blueprint/review notes when it isn't obvious from the layout.
 - Apply the same per-row normalization (field coercion, JSON-string-encoded array fields parsed into real arrays, defaulting) to every page fetched, first or Nth, via one named function per record shape — not a second copy re-derived (or skipped) for later pages, regardless of which continuation UI is used. A normalizer that only runs on page 1 fails silently until a user reaches page 2, and the failure is a render crash on whatever field it skipped, not a compile-time error.
 - **Grouped counts** (a board column header, a "by status" bar chart, a pipeline stage breakdown) have an exact server-side answer: `records.groupBy`. One call returns every bucket's real count for a `select` or `checkbox` field (or a `number`/`date` field with `bucketing: "sql"`), optionally scoped by `viewId`/`filters`/`valueFilters`, without reading a single record into the browser. Use it for any grouped *count*; never derive one by tallying loaded rows.
@@ -393,7 +394,7 @@ whole table. Every one of these shipped in a real AirApp, each with a reason tha
 | `do { … } while (cursor && pages < 12)` | "fallback" when a filter seemed not to apply | Fix the query: `valueFilters` are exact, `filters` are a best-effort superset; a `date` equals filter is not pushed down by `records.list`, so match on the field type the server honours. Then read one page. |
 | `while (cursor && pageCount < 4)` | "only a few pages" | A cap is not a budget. Read one page; offer Load More. |
 | `Promise.all(Array.from({ length: totalPages - 1 }, …))` | a dashboard summary over the whole table | Counts → `records.count`; per-bucket counts → `records.groupBy`; sums / averages / min / max → `records.groupBy` with `aggregates` (omit `fieldSlug` for one summary bucket). Only per-row arithmetic across fields (a weighted amount, a duration) has no server answer — compute it from the loaded page and label it, or snapshot it from a trusted workflow. Never fetch the rest silently. |
-| `while (loaded <= target * size) await loadMore()` | "jump to page N" | `records.listPage({ page, pageSize, viewId })` — one request. Its order comes from the View, so add a sorted View if needed. |
+| `while (loaded <= target * size) await loadMore()` | "jump to page N" | `records.listPage({ page, pageSize, sort })` — one request, in the list's own order. A list merged from several Bases has no single "page N"; give it Prev/Next instead of a jump box. |
 | `allRecords(baseId)` called on navigation | building a lookup map / picker | Read the bounded page you render; resolve the rest with `records.get` for the record named by the URL, or `records.search` for a picker. |
 
 Parallel is not bounded, a cap is not a budget, and a user typing a page number is not consent to
@@ -418,6 +419,48 @@ If the approved blueprint contains an action:
 - never call review or merge from the AirApp;
 - refresh pending CR state after submission;
 - display the new CR id to the user.
+
+## Writing An Attachment Cell
+
+An `attachment` field's cell is **not** whatever `assets.confirm` hands back. It is an array of
+objects carrying exactly these five keys:
+
+```json
+{ "minutes_pdf": [{
+  "attachmentId": "att…", "fileName": "2026-W36.pdf",
+  "mimeType": "application/pdf", "size": 170470,
+  "url": "https://s1.example.com/attachments/blobs/…"
+}] }
+```
+
+`fileName` and `url` are both required; `name` is not read. Drop one and the whole record change is
+rejected with `Invalid field value: <字段名> has an invalid attachment` — a message that does not
+say which key is missing, so a wrong shape costs a bisect rather than a read. The field is untyped
+in the OpenAPI document (`additionalProperties: {}`), so this contract exists only here and in the
+`busabase` skill; there is nothing to introspect at runtime.
+
+Two ways to produce that object:
+
+```bash
+# CLI: one command does createUploadUrl → PUT → confirm and prints the cell shape
+npx --yes busabase-cli@latest assets upload --file ./slides.pptx --context record-field --output json
+```
+
+```js
+// SDK: the three calls, then assemble the cell — publicUrl becomes url, and you
+// carry fileName / mimeType / size yourself because confirm does not echo them.
+const up = await client.assets.createUploadUrl({ fileName, mimeType, sizeBytes, contentHash });
+if (!up.duplicate) await fetch(up.uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: bytes });
+const done = await client.assets.confirm({ storageKey: up.storageKey, fileName, mimeType, sizeBytes, contentHash });
+const cell = { attachmentId: done.attachmentId, fileName, mimeType, size: bytes.length, url: done.publicUrl };
+```
+
+Then check the URL answers an **anonymous** request. A browser `<img>` or download link carries no
+API key, so an attachment that only resolves with credentials is an attachment the reader cannot
+open.
+
+Writing several files to one cell is a read-modify-write: send the existing array plus the new
+entries, or the ones already archived disappear.
 
 ## Error Taxonomy
 

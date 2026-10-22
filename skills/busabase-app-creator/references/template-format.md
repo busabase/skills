@@ -100,7 +100,17 @@ charge, merge its own proposals). An agent follows what is written here.
     "schemaVersion": 3,            // bump when the declared resource shape changes
     "airapp": "busa-email-app",    // which content/ dir is the app
     "tags": ["inbox", "review-queue"],
-    "screenshots": ["assets/screenshots/overview.webp"],
+    "screenshots": [               // English/default gallery; [0] is the cover
+      "assets/screenshots/cover.webp",
+      "assets/screenshots/overview.webp"
+    ],
+    "video": "assets/recordings/busa-email.mp4",   // optional English/default demo clip
+    "locales": {                   // optional; per-locale media, falls back to the defaults
+      "zh-CN": {
+        "screenshots": ["assets/screenshots/cover-zh-CN.webp", "assets/screenshots/overview-zh-CN.webp"],
+        "video": "assets/recordings/busa-email-zh-CN.mp4"
+      }
+    },
     "agentPrompts": [              // shown after install; "Ask agent" prefills the first
       "Triage this morning's mail and draft replies for anything high priority."
     ],
@@ -112,6 +122,15 @@ charge, merge its own proposals). An agent follows what is written here.
   }
 }
 ```
+
+`screenshots` and `video` are always the English/default set. Older servers read
+only those two, and every language without its own entry falls back to them. A
+language that has its own media goes under `locales.<locale>`: its `screenshots`
+replace the default list whole (cover first, never merged per index), and a field
+it leaves out falls back to the default. Name localized files
+`<name>-<locale>.<ext>` and keep them out of the default list. `busabase-cli check`
+errors on a localized path that is not on disk and warns on unknown locale keys
+or a `-zh-CN` file in the defaults.
 
 `agentPrompts` is not decoration. It is the shortest honest answer to "what
 would I even ask this thing", which is what decides whether an installed app
@@ -289,8 +308,8 @@ hardest failure to attribute.
 ## Validating
 
 ```bash
-npx busabase-cli index . --repo <owner/repo> -o templates.json          # build the catalog
-npx busabase-cli index . --repo <owner/repo> -o templates.json --check  # verify it is current
+npx --yes busabase-cli@latest index . --repo <owner/repo> -o templates.json          # build the catalog
+npx --yes busabase-cli@latest index . --repo <owner/repo> -o templates.json --check  # verify it is current
 ```
 
 The same rules decide catalog listing and install behaviour, so a card can never
@@ -313,9 +332,9 @@ says nothing about the rest of this skill's contract, which `check` reads off th
 directory itself:
 
 ```bash
-npx busabase-cli check ./<name>              # one directory
-npx busabase-cli check . --strict --json     # every template in a repo, for CI
-npx busabase-cli check ./<name> --only airapp  # while iterating on the app
+npx --yes busabase-cli@latest check ./<name>              # one directory
+npx --yes busabase-cli@latest check . --strict --json     # every template in a repo, for CI
+npx --yes busabase-cli@latest check ./<name> --only airapp  # while iterating on the app
 ```
 
 Four things can be true of one directory and they are not four rungs of a ladder,
