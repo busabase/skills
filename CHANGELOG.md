@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.20, which installs on DeepSeek Harness 0.2.1 (its peers
+  no longer pin 0.2.0-rc.2) and drops 18 runtime dependencies nothing imports.
 - `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.19, which bundles the skills at `91201e4`, so
   DeepSeek Harness agents also run `npx --yes busabase-cli@latest`. The manifest now declares the
   rendering libraries the plugin's UI imports as runtime dependencies.
