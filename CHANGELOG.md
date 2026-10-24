@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Describe Busabase as the open-source database and workspace for AI agents in the `busabase` skill,
+  the plugin and marketplace manifests, and the READMEs. The old "approval-first knowledge base" line
+  read as if every write waited for review; a write now lands at once with write access and waits for
+  a person's review otherwise, and the text says so.
+- Bump the Claude Code plugin to `0.4.6` and the Codex plugin to `0.3.8`.
+
 - `busabase-app-creator`: a new app takes its runtime probe, its record helpers (read a page, find,
   create, update, upsert) and its "saved or waiting for review" outcome and sentence from
   `busabase-sdk/airapp` (busabase-sdk 0.99.0 or newer) instead of carrying a private copy of each.

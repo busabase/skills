@@ -2,8 +2,9 @@
 
 **English** | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md)
 
-Agent Skills + plugins for [Busabase](https://busabase.com) — the approval-first knowledge base
-where AI proposes changes, a human reviews them, and only approved changes get merged.
+Agent Skills + plugins for [Busabase](https://busabase.com) — the open-source database and workspace
+for AI agents. Every write is a change request with a message and a diff: it lands at once with
+write access and waits for a person's review otherwise.
 
 Two skills, five ways to install them — pick whatever your agent supports.
 

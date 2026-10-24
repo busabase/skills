@@ -6,7 +6,7 @@ separate from the GitHub Codex marketplace and the MCP Registry entry.
 ## Listing
 
 - Name: `Busabase`
-- Short description: `Approval-first AI knowledge`
+- Short description: `Open-source database for AI agents`
 - MCP server: `https://busabase.com/api/mcp`
 - Website: `https://busabase.com`
 - Support: `https://busabase.com/support`
