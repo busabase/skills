@@ -105,6 +105,10 @@ charge, merge its own proposals). An agent follows what is written here.
       "assets/screenshots/overview.webp"
     ],
     "video": "assets/recordings/busa-email.mp4",   // optional English/default demo clip
+    "videos": [                    // optional; up to 3 clips instead of `video`, shown after the cover
+      { "src": "assets/recordings/busa-email.mp4", "title": "30-second tour" },
+      { "src": "assets/recordings/busa-email-full.mp4", "title": "Full walkthrough" }
+    ],
     "locales": {                   // optional; per-locale media, falls back to the defaults
       "zh-CN": {
         "screenshots": ["assets/screenshots/cover-zh-CN.webp", "assets/screenshots/overview-zh-CN.webp"],
@@ -131,6 +135,15 @@ it leaves out falls back to the default. Name localized files
 `<name>-<locale>.<ext>` and keep them out of the default list. `busabase-cli check`
 errors on a localized path that is not on disk and warns on unknown locale keys
 or a `-zh-CN` file in the defaults.
+
+One clip is `video`. Several (at most three, as on the App Store) are `videos`,
+each `{ src, title }`: they sit right after the cover in the order listed, a
+locale's `videos` replaces the default list whole, and `videos` wins over `video`
+(the catalog index writes `video` as the first clip, so servers that predate
+`videos` still show one). Give every clip a `title` once there is more than one;
+`busabase-cli check` errors on more than three and on a clip file that is not on
+disk, and warns on an untitled clip or a `video` that disagrees with the first
+`videos` entry.
 
 `agentPrompts` is not decoration. It is the shortest honest answer to "what
 would I even ask this thing", which is what decides whether an installed app

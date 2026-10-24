@@ -52,24 +52,30 @@ const browserFiles = (opts) => ({
   "app/index.html": `<!doctype html><html><head><link rel="stylesheet" href="styles.css" /></head><body><script type="module" src="js/app.js"></script></body></html>`,
   "app/styles.css":
     "body { margin: 0; } .metrics { display: grid; grid-template-columns: repeat(3, 1fr); }",
-  "app/js/config.js": `export const appConfig = ${JSON.stringify(APP_CONFIG, null, 2)};`,
+  "app/js/config.js": `export const appConfig = ${JSON.stringify(
+    opts.node ? APP_CONFIG : { ...APP_CONFIG, hostedOnly: true },
+    null,
+    2,
+  )};`,
   "app/js/messages.js": "export const messages = {};",
-  "app/js/runtime.js": `export async function getRuntime() {
-  const response = await fetch("__airapp/runtime");
-  return response.json();
-}`,
+  "app/js/runtime.js": `import { detectAirAppRuntime } from "../vendor/busabase-airapp.js";
+export const getRuntime = () => detectAirAppRuntime();`,
   "app/js/busabase-client.js": `import { createBusabaseClient } from "busabase-sdk";
 export const client = createBusabaseClient({ baseUrl: window.location.origin });`,
   "app/js/providers/busabase-provider.js": `export const load = async (client, base) =>
   client.records.list({ baseId: base.baseId, limit: base.readLimit });`,
   "app/js/providers/demo-provider.js": "export const demo = [];",
+  // The real template mounts the gate in both runtimes: for a hosted-only Python
+  // app it is where a standalone run is told it cannot work.
   "app/js/app.js": `import { getRuntime } from "./runtime.js";
-${opts.node ? 'import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";\n' : ""}export async function main() {
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+export const blocked = (appConfig, runtime) => appConfig.hostedOnly && !runtime.hosted;
+export async function main() {
   const metrics = [
     ["Items", 3],
   ];
   const runtime = await getRuntime();
-  ${opts.node ? "createAirAppConnectGate({ shouldGate: () => !runtime.hosted });" : "if (!runtime.hosted) throw new Error('hosted only');"}
+  createAirAppConnectGate({ shouldGate: () => !runtime.hosted });
 }`,
 });
 
@@ -81,12 +87,17 @@ const airappRuntime = describeBusabaseAirAppRuntime();
 export { gateway, airappRuntime };
 `;
 
+// The check only looks for the helper names a bundle built from busabase-sdk
+// 0.99.0 exports, so a stand-in naming them is enough.
+const VENDORED_AIRAPP = `// vendored airapp
+export { detectAirAppRuntime, shouldUseLocalAirAppGateway, createAirAppRecords, airAppWriteMessage };`;
+
 const NODE_PACKAGE = {
   name: APP_SLUG,
   private: true,
   type: "module",
   scripts: { dev: "node server.js", start: "node server.js" },
-  dependencies: { "busabase-sdk": "0.30.1" },
+  dependencies: { "busabase-sdk": "0.99.0" },
   devDependencies: { "esbuild-wasm": "0.25.0" },
 };
 
@@ -101,15 +112,18 @@ const build = (runtime) => {
     ...browserFiles({ node: isNode }),
   };
 
+  // The browser half imports the three bundles at load whatever serves it, so a
+  // Python app needs them as much as a Node one. Only the length is asserted for
+  // the client, so a plausible stand-in is enough.
+  files["app/vendor/busabase-sdk.js"] = `// vendored\n${"x".repeat(10_050)}`;
+  files["app/vendor/busabase-airapp.js"] = VENDORED_AIRAPP;
+  files["app/vendor/busabase-airapp-gate.js"] = "// vendored gate";
   if (isNode) {
     files["package.json"] = JSON.stringify(NODE_PACKAGE, null, 2);
     files["server.js"] = NODE_SERVER;
-    // Only the length is asserted, so a plausible stand-in is enough.
-    files["app/vendor/busabase-sdk.js"] = `// vendored\n${"x".repeat(10_050)}`;
-    files["app/vendor/busabase-airapp-gate.js"] = "// vendored gate";
   } else {
     files["airapp.json"] = JSON.stringify(
-      { runtime: "python", start: "python3 server.py", port: 3000 },
+      { runtime: "python", start: "python3 server.py" },
       null,
       2,
     );
@@ -150,6 +164,89 @@ describe("airapp template check — runtimes", () => {
     const result = run(build("python"));
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /AirApp checks OK \(python\)/);
+  });
+
+  it("rejects a Python app without its vendored bundles, which would open as an empty page", () => {
+    // How this bit: the check required the bundles only of a Node app, yet the
+    // browser half imports them at load whatever serves it. A Python app passed,
+    // was deployed, and rendered a blank shell with a 404 for the gate bundle as
+    // the only clue.
+    const root = build("python");
+    rmSync(path.join(root, "app/vendor"), { recursive: true });
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Missing: app\/vendor\/busabase-sdk\.js/);
+    assert.match(result.stderr, /--runtime python/);
+  });
+
+  it("holds a Python app to the same helper rules as a Node one", () => {
+    const root = build("python");
+    writeFileSync(path.join(root, "app/vendor/busabase-airapp.js"), "// bundle from an old SDK\n");
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /busabase-airapp\.js lacks detectAirAppRuntime/);
+  });
+
+  it("requires a Python app to be marked hosted-only and to say so standalone", () => {
+    // How this bit: the gate reads a missing /auth/status as "hosted" and steps
+    // aside, so a Python app run standalone called /api/v1 with no credential and
+    // showed a bare "Not Found" plus a hint pointing at a connect screen that never
+    // appeared.
+    const unmarked = build("python");
+    writeFileSync(
+      path.join(unmarked, "app/js/config.js"),
+      `export const appConfig = ${JSON.stringify(APP_CONFIG, null, 2)};`,
+    );
+    const noConfig = run(unmarked);
+    assert.notEqual(noConfig.status, 0);
+    assert.match(noConfig.stderr, /hosted-only: set hostedOnly in its config/);
+
+    const silent = build("python");
+    writeFileSync(
+      path.join(silent, "app/js/app.js"),
+      readFileSync(path.join(silent, "app/js/app.js"), "utf8").replace(
+        /^export const blocked.*$/m,
+        "",
+      ),
+    );
+    const noMessage = run(silent);
+    assert.notEqual(noMessage.status, 0);
+    assert.match(noMessage.stderr, /have app\.js stop with an explanation/);
+
+    // A comment naming it does not count: prose about a rule never satisfies the rule.
+    const comment = build("python");
+    writeFileSync(
+      path.join(comment, "app/js/app.js"),
+      readFileSync(path.join(comment, "app/js/app.js"), "utf8").replace(
+        /^export const blocked.*$/m,
+        "// TODO: hostedOnly",
+      ),
+    );
+    assert.notEqual(run(comment).status, 0);
+  });
+
+  it("does not ask a Node app to be hosted-only", () => {
+    const result = run(build("node"));
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it("requires a Python app to mount the connect gate too", () => {
+    // Run standalone it is the gate that tells the user a Python app is hosted-only.
+    const root = build("python");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `import { getRuntime } from "./runtime.js";
+export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
+  const runtime = await getRuntime();
+  if (!runtime.hosted) throw new Error("hosted only");
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /createAirAppConnectGate/);
   });
 
   it("still rejects a Node app whose dev script is not what Busabase runs", () => {
@@ -414,10 +511,10 @@ export const hosted = AIRAPP_HOSTED_RUNTIMES.has(airappRuntime);
     const root = build("node");
     writeFileSync(
       path.join(root, "app/js/runtime.js"),
-      `const HOSTED = new Set(["nodepod", "local-node", "srt", "embed"]);
+      `import { detectAirAppRuntime } from "../vendor/busabase-airapp.js";
+const HOSTED = new Set(["nodepod", "local-node", "srt", "embed"]);
 export async function getRuntime() {
-  const response = await fetch("__airapp/runtime");
-  const body = await response.json();
+  const body = await detectAirAppRuntime();
   return { ...body, hosted: body.hosted === true || HOSTED.has(body.runtime) };
 }`,
     );
@@ -432,10 +529,10 @@ export async function getRuntime() {
     const root = build("node");
     writeFileSync(
       path.join(root, "app/js/runtime.js"),
-      `const WHATEVER = new Set(["nodepod", "srt"]);
+      `import { detectAirAppRuntime } from "../vendor/busabase-airapp.js";
+const WHATEVER = new Set(["nodepod", "srt"]);
 export async function getRuntime() {
-  const response = await fetch("__airapp/runtime");
-  const body = await response.json();
+  const body = await detectAirAppRuntime();
   return { ...body, hosted: WHATEVER.has(body.runtime) };
 }`,
     );
@@ -451,15 +548,158 @@ export async function getRuntime() {
     const root = build("node");
     writeFileSync(
       path.join(root, "app/js/runtime.js"),
-      `const STORAGE_MODES = ["local", "browser"];
+      `import { detectAirAppRuntime } from "../vendor/busabase-airapp.js";
+const STORAGE_MODES = ["local", "browser"];
 export async function getRuntime() {
-  const response = await fetch("__airapp/runtime");
-  const body = await response.json();
+  const body = await detectAirAppRuntime();
   return { ...body, modes: STORAGE_MODES, hosted: body.hosted === true };
 }`,
     );
     const result = run(root);
     assert.equal(result.status, 0, `ordinary vocabulary rejected: ${result.stderr}`);
+  });
+
+  it("rejects a runtime.js that carries its own probe instead of the SDK's", () => {
+    // 64 apps each carried a copy of this probe, and each copy had drifted:
+    // one without the JSON content-type check, one with an engine list that was
+    // two renames stale. The SDK owns the rules now; a hand-written fetch brings
+    // the copies back.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/runtime.js"),
+      `export async function getRuntime() {
+  const response = await fetch("__airapp/runtime");
+  return response.json();
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /detectAirAppRuntime/);
+  });
+
+  it("rejects a hand-written probe even when the SDK's is also called", () => {
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/runtime.js"),
+      `import { detectAirAppRuntime } from "../vendor/busabase-airapp.js";
+export const getRuntime = async () => {
+  const mine = await fetch("__airapp/runtime").then((response) => response.json());
+  return { ...(await detectAirAppRuntime()), ...mine };
+};`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Hand-written __airapp\/runtime probe/);
+  });
+
+  it("still rejects a probe with a leading slash", () => {
+    // Under the Local Node engine a leading slash resolves against Busabase's
+    // origin root. The SDK never does this; an app that fetches it by hand can.
+    const root = build("node");
+    const appPath = path.join(root, "app/js/app.js");
+    writeFileSync(
+      appPath,
+      `${readFileSync(appPath, "utf8")}\nexport const probe = () => fetch("/__airapp/runtime");\n`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Hand-written __airapp\/runtime probe|relative path/);
+  });
+
+  it("requires the connect gate to be told explicitly whether it applies", () => {
+    // Left to itself the gate probes /auth/status and treats an unreachable or
+    // non-JSON answer as hosted: it infers a fact the host already stated.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `import { getRuntime } from "./runtime.js";
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
+  await getRuntime();
+  createAirAppConnectGate({ appName: "Fixture" });
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must be given shouldGate/);
+  });
+
+  it("requires shouldGate to come from the runtime, not a constant", () => {
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `import { getRuntime } from "./runtime.js";
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
+  await getRuntime();
+  createAirAppConnectGate({ shouldGate: () => true });
+}`,
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /derived from the runtime/);
+  });
+
+  it("accepts shouldGate derived through the SDK's shouldUseLocalAirAppGateway", () => {
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "app/js/app.js"),
+      `import { getRuntime, shouldUseLocalGateway } from "./runtime.js";
+import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
+export async function main() {
+  const metrics = [
+    ["Items", 3],
+  ];
+  const runtime = await getRuntime();
+  const isDemo = () => false;
+  createAirAppConnectGate({ shouldGate: () => !isDemo() && shouldUseLocalGateway(runtime) });
+}`,
+    );
+    const result = run(root);
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it("rejects an SDK that predates the AirApp helpers", () => {
+    // The app imports `busabase-sdk/airapp` from a vendored bundle; an older SDK
+    // has none of it, so the failure would otherwise show up as a blank page.
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "package.json"),
+      JSON.stringify({
+        ...NODE_PACKAGE,
+        dependencies: { "busabase-sdk": "0.98.0" },
+      }),
+    );
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /has no AirApp helpers/);
+  });
+
+  it("accepts a newer SDK than the floor", () => {
+    const root = build("node");
+    writeFileSync(
+      path.join(root, "package.json"),
+      JSON.stringify({
+        ...NODE_PACKAGE,
+        dependencies: { "busabase-sdk": "0.100.2" },
+      }),
+    );
+    const result = run(root);
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it("rejects a vendored AirApp bundle built from an SDK without the helpers", () => {
+    const root = build("node");
+    writeFileSync(path.join(root, "app/vendor/busabase-airapp.js"), "// old bundle");
+    const result = run(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /busabase-airapp\.js lacks detectAirAppRuntime/);
   });
 
   // Each shape below shipped in a real AirApp (2026-10 layout migration).

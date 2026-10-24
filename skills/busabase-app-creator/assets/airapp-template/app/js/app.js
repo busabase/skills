@@ -1,8 +1,9 @@
+import { airAppWriteMessage } from "../vendor/busabase-airapp.js";
 import { createAirAppConnectGate } from "../vendor/busabase-airapp-gate.js";
 import { appConfig } from "./config.js";
 import { messages } from "./messages.js";
 import { getProvider } from "./providers/index.js";
-import { connectionHintKey, getRuntime, runtimeLabel } from "./runtime.js";
+import { connectionHintKey, getRuntime, runtimeLabel, shouldUseLocalGateway } from "./runtime.js";
 
 const state = {
   provider: null,
@@ -20,6 +21,11 @@ const state = {
   query: "",
   detailError: "",
   authStatus: null,
+  // The change-request action whose form is open, the outcome message of the
+  // last write ({ tone, text }), and whether a write is in flight.
+  activeAction: null,
+  notice: null,
+  saving: false,
 };
 let routeSerial = 0;
 let previousRouteWasList = false;
@@ -48,7 +54,7 @@ const displayValue = (value) => {
 };
 
 // A relation field's value is the bare id of the target record, so printing it
-// straight renders `recmtu6jct9xgoq405` where a name belongs. Resolve it against
+// straight renders an opaque `rec...` id where a name belongs. Resolve it against
 // the loaded records; when the target has not been paged in yet, say that rather
 // than showing the id.
 const cellText = (field, value) => {
@@ -101,6 +107,11 @@ const filteredRecords = () => {
       )
     : recordsForBase();
 };
+
+// The record the detail panel shows: one already paged in, else the one the
+// route fetched by id.
+const currentRecord = () =>
+  recordsForBase().find((item) => item.id === state.selectedRecordId) || state.detailRecord;
 
 const setMobileSidebar = (open) => {
   document.body.classList.toggle("sidebar-open", open);
@@ -264,8 +275,7 @@ function renderOverview() {
 }
 
 function renderDetail() {
-  const record =
-    recordsForBase().find((item) => item.id === state.selectedRecordId) || state.detailRecord;
+  const record = currentRecord();
   byId("detailEmpty").hidden = Boolean(record);
   byId("detailContent").hidden = !record;
   const overlay = state.detailPresentation === "drawer" || state.detailPresentation === "split";
@@ -298,6 +308,7 @@ function renderDetail() {
   `,
     )
     .join("");
+  renderActions(record);
 }
 
 function renderSettings() {
@@ -328,21 +339,192 @@ function renderSettings() {
     .join("");
 }
 
+// ── Change-request actions ──────────────────────────────────────────────────
+// A blueprint `ui.actions` entry of kind "change_request" is a small, named edit
+// of the open record. The write goes through the provider, whose SDK record
+// helper never passes `autoMerge`: Busabase merges the change for a viewer with
+// write access and queues it as a ChangeRequest for one without. Both are
+// correct outcomes, so the notice says which one happened
+// (`airAppWriteMessage`) instead of claiming "Saved" for a write that is only
+// waiting for someone. A read-only app, and the demo provider, show no actions.
+const actionsForBase = () =>
+  appConfig.readOnly || typeof state.provider?.updateRecord !== "function"
+    ? []
+    : (appConfig.ui.actions || []).filter(
+        (action) => action.kind === "change_request" && action.base === state.activeBase,
+      );
+
+const actionInput = (field, value) => {
+  const name = escapeHtml(field.slug);
+  if (field.type === "checkbox")
+    return `<input name="${name}" type="checkbox"${value === true ? " checked" : ""}>`;
+  if (field.type === "select") {
+    const choices = field.options?.choices || [];
+    return `<select name="${name}"><option value=""></option>${choices
+      .map(
+        (choice) =>
+          `<option value="${escapeHtml(choice.id)}"${choice.id === value ? " selected" : ""}>${escapeHtml(choice.name)}</option>`,
+      )
+      .join("")}</select>`;
+  }
+  if (field.type === "longtext" || field.type === "markdown")
+    return `<textarea name="${name}" rows="4">${escapeHtml(value ?? "")}</textarea>`;
+  return `<input name="${name}" type="${field.type === "number" ? "number" : "text"}" value="${escapeHtml(value ?? "")}" autocomplete="off">`;
+};
+
+// What the form holds, in the shape the Base stores; compared with what the
+// record holds now so only real changes are proposed.
+const formValue = (field, element) => {
+  if (field.type === "checkbox") return element.checked;
+  if (field.type === "number") return element.value === "" ? null : Number(element.value);
+  return element.value;
+};
+const storedValue = (field, record) => {
+  const value = record.fields?.[field.slug];
+  if (field.type === "checkbox") return value === true;
+  return value ?? (field.type === "number" ? null : "");
+};
+
+function renderActions(record) {
+  const actions = record ? actionsForBase() : [];
+  const bar = byId("detailActions");
+  bar.hidden = !actions.length || Boolean(state.activeAction);
+  bar.innerHTML = actions
+    .map(
+      (action) =>
+        `<button class="button" type="button" data-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`,
+    )
+    .join("");
+  byId("actionForm").hidden = !state.activeAction;
+  for (const control of byId("actionForm").querySelectorAll("button, input, select, textarea")) {
+    control.disabled = state.saving;
+  }
+  const notice = byId("detailNotice");
+  notice.hidden = !state.notice;
+  notice.className = `notice ${state.notice?.tone || ""}`.trim();
+  notice.textContent = state.notice?.text || "";
+}
+
+function openAction(actionId) {
+  const record = currentRecord();
+  const action = actionsForBase().find((item) => item.id === actionId);
+  if (!record || !action) return;
+  state.activeAction = action;
+  state.notice = null;
+  const fields = action.fields
+    .map((slug) => baseConfig().fields.find((field) => field.slug === slug))
+    .filter(Boolean);
+  byId("actionForm").innerHTML = `
+    <h3>${escapeHtml(action.label)}</h3>
+    ${fields
+      .map(
+        (field) => `
+    <label class="action-field"><span>${escapeHtml(field.name)}</span>${actionInput(field, record.fields?.[field.slug])}</label>`,
+      )
+      .join("")}
+    <label class="action-field"><span>${escapeHtml(messages.actionNote)}</span><input data-action-note type="text" autocomplete="off"></label>
+    <div class="action-buttons">
+      <button class="button primary" type="submit">${escapeHtml(messages.actionSubmit)}</button>
+      <button class="button" type="button" data-cancel-action>${escapeHtml(messages.actionCancel)}</button>
+    </div>`;
+  renderActions(record);
+  byId("actionForm").querySelector("input, select, textarea")?.focus();
+}
+
+function closeAction() {
+  state.activeAction = null;
+  byId("actionForm").hidden = true;
+  byId("actionForm").innerHTML = "";
+}
+
+// Read the open record again. The next write is made against the head it was
+// read at, and a stale one is refused as a conflict, so this runs after a saved
+// write (its head moved) and after a refused one (someone else's change may be
+// why).
+async function reloadRecord(record) {
+  const fresh = await state.provider.getRecord(state.activeBase, record.id);
+  const index = state.payload.records.findIndex((item) => item.id === fresh.id);
+  if (index >= 0) state.payload.records[index] = fresh;
+  else state.detailRecord = fresh;
+}
+
+// A saved write changed the record. A queued one changed nothing but the
+// pending-review count.
+async function refreshAfterWrite(record, outcome) {
+  try {
+    if (outcome.status === "queued") {
+      Object.assign(state.payload, await state.provider.refreshChangeRequests());
+      return;
+    }
+    await reloadRecord(record);
+  } catch {
+    // The write itself went through and the notice says so; only the screen is
+    // behind. Say that too rather than leave the old value looking current.
+    state.notice = {
+      ...state.notice,
+      text: `${state.notice.text} ${messages.actionRefreshFailed}`,
+    };
+  }
+}
+
+async function submitAction(event) {
+  event.preventDefault();
+  const record = currentRecord();
+  const action = state.activeAction;
+  if (!record || !action || state.saving) return;
+  const form = byId("actionForm");
+  const changes = {};
+  for (const slug of action.fields) {
+    const field = baseConfig().fields.find((item) => item.slug === slug);
+    const element = form.elements.namedItem(slug);
+    if (!field || !element) continue;
+    const next = formValue(field, element);
+    if (next !== storedValue(field, record)) changes[slug] = next;
+  }
+  if (!Object.keys(changes).length) {
+    state.notice = { tone: "info", text: messages.actionNoChange };
+    renderActions(record);
+    return;
+  }
+  const note = form.querySelector("[data-action-note]").value.trim();
+  const title = displayValue(record.fields?.[primaryField()]);
+  const message = `${action.label}: ${title}${note ? `. ${note}` : ""}`;
+  state.saving = true;
+  renderActions(record);
+  try {
+    const outcome = await state.provider.updateRecord(state.activeBase, record, changes, message);
+    state.notice = {
+      tone: outcome.status === "queued" ? "info" : "success",
+      text: airAppWriteMessage(outcome, { locale: appConfig.locale }),
+    };
+    closeAction();
+    await refreshAfterWrite(record, outcome);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    state.notice = { tone: "error", text: `${messages.actionFailed} ${reason}` };
+    // Best effort: the error is the news. A reload that also fails changes nothing.
+    await reloadRecord(record).catch(() => {});
+  } finally {
+    state.saving = false;
+    render();
+  }
+}
+
 // Connection UX Contract gate — `busabase-sdk/airapp-gate`, configured. The
 // three screens (connect / choose a Space / initialize the workspace), the
 // state machine behind them, and their stylesheet all live in the SDK; only
 // this app's name and demo escape hatch are its own. `shouldGate` is passed
 // explicitly rather than letting the SDK infer it from a status probe: where
 // this app runs is a fact its host states (`BUSABASE_AIRAPP_RUNTIME`,
-// surfaced through runtime.js's `getRuntime()`), never something to guess
-// from the hostname — see runtime.js for why both directions of that guess
-// are wrong.
+// surfaced through runtime.js's `getRuntime()`, the SDK's probe), never
+// something to guess from the hostname — see runtime.js for why both
+// directions of that guess are wrong.
 const isDemo = () => new URLSearchParams(window.location.search).get("demo") === "1";
 
 const gate = createAirAppConnectGate({
   appName: appConfig.appName,
   demoHref: "?demo=1",
-  shouldGate: () => !isDemo() && !state.runtime?.hosted,
+  shouldGate: () => !isDemo() && shouldUseLocalGateway(state.runtime),
   onProvision: () => {
     throw new Error(
       "This template does not self-provision; resources are created at scaffold time.",
@@ -432,6 +614,8 @@ async function syncRoute() {
   if (recordId && previousRouteWasList) history.replaceState({ fromList: true }, "");
   previousRouteWasList = state.page === "base" && !recordId;
   state.detailRecord = null;
+  closeAction();
+  state.notice = null;
   state.query = params.get("q") || "";
   state.detailError = "";
   byId("searchInput").value = state.query;
@@ -460,13 +644,26 @@ async function load() {
   // of where this app actually runs. It must never gate the call itself: the
   // runtime decides what to TELL the user, the API decides what is possible.
   state.runtime = await getRuntime();
+  // A hosted-only app (a Python host has no OAuth gateway) run standalone cannot
+  // get a credential, and the gate cannot tell it so: with no /auth/status to read
+  // it assumes a hosted origin and lets the app call /api/v1 with nothing, which
+  // ends in a bare "Not Found". Say what is true instead.
+  if (appConfig.hostedOnly && state.runtime.determined && !state.runtime.hosted && !isDemo()) {
+    setText("loadingState", "");
+    byId("errorState").hidden = false;
+    setText("errorState", messages.hostedOnly);
+    return;
+  }
   try {
     const ready = await gate.pass({ onReady: load });
     if (!ready) {
       setText("loadingState", "");
       return;
     }
-    state.authStatus = await gate.status();
+    // Only a standalone run has a gateway to ask. A hosted app never calls /auth/*:
+    // Busabase owns /api/v1 there, and the answer would be about nothing.
+    state.authStatus =
+      !isDemo() && shouldUseLocalGateway(state.runtime) ? await gate.status() : null;
     state.provider = await getProvider();
     state.payload = await state.provider.getState();
     setText("loadingState", "");
@@ -535,6 +732,16 @@ byId("sidebarScrim").addEventListener("click", () => setMobileSidebar(false));
 byId("backButton").addEventListener("click", () => {
   if (history.state?.fromList) history.back();
   else window.location.hash = listUrl();
+});
+byId("detailActions").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-action]");
+  if (button) openAction(button.dataset.action);
+});
+byId("actionForm").addEventListener("submit", submitAction);
+byId("actionForm").addEventListener("click", (event) => {
+  if (!event.target.closest("[data-cancel-action]")) return;
+  closeAction();
+  renderActions(currentRecord());
 });
 window.addEventListener("hashchange", () => {
   if (state.payload) syncRoute();

@@ -779,6 +779,82 @@ body.density-compact .records-table {
   font-size: var(--text-base);
   font-weight: 550;
 }
+/* The outcome of a write. Tone is a class, never a raw color: success is a
+ * landed write, info is one waiting for someone with write access, error is
+ * one that was refused. */
+.notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+.notice[hidden] {
+  display: none;
+}
+.notice.success {
+  border-color: color-mix(in srgb, var(--positive) 40%, var(--line));
+  color: var(--positive);
+}
+.notice.error {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  color: var(--danger);
+}
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+.detail-actions[hidden] {
+  display: none;
+}
+.action-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.action-form[hidden] {
+  display: none;
+}
+.action-form h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+.action-field {
+  display: grid;
+  gap: 4px;
+}
+.action-field span {
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.action-field input:not([type="checkbox"]),
+.action-field select,
+.action-field textarea {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-base);
+}
+.action-field input[type="checkbox"] {
+  justify-self: start;
+}
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
 .back-button,
 .detail-expand {
   padding: 0;

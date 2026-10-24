@@ -44,8 +44,21 @@ export const messages = {
     "This app was started with BUSABASE_BASE_URL set, so Busabase itself rejected the request. Check that origin, the API key, and the Space id it was started with.",
   hintStandalone:
     "This app is running standalone with no Busabase connection. Use the Connect Busabase setup to sign in, or append ?demo=1 to browse sample data instead.",
+  hostedOnly:
+    "This app runs inside Busabase only. Open it from its node in your Busabase workspace, or append ?demo=1 to browse sample data instead.",
   hintUnknown:
     "This app could not determine its runtime, so it cannot tell whether a connection is expected. Reload the page; if this persists the app is being served by something other than its own server.",
+  // Change-request actions (the blueprint's `ui.actions`). What happened to a
+  // write -- "Saved." or "Sent for review. ..." -- is the SDK's own sentence
+  // (`airAppWriteMessage`, localized for en / zh-CN / zh-TW / ja). Pass
+  // `messages: { saved, queued }` to it from app.js only for a language the SDK
+  // does not cover; do not copy the sentences here.
+  actionNote: "Note for the reviewer (optional)",
+  actionSubmit: "Submit",
+  actionCancel: "Cancel",
+  actionNoChange: "Nothing changed yet. Edit a field first.",
+  actionFailed: "Couldn't submit this change.",
+  actionRefreshFailed: "Reload the page to see the latest values.",
   setupEyebrow: "Workspace setup",
   connectTitle: "Connect Busabase",
   connectCopy: "Choose the Busabase server that holds this app's workspace.",

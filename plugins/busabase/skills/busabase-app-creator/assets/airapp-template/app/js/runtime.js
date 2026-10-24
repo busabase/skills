@@ -1,8 +1,14 @@
 /**
- * Where am I running? — the app's single source of truth.
+ * Where am I running? — the app's single entry point for that question.
  *
- * Answered by this app's own server (`server.js`), which reads the
- * `BUSABASE_AIRAPP_RUNTIME` env var Busabase injects when it spawns the app.
+ * The probe itself is the SDK's: `detectAirAppRuntime()` from `busabase-sdk/airapp`
+ * (vendored as `../vendor/busabase-airapp.js`) asks this app's own server
+ * (`server.js`), which reads the `BUSABASE_AIRAPP_RUNTIME` env var Busabase
+ * injects when it spawns the app. The SDK owns the rules that kept breaking in
+ * hand-written copies: a relative path, a JSON content-type check, a 3 s
+ * timeout, `hosted` taken from the server's own boolean, and an `unknown`
+ * outcome when the probe does not answer. Do not re-implement any of it here.
+ *
  * No other module may branch on the environment, and nothing anywhere may look
  * at `location.hostname`: a Busabase-hosted AirApp can be served from
  * `localhost`, and a standalone `npm run dev` can be reached over a signed dev
@@ -15,42 +21,25 @@
  *   unknown     — the runtime endpoint didn't answer. Say so; don't guess.
  */
 
-const UNKNOWN_RUNTIME = { runtime: "unknown", hosted: false, devProxy: false, determined: false };
-
-let pending = null;
-
-const normalize = (body) => {
-  if (!body || typeof body !== "object" || typeof body.runtime !== "string") return UNKNOWN_RUNTIME;
-  return {
-    runtime: body.runtime,
-    hosted: body.hosted === true,
-    devProxy: body.devProxy === true,
-    determined: true,
-  };
-};
+import {
+  AIRAPP_RUNTIME_UNKNOWN,
+  detectAirAppRuntime,
+  shouldUseLocalAirAppGateway,
+} from "../vendor/busabase-airapp.js";
 
 /**
- * Relative path on purpose: under the Local Node engine the app lives on a
- * sub-path of busabase's origin, and `<base href>` makes a relative fetch
- * resolve there. A leading slash would hit busabase's own root and 404.
- *
- * The content-type check is not paranoia — a hosted origin's catch-all route
- * can answer 200 with an HTML shell, and `response.ok` alone would read that
- * as a successful runtime probe.
+ * `{ runtime, hosted, devProxy, determined }`. Never rejects, and the answer is
+ * shared page-wide, so every caller may ask without another round trip.
  */
-export async function getRuntime() {
-  if (!pending) {
-    pending = fetch("__airapp/runtime", { headers: { accept: "application/json" } })
-      .then((response) => {
-        const type = response.headers.get("content-type") || "";
-        if (!response.ok || !type.includes("application/json")) return null;
-        return response.json();
-      })
-      .catch(() => null)
-      .then(normalize);
-  }
-  return pending;
-}
+export const getRuntime = () => detectAirAppRuntime();
+
+/**
+ * Whether this app's own `/auth/*` connect gate applies — the `shouldGate`
+ * answer. `unknown` shows the gate: an unnecessary gate is closed by the
+ * operator, a missing one strands them.
+ */
+export const shouldUseLocalGateway = (runtime) =>
+  shouldUseLocalAirAppGateway(runtime ?? AIRAPP_RUNTIME_UNKNOWN);
 
 /** Human-readable runtime label for the settings panel. */
 export const runtimeLabel = (runtime) =>

@@ -76,7 +76,12 @@
               <div class="detail-empty" id="detailEmpty"></div>
               <article id="detailContent" hidden>
                 <h2 id="detailTitle"></h2>
+                <div class="notice" id="detailNotice" role="status" hidden></div>
                 <div class="detail-fields" id="detailFields"></div>
+                <!-- Change-request actions from the blueprint's ui.actions. Both stay
+                     hidden for a read-only app (see renderActions in js/app.js). -->
+                <div class="detail-actions" id="detailActions" hidden></div>
+                <form class="action-form" id="actionForm" hidden></form>
               </article>
             </section>
           </section>

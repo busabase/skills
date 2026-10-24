@@ -57,7 +57,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   second AirApp implementation, and never leave a remote-only edit: read it back, back-port it to the
   canonical local project, and re-run checks before continuing.
 - **Pick a runtime first: `node` (default) or `python`.** The browser half of an AirApp — everything under `app/` — is identical either way; only the process serving it differs. Choose `python` when the app's own work is Python's (data, scraping, ML), and `node` otherwise. See "Python AirApps" below for the one thing they cannot do.
-- **When scaffolding a new app**, use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one; do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
+- **When scaffolding a new app**, use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one (`airapp-kit.mjs scaffold ... --runtime python`); do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
 - **That is a scaffolding default, not a verdict on an app you did not write.** A framework AirApp is
   valid: `vite@7.3.1` boots under the in-browser engine, and the `remote` engine is an ordinary
   container where Next/React is a shipped demo. In `maintain`, read "Which Stack Is Allowed" in
@@ -69,9 +69,17 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   could produce itself — see "Is There Source Here At All?" in `references/maintenance.md`. A `dist`-only
   push with no producer in the tree and no source findable anywhere is a Stop Condition, not a base to
   build on: never patch a minified bundle to satisfy a requested change.
-- Resolve the latest published `busabase-sdk`, verify that it exports `createBusabaseClient`, the
-  local AirApp OAuth gateway, `describeBusabaseAirAppRuntime`, and the Node credential-store entry,
-  then pin the exact version in the generated app.
+- Resolve the latest published `busabase-sdk` (0.99.0 or newer), verify that it exports
+  `createBusabaseClient`, the local AirApp OAuth gateway, `describeBusabaseAirAppRuntime`, the Node
+  credential-store entry, and the browser AirApp helpers on `busabase-sdk/airapp`
+  (`detectAirAppRuntime`, `createAirAppRecords`, `airAppWriteMessage`), then pin the exact version in
+  the generated app. The scaffold does all of this and refuses an older SDK.
+- **Use the SDK's AirApp helpers; do not write your own.** The runtime probe, the record reads and
+  writes, and the "saved or waiting for review" outcome and sentence all come from
+  `busabase-sdk/airapp`, which the scaffold already vendors as `app/vendor/busabase-airapp.js`
+  (`detectAirAppRuntime`, `createAirAppRecords`, `toAirAppWriteOutcome`, `airAppWriteMessage`). A
+  per-app copy of any of them is how the same bug ended up fixed by hand in dozens of apps.
+  `references/runtime-and-sdk.md` says how each is used.
 - Use `createBusabaseClient` against `window.location.origin` in browser code. Never hard-code an
   absolute Busabase URL, never use the obsolete `/__busabase_api__/` bridge prefix, and never put an
   API key, Bearer token, OAuth token, session cookie, or secret in browser code
@@ -79,7 +87,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
   `references/runtime-and-sdk.md`. A deployed AirApp must skip the OAuth gate and use the viewer's
   same-origin ambient session; environment credentials remain an explicit automation/testing
   override, not the user onboarding path.
-- In `create`, keep the first version read-only unless the user explicitly requests a small action. In either mode, any requested write must create a ChangeRequest; never mutate or merge canonical records from the AirApp.
+- In `create`, keep the first version read-only unless the user explicitly requests a small action. In either mode, any requested write goes through a ChangeRequest made by the SDK's record helpers, with `autoMerge` left unset: Busabase merges it for a viewer with write access and queues it for review for one without, and the app says which happened. The AirApp never calls review or merge, and never forces review on its own.
 - In `create`, access only resources created during this run. In `maintain`, use exact existing resource ids and explicitly materialize ids for newly approved resources; never discover or repurpose unrelated resources by a matching name or slug. Model new concerns with native Busabase resources.
 - Declare third-party integrations and Vault requirements in the blueprint without values. Browser AirApps cannot read Vault. Secret-consuming work must run through a trusted Busabase Workflow or explicitly configured Agent path.
 - Load persistent application configuration and workflow/domain state from Busabase through
@@ -371,12 +379,14 @@ project, and the inner directory is the AirApp static file tree. The scaffold st
 overwrite a non-empty directory; update an existing canonical project through maintain mode instead
 of replacing it blindly.
 
-The scaffold refuses an unmaterialized blueprint. It copies the tested Hono/vanilla shell, pins the resolved SDK, writes exact Folder/Node/Base/View/resource ids plus non-secret Vault requirements into deployment config, installs dependencies, verifies the SDK client export, creates the browser SDK bundle, and creates a lockfile. The bundle is part of the reviewed AirApp source so Nodepod does not run a build tool. Customize the generated domain UI and projections to match the approved blueprint; do not leave generic placeholder labels or demo entities in production mode.
+The scaffold refuses an unmaterialized blueprint. It copies the tested Hono/vanilla shell, pins the resolved SDK (0.99.0 or newer), writes exact Folder/Node/Base/View/resource ids plus non-secret Vault requirements into deployment config, installs dependencies, verifies the SDK client export and the browser AirApp helpers, creates the browser bundles (`app/vendor/busabase-sdk.js` for the client, `busabase-airapp.js` for the AirApp helpers, `busabase-airapp-gate.js` for the connect gate), and creates a lockfile. The bundles are part of the reviewed AirApp source so Nodepod does not run a build tool. Customize the generated domain UI and projections to match the approved blueprint; do not leave generic placeholder labels or demo entities in production mode.
 
 Keep the providers separate:
 
 - Demo provider: deterministic local UI data only.
-- Busabase provider: only approved canonical resources and pending CR summaries through the SDK against `/api/v1` on the app's own origin. It never exposes Vault or silently falls back to Demo data.
+- Busabase provider: only approved canonical resources and pending CR summaries through the SDK against `/api/v1` on the app's own origin. It reads and writes records through `createAirAppRecords`, keeps only the app's own rules (its procedure allowlist, how a record maps onto the UI's rows), and never exposes Vault or silently falls back to Demo data.
+
+The scaffold also renders each blueprint action of kind `change_request` as a small form on the open record (`ui.actions[].fields`, editable field types only), and tells the person whether the change was saved or is waiting for review. A read-only app renders none of it. Extend that path rather than writing a second one. It edits an open record only: **there is no "new record" form**, deliberately (see `references/runtime-and-sdk.md` § Optional Actions), so add one when the approved blueprint needs it.
 
 The local Hono scaffold must also include the OAuth routes and proxy contract in
 `references/runtime-and-sdk.md`. A generated setup screen may customize labels and layout, but it
@@ -397,19 +407,51 @@ they must not silently scan the whole Base.
 Always run:
 
 ```bash
-pnpm check
+pnpm check                 # node runtime
 node --check server.js     # node runtime
+node scripts/check.mjs     # python runtime (no package.json, so no `pnpm check`)
 python3 -m py_compile server.py   # python runtime
 ```
 
+`pnpm check` is the scaffold's own gate. When the app ships inside a package or template, also run
+the platform's checker on that package; its `airapp` layer applies the same contract (runtime
+detection, bounded reads, and `airapp/forced-review` for any `autoMerge` that is not a literal
+`true`):
+
+```bash
+npx --yes busabase-cli@latest check <package-dir>
+```
+
+An app pinned to one workspace's ids (workspace-first) is not publishable as a template, so its
+`package/workspace-ids` findings are expected there; read the `airapp` layer.
+
 ## Python AirApps
 
-A `python` app ships `airapp.json`, `server.py` and the same `app/` subtree. It declares its own
-commands, because there are no npm scripts for Busabase to read:
+Scaffold one with the same script and `--runtime python`:
+
+```bash
+node <skill-dir>/scripts/airapp-kit.mjs scaffold --blueprint <path>/blueprint.json \
+  --output <chosen-source-dir> --runtime python
+```
+
+A `python` app ships `airapp.json`, `server.py` and the same `app/` subtree as a Node app, and **no
+`package.json`** (Busabase would read one as a Node app). It declares its own commands, because
+there are no npm scripts for Busabase to read:
 
 ```jsonc
-{ "runtime": "python", "install": "…", "start": "python3 server.py", "port": 3000 }
+{ "runtime": "python", "install": "…", "start": "python3 server.py" }
 ```
+
+Do not declare a `port`. Without one the host engine hands the app a free port in `PORT` (which
+`server.py` reads) and finds it from the `listening on port N` line; a fixed `3000` makes the second
+Python app on that machine, or anything else already on 3000, die with `Address already in use`.
+
+**The browser half needs the same three bundles as a Node app.** `app/index.html` and `app/js/` import
+`app/vendor/busabase-sdk.js`, `busabase-airapp.js` and `busabase-airapp-gate.js` at load. A Python
+app has no `package.json` to run `build:sdk` from, so the scaffold builds them in a throwaway
+directory from the template's own `build:sdk` script and copies them into `app/vendor/`. Without
+them the app opens as an empty page with a 404 for the gate bundle as the only clue; `node
+scripts/check.mjs` now fails on their absence.
 
 **A Python AirApp is hosted-only, and this is not a gap to work around.** The `/auth/*` routes and
 the credentialled `/api/v1` proxy in `server.js` come from `busabase-sdk`'s local AirApp OAuth
@@ -418,9 +460,9 @@ gateway is deliberately not reimplemented in Python: porting an auth flow into a
 how two implementations drift, and the one that drifts is a security boundary.
 
 Inside Busabase nothing is missing — the browser's `/api/v1` calls are same-origin and carry the
-viewer's session, so no gateway is involved. Run standalone, `server.py` answers `/auth/*` with an
-explanation rather than a bare 404. If an app genuinely needs to run standalone with its own
-credential, write it in `node`.
+viewer's session, so no gateway is involved. Run standalone, the connect gate appears (as for a Node
+app) and `server.py` answers `/auth/*` with an explanation rather than a bare 404. If an app
+genuinely needs to run standalone with its own credential, write it in `node`.
 
 Then follow the selected validation mode in `references/ui-and-validation.md`.
 

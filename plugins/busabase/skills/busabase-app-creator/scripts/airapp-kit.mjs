@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { access, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -68,6 +79,41 @@ const VIEW_TYPES = new Set(["table", "gallery", "kanban", "calendar", "gantt"]);
 const RESOURCE_COLLECTIONS = ["docs", "drives", "whiteboards", "forms", "workflows", "html"];
 const VAULT_KEY = /^[A-Z][A-Z0-9_]*$/;
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+/**
+ * The first busabase-sdk that ships the browser AirApp helpers on `busabase-sdk/airapp`
+ * (`detectAirAppRuntime`, `createAirAppRecords`, `airAppWriteMessage`, ...) which the
+ * scaffolded app imports from its vendored bundle. An older SDK has none of them, so
+ * the scaffold refuses it instead of producing an app that fails in the browser.
+ */
+export const MIN_SDK_VERSION = "0.99.0";
+/** The browser helpers a scaffolded app imports from `busabase-sdk/airapp`. */
+const AIRAPP_BROWSER_HELPERS = [
+  "detectAirAppRuntime",
+  "shouldUseLocalAirAppGateway",
+  "createAirAppRecords",
+  "airAppWriteMessage",
+];
+
+const versionOlderThan = (version, floor) => {
+  const have = version.split("-")[0].split(".").map(Number);
+  const want = floor.split(".").map(Number);
+  for (let index = 0; index < want.length; index += 1) {
+    if (have[index] !== want[index]) return have[index] < want[index];
+  }
+  return false;
+};
+const ACTION_FIELD_TYPES = new Set([
+  "text",
+  "longtext",
+  "markdown",
+  "number",
+  "checkbox",
+  "select",
+  "url",
+  "email",
+  "phone",
+  "date",
+]);
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -340,6 +386,27 @@ export function validateBlueprint(blueprint) {
     }
     if (action?.base && !baseKeys.has(action.base))
       error(`ui.actions[${actionIndex}].base does not exist.`);
+    if (action?.kind === "change_request") {
+      // The scaffold renders one form per action on the record it names, so an
+      // action with no Base or no editable field would be a button that does nothing.
+      const prefix = `ui.actions[${actionIndex}]`;
+      if (!String(action.id || "").trim()) error(`${prefix}.id is required.`);
+      if (!String(action.label || "").trim()) error(`${prefix}.label is required.`);
+      if (!action.base) error(`${prefix}.base is required for a change_request action.`);
+      const target = bases.find((base) => base?.key === action.base);
+      const names = asArray(action.fields);
+      if (names.length === 0) error(`${prefix}.fields must name the fields the action edits.`);
+      for (const name of names) {
+        const field = asArray(target?.fields).find((item) => item?.slug === name);
+        if (target && !field) {
+          error(`${prefix}.fields references unknown field ${name} in ${action.base}.`);
+        } else if (field && !ACTION_FIELD_TYPES.has(field.type)) {
+          error(
+            `${prefix}.fields: ${name} is a ${field.type} field; the scaffold edits ${[...ACTION_FIELD_TYPES].join(", ")} fields.`,
+          );
+        }
+      }
+    }
   }
   if (app.read_only === true && actions.some((action) => action?.kind === "change_request")) {
     error("read_only app cannot declare change_request actions.");
@@ -391,6 +458,16 @@ export function validateBlueprint(blueprint) {
       error(`Forbidden change-request procedure: ${procedure}.`);
     }
   }
+  if (actions.some((action) => action?.kind === "change_request")) {
+    // An action proposes a change with `records.changeRequest`, and re-reads the record
+    // afterwards with `records.get` so the next change is made against its new head.
+    if (!asArray(permissions.change_request_procedures).includes("records.changeRequest")) {
+      error("permissions.change_request_procedures must include records.changeRequest.");
+    }
+    if (!asArray(permissions.read_procedures).includes("records.get")) {
+      error("permissions.read_procedures must include records.get for change_request actions.");
+    }
+  }
   if (seedCount < 3 || seedCount > 5) warn(`Expected 3-5 total seed records; found ${seedCount}.`);
   if (bases.length > 5)
     warn(`Large first version: ${bases.length} Bases. Confirm the user accepted this scope.`);
@@ -403,11 +480,20 @@ export async function readBlueprint(filePath) {
   return JSON.parse(raw);
 }
 
+const requireAirAppHelpers = (version) => {
+  if (versionOlderThan(version, MIN_SDK_VERSION)) {
+    throw new Error(
+      `busabase-sdk ${version} has no AirApp helpers (busabase-sdk/airapp); the scaffold needs ${MIN_SDK_VERSION} or newer.`,
+    );
+  }
+  return version;
+};
+
 export async function resolveSdkVersion(requestedVersion) {
   if (requestedVersion) {
     if (!EXACT_VERSION.test(requestedVersion))
       throw new Error("--sdk-version must be an exact version.");
-    return requestedVersion;
+    return requireAirAppHelpers(requestedVersion);
   }
   const { stdout } = await execFileAsync("npm", ["view", "busabase-sdk", "version", "--json"], {
     timeout: 30_000,
@@ -416,16 +502,24 @@ export async function resolveSdkVersion(requestedVersion) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
     throw new Error("npm returned an invalid busabase-sdk version.");
   }
-  return version;
+  return requireAirAppHelpers(version);
 }
 
 export async function verifyInstalledSdk(projectPath) {
+  // The browser helpers are checked last, and only once the Node entry points
+  // passed, so a failure names the first thing that is actually missing.
   const probe = [
     'Promise.all([import("busabase-sdk"), import("busabase-sdk/airapp-node")])',
     ".then(([sdk, airapp]) => {",
     '  if (typeof sdk.createBusabaseClient !== "function") process.exit(2);',
     '  if (typeof airapp.createBusabaseAirAppLocalGateway !== "function") process.exit(3);',
     '  if (typeof airapp.describeBusabaseAirAppRuntime !== "function") process.exit(4);',
+    '  return import("busabase-sdk/airapp");',
+    "})",
+    ".then((browser) => {",
+    `  for (const name of ${JSON.stringify(AIRAPP_BROWSER_HELPERS)}) {`,
+    '    if (typeof browser[name] !== "function") { console.error(name); process.exit(5); }',
+    "  }",
     "})",
     ".catch((error) => { console.error(error.message); process.exit(1); });",
   ].join("");
@@ -444,6 +538,10 @@ export async function verifyInstalledSdk(projectPath) {
     if (error?.code === 4)
       throw new Error(
         "Installed busabase-sdk does not provide the required runtime export describeBusabaseAirAppRuntime.",
+      );
+    if (error?.code === 5)
+      throw new Error(
+        `Installed busabase-sdk does not provide the required browser AirApp helper ${String(error?.stderr || "").trim()} (busabase-sdk/airapp); use ${MIN_SDK_VERSION} or newer.`,
       );
     throw new Error(
       `Unable to import installed busabase-sdk: ${error?.stderr || error?.message || error}`,
@@ -470,7 +568,7 @@ const resourceConfig = (resource) => ({
   node_id: undefined,
 });
 
-const deploymentConfig = (blueprint) => ({
+const deploymentConfig = (blueprint, runtime = "node") => ({
   appName: blueprint.app.name,
   appSlug: blueprint.app.slug,
   description: blueprint.app.description,
@@ -478,6 +576,9 @@ const deploymentConfig = (blueprint) => ({
   deployment: blueprint.app.deployment,
   spaceId: blueprint.app.space_id || "",
   readOnly: blueprint.app.read_only,
+  // A Python host has no OAuth gateway (see server.py), so run standalone the app
+  // can only say it needs Busabase to host it; app.js reads this to say so.
+  ...(runtime === "python" ? { hostedOnly: true } : {}),
   onboarding: blueprint.onboarding,
   brand: blueprint.app.brand || { mode: "inferred", accent: "#176B5B", logo_path: "" },
   schema: {
@@ -522,12 +623,37 @@ const deploymentConfig = (blueprint) => ({
   ),
 });
 
+/**
+ * Bundle `busabase-sdk` for the browser into `<output>/app/vendor/` in a throwaway
+ * project. A Python AirApp has no `package.json` (Busabase would read one as a Node
+ * app), so there is nowhere in the app to run `build:sdk`; but its browser half is
+ * the same as a Node app's and imports the same bundles. The commands are the
+ * template's own `build:sdk` script, not a second copy of them.
+ */
+async function buildVendorBundlesElsewhere(output, packageJson) {
+  const work = await mkdtemp(path.join(os.tmpdir(), "airapp-vendor-"));
+  try {
+    await writeFile(path.join(work, "package.json"), packageJson, "utf8");
+    await mkdir(path.join(work, "app", "vendor"), { recursive: true });
+    await execFileAsync("npm", ["install", "--save-exact"], { cwd: work, timeout: 120_000 });
+    await verifyInstalledSdk(work);
+    await execFileAsync("npm", ["run", "build:sdk"], { cwd: work, timeout: 120_000 });
+    await cp(path.join(work, "app", "vendor"), path.join(output, "app", "vendor"), {
+      recursive: true,
+    });
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
 export async function scaffoldProject({
   blueprintPath,
   outputPath,
   sdkVersion,
+  runtime = "node",
   skipInstall = false,
 }) {
+  if (!["node", "python"].includes(runtime)) throw new Error("--runtime must be node or python.");
   if (!blueprintPath) throw new Error("--blueprint is required.");
   if (!outputPath) throw new Error("--output is required.");
   const blueprint = await readBlueprint(blueprintPath);
@@ -567,10 +693,23 @@ export async function scaffoldProject({
   const packageJson = (await readFile(packageTemplate, "utf8"))
     .replaceAll("__APP_SLUG__", blueprint.app.slug)
     .replaceAll("__SDK_VERSION__", version);
-  await writeFile(path.join(output, "package.json"), packageJson, "utf8");
   await rm(packageTemplate);
 
-  const serverPath = path.join(output, "server.js");
+  // The template carries both hosts; an app keeps only the one it runs on. The
+  // other one is dead weight that would be deployed with it, and a leftover
+  // `package.json` would make Busabase read a Python app as a Node one.
+  const hostFile = runtime === "python" ? "server.py" : "server.js";
+  const spareHostFile = runtime === "python" ? "server.js" : "server.py";
+  await rm(path.join(output, spareHostFile));
+  const manifestTemplate = path.join(output, "airapp.json.template");
+  if (runtime === "python") {
+    await writeFile(path.join(output, "airapp.json"), await readFile(manifestTemplate, "utf8"));
+  } else {
+    await writeFile(path.join(output, "package.json"), packageJson, "utf8");
+  }
+  await rm(manifestTemplate);
+
+  const serverPath = path.join(output, hostFile);
   const serverTemplate = await readFile(serverPath, "utf8");
   await writeFile(
     serverPath,
@@ -582,7 +721,10 @@ export async function scaffoldProject({
   const configTemplate = await readFile(configPath, "utf8");
   await writeFile(
     configPath,
-    configTemplate.replace("__APP_CONFIG__", JSON.stringify(deploymentConfig(blueprint), null, 2)),
+    configTemplate.replace(
+      "__APP_CONFIG__",
+      JSON.stringify(deploymentConfig(blueprint, runtime), null, 2),
+    ),
     "utf8",
   );
   await writeFile(
@@ -592,12 +734,16 @@ export async function scaffoldProject({
   );
 
   if (!skipInstall) {
-    await execFileAsync("npm", ["install", "--save-exact"], { cwd: output, timeout: 120_000 });
-    await verifyInstalledSdk(output);
-    await execFileAsync("npm", ["run", "build:sdk"], { cwd: output, timeout: 120_000 });
+    if (runtime === "python") {
+      await buildVendorBundlesElsewhere(output, packageJson);
+    } else {
+      await execFileAsync("npm", ["install", "--save-exact"], { cwd: output, timeout: 120_000 });
+      await verifyInstalledSdk(output);
+      await execFileAsync("npm", ["run", "build:sdk"], { cwd: output, timeout: 120_000 });
+    }
   }
   await checkGeneratedProject(output, { requireBundle: !skipInstall });
-  return { output, sdkVersion: version, warnings: result.warnings };
+  return { output, runtime, sdkVersion: version, warnings: result.warnings };
 }
 
 // A full scan rarely looks like `while (cursor)`. See
@@ -634,15 +780,24 @@ const collectTextFiles = async (root, current = root) => {
 
 export async function checkGeneratedProject(projectPath, { requireBundle = true } = {}) {
   const root = path.resolve(projectPath);
+  // A Python app says so in `airapp.json` and has no `package.json`; a Node app
+  // has the reverse. Everything under `app/` is the same for both.
+  const manifestPath = path.join(root, "airapp.json");
+  const manifest = (await pathExists(manifestPath))
+    ? JSON.parse(await readFile(manifestPath, "utf8"))
+    : {};
+  const isNode = (manifest.runtime ?? "node") === "node";
+  const serverFile = isNode ? "server.js" : "server.py";
   const required = [
-    "package.json",
-    "server.js",
+    ...(isNode ? ["package.json"] : ["airapp.json"]),
+    serverFile,
     "airapp-blueprint.json",
     "app/index.html",
     "app/styles.css",
     "app/js/app.js",
     "app/js/config.js",
     "app/js/busabase-client.js",
+    "app/js/runtime.js",
     "app/js/providers/busabase-provider.js",
     "app/js/providers/demo-provider.js",
     "scripts/check.mjs",
@@ -651,23 +806,45 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   for (const relative of required)
     if (!(await pathExists(path.join(root, relative)))) missing.push(relative);
   const bundlePath = path.join(root, "app/vendor/busabase-sdk.js");
+  const airappBundlePath = path.join(root, "app/vendor/busabase-airapp.js");
   if (requireBundle && !(await pathExists(bundlePath))) missing.push("app/vendor/busabase-sdk.js");
+  if (requireBundle && !(await pathExists(airappBundlePath)))
+    missing.push("app/vendor/busabase-airapp.js");
   if (missing.length) throw new Error(`Generated project missing: ${missing.join(", ")}`);
 
-  const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-  const sdkVersion = packageJson.dependencies?.["busabase-sdk"];
-  if (!EXACT_VERSION.test(String(sdkVersion || "")))
-    throw new Error("busabase-sdk must use an exact version.");
-  if (!EXACT_VERSION.test(String(packageJson.devDependencies?.["esbuild-wasm"] || ""))) {
-    throw new Error("esbuild-wasm must use an exact version.");
+  // Only a Node app records its SDK version, in `package.json`; a Python app's
+  // bundles carry it implicitly, and are checked for the helpers they must export.
+  let sdkVersion;
+  if (isNode) {
+    const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+    sdkVersion = packageJson.dependencies?.["busabase-sdk"];
+    if (!EXACT_VERSION.test(String(sdkVersion || "")))
+      throw new Error("busabase-sdk must use an exact version.");
+    if (!EXACT_VERSION.test(String(packageJson.devDependencies?.["esbuild-wasm"] || ""))) {
+      throw new Error("esbuild-wasm must use an exact version.");
+    }
+    if (packageJson.scripts?.start !== "node server.js") {
+      throw new Error("start must not build or spawn subprocesses.");
+    }
+    if (packageJson.dependencies?.react || packageJson.dependencies?.vite)
+      throw new Error("React/Vite are forbidden.");
+  } else if (manifest.runtime !== "python" || typeof manifest.start !== "string") {
+    throw new Error('airapp.json must declare runtime "python" and a start command.');
   }
-  if (packageJson.scripts?.start !== "node server.js") {
-    throw new Error("start must not build or spawn subprocesses.");
-  }
-  if (packageJson.dependencies?.react || packageJson.dependencies?.vite)
-    throw new Error("React/Vite are forbidden.");
   if (requireBundle && (await stat(bundlePath)).size < 10_000)
     throw new Error("Browser SDK bundle is incomplete.");
+  if (requireBundle) {
+    const airappBundle = await readFile(airappBundlePath, "utf8");
+    const missingHelper = AIRAPP_BROWSER_HELPERS.find((name) => !airappBundle.includes(name));
+    if (missingHelper)
+      throw new Error(
+        `Browser AirApp bundle lacks ${missingHelper}; rebuild it with npm run build:sdk against busabase-sdk ${MIN_SDK_VERSION} or newer.`,
+      );
+  }
+  if (isNode && versionOlderThan(sdkVersion, MIN_SDK_VERSION))
+    throw new Error(
+      `busabase-sdk ${sdkVersion} has no AirApp helpers (busabase-sdk/airapp); use ${MIN_SDK_VERSION} or newer.`,
+    );
 
   const blueprint = JSON.parse(await readFile(path.join(root, "airapp-blueprint.json"), "utf8"));
   const validation = validateBlueprint(blueprint);
@@ -686,9 +863,9 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
       "Embedded blueprint must include all materialized Folder/Node/Base/View/resource ids.",
     );
   }
-  // `server.js` is checked separately: it is the one file allowed to mention a
-  // credential, because its dev proxy reads it from the environment.
-  const serverSource = await readFile(path.join(root, "server.js"), "utf8");
+  // The host (`server.js` or `server.py`) is checked separately: it is the one file
+  // allowed to mention a credential, because its dev proxy reads it from the environment.
+  const serverSource = await readFile(path.join(root, serverFile), "utf8");
   const configSource = await readFile(path.join(root, "app/js/config.js"), "utf8");
   const configMatch = configSource.match(/^\s*export const appConfig = ([\s\S]+);\s*$/);
   if (!configMatch) throw new Error("Generated config must export one JSON appConfig object.");
@@ -722,6 +899,13 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   }
   if (/client\.bases\.list\s*\(/.test(source))
     throw new Error("Runtime Base discovery is forbidden; use materialized Base ids.");
+  // The runtime probe and the record plumbing are the SDK's, not a per-app copy.
+  if (!/\bdetectAirAppRuntime\s*\(/.test(source))
+    throw new Error("Browser code must probe the runtime with the SDK's detectAirAppRuntime().");
+  if (!/\bcreateAirAppRecords\s*\(/.test(providerSource))
+    throw new Error(
+      "Busabase provider must read and write through the SDK's createAirAppRecords().",
+    );
   // The app talks to its own origin in every environment — same-origin inside
   // Busabase, this project's dev proxy when run standalone. Anything absolute or
   // prefixed would only work in one of them.
@@ -748,17 +932,29 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   for (const [pattern, label] of forbidden)
     if (pattern.test(source)) throw new Error(`Forbidden ${label} found in browser source.`);
   if (/Bearer\s+(?!\$\{)[A-Za-z0-9_-]{8,}/.test(serverSource))
-    throw new Error("Literal Bearer token found in server.js.");
-  if (!serverSource.includes("createBusabaseAirAppLocalGateway"))
-    throw new Error("Server must use the SDK local AirApp OAuth/Space gateway.");
-  for (const route of [
-    "/auth/status",
-    "/auth/start",
-    "/auth/callback",
-    "/auth/space",
-    "/auth/logout",
-  ]) {
-    if (!serverSource.includes(route)) throw new Error(`Server is missing ${route}.`);
+    throw new Error(`Literal Bearer token found in ${serverFile}.`);
+  if (isNode) {
+    if (!serverSource.includes("createBusabaseAirAppLocalGateway"))
+      throw new Error("Server must use the SDK local AirApp OAuth/Space gateway.");
+    for (const route of [
+      "/auth/status",
+      "/auth/start",
+      "/auth/callback",
+      "/auth/space",
+      "/auth/logout",
+    ]) {
+      if (!serverSource.includes(route)) throw new Error(`Server is missing ${route}.`);
+    }
+  } else {
+    // A Python host is hosted-only: it has no OAuth gateway to port, so it must
+    // say so at /auth/* and still tell the browser where it runs.
+    if (
+      !serverSource.includes("BUSABASE_AIRAPP_RUNTIME") ||
+      !serverSource.includes("/__airapp/runtime")
+    )
+      throw new Error("server.py must read BUSABASE_AIRAPP_RUNTIME and serve /__airapp/runtime.");
+    if (!serverSource.includes("/auth/"))
+      throw new Error("server.py must answer /auth/* with an explanation that it is hosted-only.");
   }
   // Space selection now lives in busabase-sdk/airapp-gate's createAirAppConnectGate(),
   // not a hand-rolled literal route in each app's own source.
@@ -775,7 +971,7 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
 const usage = () => {
   console.log(`Usage:
   airapp-kit.mjs validate-blueprint --blueprint <file>
-  airapp-kit.mjs scaffold --blueprint <file> --output <dir> [--sdk-version <exact>] [--skip-install]
+  airapp-kit.mjs scaffold --blueprint <file> --output <dir> [--runtime node|python] [--sdk-version <exact>] [--skip-install]
   airapp-kit.mjs check --project <dir>`);
 };
 
@@ -793,6 +989,7 @@ async function main() {
       blueprintPath: flags.blueprint,
       outputPath: flags.output,
       sdkVersion: flags["sdk-version"],
+      runtime: typeof flags.runtime === "string" ? flags.runtime : "node",
       skipInstall: Boolean(flags["skip-install"]),
     });
     console.log(JSON.stringify({ ok: true, ...result }, null, 2));
