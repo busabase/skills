@@ -20,17 +20,16 @@ const isNode = runtime === "node";
 const serverFile = isNode ? "server.js" : "server.py";
 
 const required = [
-  ...(isNode
-    ? [
-        "package.json",
-        "server.js",
-        // The vendored SDK + gate exist to give a STANDALONE app a credential of
-        // its own. A Python AirApp is hosted-only (see server.py), so requiring
-        // them would be requiring machinery it cannot use.
-        "app/vendor/busabase-sdk.js",
-        "app/vendor/busabase-airapp-gate.js",
-      ]
-    : ["airapp.json", "server.py"]),
+  ...(isNode ? ["package.json", "server.js"] : ["airapp.json", "server.py"]),
+  // The browser half is the same for both runtimes, and it imports all three
+  // bundles at load: the client, the AirApp helpers and the connect gate. A
+  // Python app has no package.json to run `build:sdk` from, but it still needs
+  // the files -- `airapp-kit scaffold --runtime python` builds them. Leaving
+  // them out of this list is how a Python app passed its check and then opened
+  // as an empty page, with a 404 for the gate bundle as the only clue.
+  "app/vendor/busabase-sdk.js",
+  "app/vendor/busabase-airapp.js",
+  "app/vendor/busabase-airapp-gate.js",
   "airapp-blueprint.json",
   "app/index.html",
   "app/styles.css",
@@ -44,8 +43,22 @@ const required = [
 ];
 
 const contents = {};
-for (const relative of required)
-  contents[relative] = await readFile(path.join(root, relative), "utf8");
+const missingFiles = [];
+for (const relative of required) {
+  const text = await readFile(path.join(root, relative), "utf8").catch(() => null);
+  if (text === null) missingFiles.push(relative);
+  else contents[relative] = text;
+}
+if (missingFiles.length) {
+  const vendor = missingFiles.some((relative) => relative.startsWith("app/vendor/"));
+  throw new Error(
+    `Missing: ${missingFiles.join(", ")}.${
+      vendor
+        ? " The browser imports the vendored bundles at load, so without them the app opens as an empty page. Build them with `npm run build:sdk` (Node) or scaffold again with `--runtime python`."
+        : ""
+    }`,
+  );
+}
 
 const packageJson = isNode ? JSON.parse(contents["package.json"]) : {};
 const blueprint = JSON.parse(contents["airapp-blueprint.json"]);
@@ -89,8 +102,38 @@ if (!isNode) {
   if (!manifest.start.includes(serverFile))
     throw new Error(`airapp.json's start command must run ${serverFile}.`);
 }
-if (isNode && contents["app/vendor/busabase-sdk.js"].length < 10_000)
+if (contents["app/vendor/busabase-sdk.js"].length < 10_000)
   throw new Error("Browser SDK bundle is missing or incomplete.");
+// The AirApp helpers (runtime probe, record reads/writes, write outcome) come
+// from `busabase-sdk/airapp`, vendored the same way as the client. A bundle built
+// from an older SDK lacks them, and the app then fails in the browser rather
+// than here.
+const AIRAPP_HELPERS = [
+  "detectAirAppRuntime",
+  "shouldUseLocalAirAppGateway",
+  "createAirAppRecords",
+  "airAppWriteMessage",
+];
+const MIN_SDK_VERSION = [0, 99, 0];
+const olderThan = (version, floor) => {
+  const have = version.split("-")[0].split(".").map(Number);
+  for (let index = 0; index < floor.length; index += 1) {
+    if (have[index] !== floor[index]) return have[index] < floor[index];
+  }
+  return false;
+};
+// Only a Node app records which SDK it was built against, in package.json.
+if (isNode && olderThan(sdkVersion, MIN_SDK_VERSION))
+  throw new Error(
+    `busabase-sdk ${sdkVersion} has no AirApp helpers (busabase-sdk/airapp); use ${MIN_SDK_VERSION.join(".")} or newer.`,
+  );
+const missingHelper = AIRAPP_HELPERS.find(
+  (name) => !contents["app/vendor/busabase-airapp.js"].includes(name),
+);
+if (missingHelper)
+  throw new Error(
+    `app/vendor/busabase-airapp.js lacks ${missingHelper}; rebuild it against busabase-sdk ${MIN_SDK_VERSION.join(".")} or newer (\`npm run build:sdk\`, or scaffold again with --runtime python).`,
+  );
 if (!["cloud", "desktop"].includes(appConfig.deployment))
   throw new Error("Invalid deployment mode.");
 if (!Array.isArray(appConfig.schema?.bases) || !appConfig.schema.bases.length)
@@ -343,8 +386,28 @@ if (
 }
 if (!/getRuntime\s*\(/.test(contents["app/js/app.js"]))
   throw new Error("app.js must resolve the runtime via runtime.js's getRuntime().");
-if (!browserSource.includes("__airapp/runtime"))
-  throw new Error("Browser source must probe the __airapp/runtime endpoint.");
+// The probe is the SDK's. Its rules (relative path, JSON content-type, timeout,
+// `hosted` from the server's own boolean, an `unknown` outcome) used to be
+// copied into every app and drifted apart; a hand-written fetch of
+// `__airapp/runtime` brings that back.
+if (!/\bdetectAirAppRuntime\s*\(/.test(stripComments(contents["app/js/runtime.js"])))
+  throw new Error(
+    "runtime.js must probe through the SDK's detectAirAppRuntime() (busabase-sdk/airapp), not a probe of its own.",
+  );
+if (/\bfetch\s*\(\s*["'`][^"'`]*__airapp\/runtime/.test(withoutComments))
+  throw new Error(
+    "Hand-written __airapp/runtime probe found; call the SDK's detectAirAppRuntime() instead.",
+  );
+// The gate is told explicitly whether it applies, from the runtime the host
+// stated -- never inferred from a status probe, never from the hostname.
+if (
+  !/createAirAppConnectGate\s*\(\s*\{[\s\S]*?\bshouldGate\s*:\s*(?:async\s*)?\(\s*\)\s*=>[^,\n]*(?:shouldUseLocalGateway|shouldUseLocalAirAppGateway|\bhosted\b)/.test(
+    stripComments(contents["app/js/app.js"]),
+  )
+)
+  throw new Error(
+    "createAirAppConnectGate() must be given shouldGate, derived from the runtime (shouldUseLocalGateway(runtime) or runtime.hosted).",
+  );
 // Relative on purpose — under the Local Node engine a leading slash resolves
 // against busabase's origin root instead of the app's preview sub-path.
 if (/["'`]\/__airapp\/runtime/.test(browserSource))
@@ -517,10 +580,24 @@ if (isNode) {
 // Space selection now lives in busabase-sdk/airapp-gate's createAirAppConnectGate(),
 // not hand-rolled per app — see runtime-and-sdk.md. Assert adoption, not the retired
 // literal route string (that now lives only in the vendored SDK bundle).
-// The connect gate is the standalone half too: it exists to walk a user through
-// obtaining a credential, which a hosted-only runtime never needs.
-if (isNode && !contents["app/js/app.js"].includes("createAirAppConnectGate"))
+// Both runtimes mount the gate. For a Node app it walks the user through obtaining
+// a credential; a Python app is hosted-only, so run standalone its gate is where
+// the user is told so (server.py answers /auth/* with the explanation) instead of
+// the app calling /api/v1 with no credential and failing in a way nobody can act on.
+if (!contents["app/js/app.js"].includes("createAirAppConnectGate"))
   throw new Error("Browser setup must use busabase-sdk/airapp-gate's createAirAppConnectGate().");
+// A Python host has no OAuth gateway, so its app is hosted-only. The gate cannot
+// say so on its own (it reads a missing /auth/status as "hosted" and steps aside),
+// so the config marks the app and app.js must stop with the explanation, rather
+// than the user landing on a bare "Not Found" from /api/v1.
+if (
+  !isNode &&
+  (appConfig.hostedOnly !== true ||
+    !/\bhostedOnly\b/.test(stripComments(contents["app/js/app.js"])))
+)
+  throw new Error(
+    "A Python app is hosted-only: set hostedOnly in its config and have app.js stop with an explanation when run standalone.",
+  );
 if (appConfig.readOnly && appConfig.permissions.change_request_procedures.length) {
   throw new Error("Read-only app declares write procedures.");
 }

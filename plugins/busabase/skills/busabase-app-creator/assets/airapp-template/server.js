@@ -47,10 +47,11 @@ app.all("/api/v1/*", (context) => gateway.proxy(context.req.raw));
  * reports only the non-interactive env bootstrap; the interactive answer is
  * the gateway's own `/auth/status`.
  *
- * Browser code must fetch this RELATIVELY (`__airapp/runtime`, no leading
- * slash). Under the Local Node engine the app is reverse-proxied onto a
- * sub-path of busabase's origin, so a leading slash resolves against the
- * origin root — busabase itself — and 404s.
+ * The browser reads it through the SDK's `detectAirAppRuntime()`
+ * (`busabase-sdk/airapp`, see `app/js/runtime.js`), which fetches it
+ * RELATIVELY (`__airapp/runtime`, no leading slash). Under the Local Node
+ * engine the app is reverse-proxied onto a sub-path of busabase's origin, so a
+ * leading slash resolves against the origin root — busabase itself — and 404s.
  */
 // Keep presence-based hosting detection centralized in the SDK. The helper
 // also preserves unknown future engine names while exposing a narrowed

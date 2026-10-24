@@ -8,12 +8,26 @@ import { promisify } from "node:util";
 
 import {
   checkGeneratedProject,
+  resolveSdkVersion,
   scaffoldProject,
   validateBlueprint,
   verifyInstalledSdk,
 } from "./airapp-kit.mjs";
 
 const execFileAsync = promisify(execFile);
+
+// Comments may explain why `autoMerge` is absent; only code can force review.
+const codeOnly = (source) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+// What busabase-sdk/airapp exports for the browser from 0.99.0 on.
+const BROWSER_HELPERS = [
+  "detectAirAppRuntime",
+  "shouldUseLocalAirAppGateway",
+  "createAirAppRecords",
+  "airAppWriteMessage",
+]
+  .map((name) => `export const ${name} = () => ({});`)
+  .join("\n");
 
 const validBlueprint = () => ({
   schema_version: 1,
@@ -199,12 +213,12 @@ test("scaffolds and checks a project without network access", async () => {
   const result = await scaffoldProject({
     blueprintPath,
     outputPath,
-    sdkVersion: "0.9.7",
+    sdkVersion: "0.99.0",
     skipInstall: true,
   });
-  assert.equal(result.sdkVersion, "0.9.7");
+  assert.equal(result.sdkVersion, "0.99.0");
   const packageJson = JSON.parse(await readFile(path.join(outputPath, "package.json"), "utf8"));
-  assert.equal(packageJson.dependencies["busabase-sdk"], "0.9.7");
+  assert.equal(packageJson.dependencies["busabase-sdk"], "0.99.0");
   const config = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
   const provider = await readFile(
     path.join(outputPath, "app/js/providers/busabase-provider.js"),
@@ -220,9 +234,20 @@ test("scaffolds and checks a project without network access", async () => {
   assert.match(config, /"key": "PUBLISH_API_KEY"/);
   assert.match(config, /"onboarding"/);
   assert.match(config, /"readLimit": 50/);
+  assert.doesNotMatch(config, /hostedOnly/);
   assert.match(provider, /base\.readLimit/);
   assert.match(provider, /limit: base\.readLimit/);
   assert.match(provider, /status: PENDING_STATUSES/);
+  // The record plumbing is the SDK's, and the app never forces review.
+  assert.match(provider, /createAirAppRecords/);
+  assert.doesNotMatch(codeOnly(provider), /autoMerge/);
+  assert.match(
+    packageJson.scripts["build:sdk"],
+    /dist\/airapp\.js .*app\/vendor\/busabase-airapp\.js/,
+  );
+  const runtime = await readFile(path.join(outputPath, "app/js/runtime.js"), "utf8");
+  assert.match(runtime, /detectAirAppRuntime/);
+  assert.doesNotMatch(runtime, /fetch\(/);
   assert.doesNotMatch(provider, /client\.bases\.list\s*\(/);
   assert.doesNotMatch(provider, /while\s*\(\s*cursor\s*\)/);
   assert.match(server, /createBusabaseAirAppLocalGateway/);
@@ -267,7 +292,7 @@ test("emits and consumes custom per-Base read budgets", async () => {
   await scaffoldProject({
     blueprintPath,
     outputPath,
-    sdkVersion: "0.9.7",
+    sdkVersion: "0.99.0",
     skipInstall: true,
   });
   const config = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
@@ -284,6 +309,11 @@ test("emits and consumes custom per-Base read budgets", async () => {
   const vendorPath = path.join(outputPath, "app/vendor");
   await mkdir(vendorPath, { recursive: true });
   await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
+  await writeFile(
+    path.join(vendorPath, "busabase-airapp.js"),
+    "export { detectAirAppRuntime, shouldUseLocalAirAppGateway, createAirAppRecords, airAppWriteMessage };",
+    "utf8",
+  );
   await writeFile(path.join(vendorPath, "busabase-airapp-gate.js"), "x".repeat(1_001), "utf8");
   const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
     cwd: outputPath,
@@ -312,7 +342,7 @@ test("refuses to scaffold before Busabase ids are materialized", async () => {
     scaffoldProject({
       blueprintPath,
       outputPath: path.join(temporary, "generated"),
-      sdkVersion: "0.9.7",
+      sdkVersion: "0.99.0",
       skipInstall: true,
     }),
     /must be materialized.*folder\.node_id.*base_id.*docs\[0\]\.node_id/s,
@@ -412,7 +442,7 @@ test("scaffolds a Desktop app without requiring a Space id", async () => {
   await scaffoldProject({
     blueprintPath,
     outputPath,
-    sdkVersion: "0.9.7",
+    sdkVersion: "0.99.0",
     skipInstall: true,
   });
   const source = await readFile(path.join(outputPath, "app/js/busabase-client.js"), "utf8");
@@ -435,6 +465,7 @@ test("verifies the installed SDK client export", async () => {
       exports: {
         ".": "./dist/index.js",
         "./airapp-node": "./dist/airapp-node.js",
+        "./airapp": "./dist/airapp.js",
       },
     }),
     "utf8",
@@ -449,6 +480,7 @@ test("verifies the installed SDK client export", async () => {
     "export const createBusabaseAirAppLocalGateway = () => ({});\nexport const describeBusabaseAirAppRuntime = () => ({});\n",
     "utf8",
   );
+  await writeFile(path.join(modulePath, "dist", "airapp.js"), BROWSER_HELPERS, "utf8");
   await verifyInstalledSdk(temporary);
 });
 
@@ -504,4 +536,256 @@ test("rejects an installed SDK without the runtime report export", async () => {
   );
 
   await assert.rejects(verifyInstalledSdk(temporary), /required runtime export/);
+});
+
+test("rejects an installed SDK without the browser AirApp helpers", async () => {
+  // 0.98.0 and earlier export the Node gateway and the runtime report but not
+  // `busabase-sdk/airapp`'s browser helpers, which the scaffolded app imports.
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-sdk-browser-test-"));
+  const sdkRoot = path.join(temporary, "node_modules", "busabase-sdk");
+  await mkdir(path.join(sdkRoot, "dist"), { recursive: true });
+  await writeFile(
+    path.join(sdkRoot, "package.json"),
+    JSON.stringify({
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./airapp-node": "./dist/airapp-node.js",
+        "./airapp": "./dist/airapp.js",
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "index.js"),
+    "export const createBusabaseClient = () => ({});\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "airapp-node.js"),
+    "export const createBusabaseAirAppLocalGateway = () => ({});\nexport const describeBusabaseAirAppRuntime = () => ({});\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(sdkRoot, "dist", "airapp.js"),
+    "export const detectAirAppRuntime = () => ({});\n",
+    "utf8",
+  );
+
+  await assert.rejects(
+    verifyInstalledSdk(temporary),
+    /required browser AirApp helper shouldUseLocalAirAppGateway/,
+  );
+});
+
+test("refuses an SDK version that predates the AirApp helpers", async () => {
+  await assert.rejects(resolveSdkVersion("0.98.0"), /has no AirApp helpers.*0\.99\.0 or newer/);
+  assert.equal(await resolveSdkVersion("0.99.0"), "0.99.0");
+  assert.equal(await resolveSdkVersion("0.100.3"), "0.100.3");
+  assert.equal(await resolveSdkVersion("1.0.0-rc.1"), "1.0.0-rc.1");
+});
+
+test("scaffolding refuses an old SDK before writing anything", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-old-sdk-test-"));
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  await writeFile(blueprintPath, JSON.stringify(validBlueprint(), null, 2), "utf8");
+  const outputPath = path.join(temporary, "generated");
+  await assert.rejects(
+    scaffoldProject({ blueprintPath, outputPath, sdkVersion: "0.98.0", skipInstall: true }),
+    /has no AirApp helpers/,
+  );
+  await assert.rejects(readFile(path.join(outputPath, "package.json"), "utf8"), /ENOENT/);
+});
+
+const writableBlueprint = () => {
+  const blueprint = validBlueprint();
+  blueprint.app.read_only = false;
+  blueprint.ui.actions = [
+    {
+      id: "change-status",
+      label: "Change status",
+      kind: "change_request",
+      base: "launches",
+      fields: ["status", "launch-date"],
+    },
+  ];
+  blueprint.permissions.read_procedures = ["records.list", "records.get", "changeRequests.list"];
+  blueprint.permissions.change_request_procedures = ["records.changeRequest"];
+  return blueprint;
+};
+
+test("accepts a change_request action on editable fields", () => {
+  const { errors } = validateBlueprint(writableBlueprint());
+  assert.deepEqual(errors, []);
+});
+
+test("a change_request action needs its Base, fields and procedures", () => {
+  const noFields = writableBlueprint();
+  noFields.ui.actions[0].fields = [];
+  assert.ok(
+    validateBlueprint(noFields).errors.some((message) => message.includes("fields must name")),
+  );
+
+  const unknownField = writableBlueprint();
+  unknownField.ui.actions[0].fields = ["missing"];
+  assert.ok(
+    validateBlueprint(unknownField).errors.some((message) =>
+      message.includes("unknown field missing in launches"),
+    ),
+  );
+
+  const notEditable = writableBlueprint();
+  notEditable.ui.actions[0].fields = ["map"];
+  assert.ok(
+    validateBlueprint(notEditable).errors.some((message) =>
+      message.includes("map is a whiteboard field"),
+    ),
+  );
+
+  const noBase = writableBlueprint();
+  delete noBase.ui.actions[0].base;
+  assert.ok(
+    validateBlueprint(noBase).errors.some((message) => message.includes("base is required")),
+  );
+
+  const noWriteProcedure = writableBlueprint();
+  noWriteProcedure.permissions.change_request_procedures = [];
+  assert.ok(
+    validateBlueprint(noWriteProcedure).errors.some((message) =>
+      message.includes("must include records.changeRequest"),
+    ),
+  );
+
+  const noGet = writableBlueprint();
+  noGet.permissions.read_procedures = ["records.list"];
+  assert.ok(
+    validateBlueprint(noGet).errors.some((message) => message.includes("must include records.get")),
+  );
+});
+
+test("scaffolds a writable app whose provider never forces review", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-write-test-"));
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  const outputPath = path.join(temporary, "generated");
+  await writeFile(blueprintPath, JSON.stringify(writableBlueprint(), null, 2), "utf8");
+  await scaffoldProject({ blueprintPath, outputPath, sdkVersion: "0.99.0", skipInstall: true });
+  const provider = await readFile(
+    path.join(outputPath, "app/js/providers/busabase-provider.js"),
+    "utf8",
+  );
+  const app = await readFile(path.join(outputPath, "app/js/app.js"), "utf8");
+  const config = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
+  assert.match(config, /"readOnly": false/);
+  assert.match(config, /"id": "change-status"/);
+  assert.match(provider, /updateRecord/);
+  assert.doesNotMatch(codeOnly(provider), /autoMerge/);
+  assert.doesNotMatch(codeOnly(app), /autoMerge/);
+  // The sentence a person reads after a write is the SDK's, not a per-app copy.
+  assert.match(app, /airAppWriteMessage/);
+  const check = await checkGeneratedProject(outputPath, { requireBundle: false });
+  assert.equal(check.ok, true);
+});
+
+test("a Node scaffold carries only the Node host", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-node-host-test-"));
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  const outputPath = path.join(temporary, "generated");
+  await writeFile(blueprintPath, JSON.stringify(validBlueprint(), null, 2), "utf8");
+  await scaffoldProject({ blueprintPath, outputPath, sdkVersion: "0.99.0", skipInstall: true });
+  // The Python host and its manifest are dead weight in a Node app, and would be deployed with it.
+  for (const spare of [
+    "server.py",
+    "airapp.json.template",
+    "airapp.json",
+    "package.json.template",
+  ]) {
+    await assert.rejects(readFile(path.join(outputPath, spare), "utf8"), /ENOENT/, spare);
+  }
+  await readFile(path.join(outputPath, "server.js"), "utf8");
+  await readFile(path.join(outputPath, "package.json"), "utf8");
+});
+
+test("scaffolds a Python app: airapp.json and server.py, no package.json, no server.js", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "busabase-app-creator-python-test-"));
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  const outputPath = path.join(temporary, "generated");
+  await writeFile(blueprintPath, JSON.stringify(validBlueprint(), null, 2), "utf8");
+  const result = await scaffoldProject({
+    blueprintPath,
+    outputPath,
+    sdkVersion: "0.99.0",
+    runtime: "python",
+    skipInstall: true,
+  });
+  assert.equal(result.runtime, "python");
+  // A leftover package.json would make Busabase read this as a Node app.
+  for (const spare of [
+    "package.json",
+    "package.json.template",
+    "server.js",
+    "airapp.json.template",
+  ]) {
+    await assert.rejects(readFile(path.join(outputPath, spare), "utf8"), /ENOENT/, spare);
+  }
+  const manifest = JSON.parse(await readFile(path.join(outputPath, "airapp.json"), "utf8"));
+  assert.equal(manifest.runtime, "python");
+  assert.equal(manifest.start, "python3 server.py");
+  // A declared port is binding: the second Python app on one machine would die on it.
+  assert.equal("port" in manifest, false);
+  const server = await readFile(path.join(outputPath, "server.py"), "utf8");
+  assert.match(server, /APP_SLUG = "launch-tracker"/);
+  assert.doesNotMatch(server, /__APP_SLUG__/);
+  // The gate cannot tell a standalone Python app it cannot work, so the config does.
+  const config = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
+  assert.match(config, /"hostedOnly": true/);
+  const check = await checkGeneratedProject(outputPath, { requireBundle: false });
+  assert.equal(check.ok, true);
+  assert.equal(check.sdkVersion, undefined);
+
+  // Its own check needs the bundles the browser imports, like a Node app's does.
+  await assert.rejects(
+    execFileAsync(process.execPath, ["scripts/check.mjs"], { cwd: outputPath }),
+    (error) => /Missing: app\/vendor\/busabase-sdk\.js/.test(error.stderr),
+  );
+  const vendorPath = path.join(outputPath, "app/vendor");
+  await mkdir(vendorPath, { recursive: true });
+  await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
+  await writeFile(path.join(vendorPath, "busabase-airapp-gate.js"), "x".repeat(1_001), "utf8");
+  await writeFile(
+    path.join(vendorPath, "busabase-airapp.js"),
+    "export { detectAirAppRuntime, shouldUseLocalAirAppGateway, createAirAppRecords, airAppWriteMessage };",
+    "utf8",
+  );
+  const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
+    cwd: outputPath,
+  });
+  assert.match(generatedCheck.stdout, /AirApp checks OK \(python\)/);
+  assert.equal((await checkGeneratedProject(outputPath, { requireBundle: true })).ok, true);
+  await writeFile(
+    path.join(vendorPath, "busabase-airapp.js"),
+    "// bundle from an old SDK\n",
+    "utf8",
+  );
+  await assert.rejects(
+    checkGeneratedProject(outputPath, { requireBundle: true }),
+    /Browser AirApp bundle lacks detectAirAppRuntime/,
+  );
+});
+
+test("refuses an unknown runtime before writing anything", async () => {
+  const temporary = await mkdtemp(
+    path.join(os.tmpdir(), "busabase-app-creator-runtime-flag-test-"),
+  );
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  await writeFile(blueprintPath, JSON.stringify(validBlueprint(), null, 2), "utf8");
+  await assert.rejects(
+    scaffoldProject({
+      blueprintPath,
+      outputPath: path.join(temporary, "generated"),
+      sdkVersion: "0.99.0",
+      runtime: "cobol",
+      skipInstall: true,
+    }),
+    /--runtime must be node or python/,
+  );
 });

@@ -24,7 +24,10 @@ drifts is a security boundary.
 The consequence, stated plainly rather than discovered: **a Python AirApp is
 hosted-only.** Inside Busabase the browser's `/api/v1` calls are same-origin and
 carry the viewer's session, so no gateway is involved and everything works. Run
-standalone, this host says so at `/auth/start` instead of 404ing at it.
+standalone, the app itself says so (its config carries `hostedOnly`, and
+`app/js/app.js` stops with the explanation rather than calling `/api/v1` with no
+credential), and this host answers `/auth/*` with the same explanation instead of
+404ing at it.
 """
 
 from __future__ import annotations

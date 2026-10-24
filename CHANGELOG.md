@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `busabase-app-creator`: a new app takes its runtime probe, its record helpers (read a page, find,
+  create, update, upsert) and its "saved or waiting for review" outcome and sentence from
+  `busabase-sdk/airapp` (busabase-sdk 0.99.0 or newer) instead of carrying a private copy of each.
+  The scaffold refuses an older SDK, renders a blueprint action of kind `change_request` as a small
+  form on the open record, and checks that no app forces review on a person's own write
+  (`airapp/forced-review`; `npx --yes busabase-cli@latest check` applies the same rule).
+- `busabase-app-creator`: a Python app now gets its browser bundles built when it is scaffolded. It used
+  to open as a blank preview because nothing could produce them, and its fixed port 3000 stopped a
+  second Python app from starting.
+- `busabase-template-creator`: a template can show up to three clips (`template.videos`), each with an
+  optional title, ahead of the screenshots.
+- Bump the Claude Code plugin to `0.4.5` and the Codex plugin to `0.3.7`, which both bundle the
+  updated `busabase-app-creator`.
+
 - `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.20, which installs on DeepSeek Harness 0.2.1 (its peers
   no longer pin 0.2.0-rc.2) and drops 18 runtime dependencies nothing imports.
 - `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.19, which bundles the skills at `91201e4`, so

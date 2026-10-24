@@ -11,7 +11,9 @@ below before judging one:
 - Hono server with `@hono/node-server`.
 - Vanilla HTML/CSS/JavaScript browser code.
 - No runtime build step, React, Vite, JSX, SWC, native binary, subprocess, browser automation, or server-side secret.
-- `busabase-sdk` pinned to the exact latest version resolved during scaffolding.
+- `busabase-sdk` pinned to the exact latest version resolved during scaffolding (0.99.0 or newer: the
+  first with the browser AirApp helpers on `busabase-sdk/airapp`, which the app imports from a
+  vendored bundle).
 
 These constraints are authoritative for higher-level App-in-Skill creators too. They may define the
 product workflow and UI requirements, but must not replace this runtime with a conflicting language,
@@ -187,9 +189,9 @@ fact "standalone"**.
 | *(unset)* | standalone `npm run dev` | this app's own dev proxy / OAuth registration |
 
 The app's host (`server.js`, or `server.py` for a Python AirApp) re-exposes it to the browser, which
-cannot read env vars, and `app/js/runtime.js` is the only module allowed to answer the question.
-Both ship in the template; keep them. The contract is the same in either language — only the host
-that serves it differs.
+cannot read env vars, and `app/js/runtime.js` is the only module allowed to answer the question — by
+asking the SDK (below), not by probing on its own. Both ship in the template; keep them. The contract
+is the same in either language — only the host that serves it differs.
 
 ```js
 import { describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
@@ -200,16 +202,37 @@ const airappRuntime = describeBusabaseAirAppRuntime();
 app.get("/__airapp/runtime", (context) => context.json(airappRuntime));
 ```
 
-The browser probe must use the **relative** path `__airapp/runtime` (no leading slash — under the
-Local Node engine a leading slash resolves against busabase's origin root) and must verify the
-response's `content-type` is JSON: a hosted origin's catch-all route can answer `200` with an HTML
-shell, and `response.ok` alone would read that as a successful probe.
+The browser half is the SDK's, not the app's. `detectAirAppRuntime()` from `busabase-sdk/airapp`
+(vendored as `app/vendor/busabase-airapp.js`) asks that endpoint and encodes every rule a hand-written
+probe has to get right: the **relative** path `__airapp/runtime` (no leading slash — under the Local
+Node engine a leading slash resolves against busabase's origin root), a JSON `content-type` check (a
+hosted origin's catch-all route can answer `200` with an HTML shell, and `response.ok` alone would
+read that as a successful probe), a 3 s timeout, and `hosted` taken from the server's own boolean —
+never from a list of engine names. The scaffold's `app/js/runtime.js` is just that call:
 
-Resolve **three** states, never two — `hosted`, `standalone`, and `unknown` (the probe did not
-answer). Keep "where am I running" separate from "do I have credentials" (`devProxy`, and the
-`/api/v1` response itself). Collapsing the two axes into one boolean is what produces a UI that
-states a fixed "authenticated" and is wrong the moment it isn't. `scripts/check.mjs` fails the build
-on `location.hostname` use, on loopback-literal comparisons, and on a missing runtime probe.
+```js
+// app/js/runtime.js
+import { detectAirAppRuntime, shouldUseLocalAirAppGateway } from "../vendor/busabase-airapp.js";
+
+export const getRuntime = () => detectAirAppRuntime(); // { runtime, hosted, devProxy, determined }
+export const shouldUseLocalGateway = (runtime) => shouldUseLocalAirAppGateway(runtime);
+```
+
+It resolves **three** states, never two — `hosted`, `standalone`, and `unknown` (the probe did not
+answer; `hosted: false, determined: false`, so the connect gate is shown: an unnecessary gate is
+closed by the operator, a missing one strands them). It never rejects, and the answer is shared
+page-wide, so call it wherever you need it. Keep "where am I running" separate from "do I have
+credentials" (`devProxy`, and the `/api/v1` response itself). Collapsing the two axes into one boolean
+is what produces a UI that states a fixed "authenticated" and is wrong the moment it isn't.
+
+`scripts/check.mjs` fails the build on `location.hostname` use, on loopback-literal comparisons, on a
+`runtime.js` that does not call `detectAirAppRuntime()`, on a hand-written `__airapp/runtime` probe,
+and on a connect gate that is not given `shouldGate`. `busabase-cli check` counts a
+`detectAirAppRuntime()` call as the probe.
+
+An app scaffolded before 0.99.0 carries its own `runtime.js` probe and record helpers, and keeps
+working. Moving it onto the SDK's helpers is a change of its own: in `maintain`, make it only when the
+approved scope includes it, and never as a side effect of an unrelated edit.
 
 ## Local Development Against Real Data
 
@@ -223,8 +246,8 @@ Use `createAirAppConnectGate()` from `busabase-sdk/airapp-gate` for the browser 
 boundary — the connect screen, the Space-selection screen, and the state machine that decides which
 one is owed. Do not hand-roll this UI per app; every App-in-Skill that did carried a duplicated
 ~160-line renderer plus a byte-identical stylesheet across dozens of apps before this existed. Pass
-`shouldGate: () => !isDemo() && !runtime.hosted` explicitly — never let the gate infer whether it is
-needed from a status probe, for the same reason hostname detection is banned below. Import
+`shouldGate: () => !isDemo() && shouldUseLocalGateway(runtime)` explicitly — never let the gate infer
+whether it is needed from a status probe, for the same reason hostname detection is banned below. Import
 `busabase-sdk/airapp-gate.css` (or vendor it, matching how `busabase-sdk` itself is vendored) for the
 default look; it is themed entirely through `--bb-gate-*` custom properties, so match `appConfig`'s
 accent color by overriding them rather than forking the renderer. `gate.pass({ onReady })` returns
@@ -295,7 +318,7 @@ skips the local OAuth gate, and constructs
 auth layer validates the same-origin browser request, resolves the Better Auth session, and scopes
 the request to the viewer's active Space.
 
-The published `busabase-sdk` ESM file can contain bare imports such as `@orpc/client`; a browser cannot resolve those imports directly. During local scaffolding, exact-pinned `esbuild-wasm` bundles the exact-pinned SDK into `app/vendor/busabase-sdk.js`. Commit that generated file as reviewed AirApp source. `start` only runs `node server.js`, so Nodepod never invokes a build tool, native binary, or subprocess. This is a dependency bridge, not an application framework: the AirApp remains Hono plus vanilla HTML, CSS, and JavaScript. Never expose `node_modules` through a static route or replace this with a third-party CDN.
+The published `busabase-sdk` ESM file can contain bare imports such as `@orpc/client`; a browser cannot resolve those imports directly. During local scaffolding, exact-pinned `esbuild-wasm` bundles the exact-pinned SDK into `app/vendor/busabase-sdk.js` (the client), `app/vendor/busabase-airapp.js` (the `busabase-sdk/airapp` helpers) and `app/vendor/busabase-airapp-gate.js` (the connect gate, with its stylesheet). `npm run build:sdk` rebuilds all of them. Commit the generated files as reviewed AirApp source. `start` only runs `node server.js`, so Nodepod never invokes a build tool, native binary, or subprocess. This is a dependency bridge, not an application framework: the AirApp remains Hono plus vanilla HTML, CSS, and JavaScript. Never expose `node_modules` through a static route or replace this with a third-party CDN.
 
 The Demo provider is dynamically imported before the Busabase provider. Consequently `?demo=1` remains deterministic and can render even before the SDK bundle exists, while production mode loads the SDK only when needed.
 
@@ -312,6 +335,49 @@ app/js/config.js
 ```
 
 The UI calls only the provider interface. The demo provider is deterministic. The Busabase provider uses only the procedures declared in `blueprint.json` and reads only the exact materialized resource ids written into generated config. Do not list the workspace at runtime to rediscover configured resources by slug.
+
+## Reading And Writing Records
+
+The scaffold's provider is built on `createAirAppRecords` (`busabase-sdk/airapp`, vendored as
+`app/vendor/busabase-airapp.js`); keep it that way instead of re-deriving the plumbing. Apps used to
+carry their own `readPage` / `findRecord` / `upsert` / `isQueued` and their own copy of the "sent for
+review" sentence, and a fix to any of them had to be applied to each copy by hand.
+
+```js
+import { airAppWriteMessage, createAirAppRecords } from "../../vendor/busabase-airapp.js";
+
+const records = createAirAppRecords(client, { appId: appConfig.appId });
+
+const page = await records.readPage({ baseId: base.baseId, limit: base.readLimit, cursor }); // one page
+const row = page.records[0]; // RecordVO + `fields` (current values by slug)
+const match = await records.findRecord({ baseId, fieldSlug: "deal-id", valueText: dealId }); // or null
+const outcome = await records.upsert({ baseId, fieldSlug: "deal-id", valueText: dealId, fields, message });
+// outcome: { status: "saved" | "queued", recordId?, changeRequestId?, action, response }
+state.notice = airAppWriteMessage(outcome, { locale }); // "Saved." / "Sent for review. …"
+```
+
+- **Never pass `autoMerge` from app code.** The helpers do not, and `busabase-cli check` fails
+  (`airapp/forced-review`) on any `autoMerge` that is not a literal `true` — an explicit `false`, a value
+  worked out from where the app runs, or a variable passed through. A person's own write follows their
+  permission: merged for someone with write access, a ChangeRequest for someone without. Both are
+  correct outcomes; report which one happened. The only exception is a write that is itself something
+  outgoing a second person must approve before it is sent — mark it on the line or the line above with
+  `// allow-forced-review: <reason, 20+ characters>`.
+- **Say what happened.** `queued` means the change is waiting for someone with write access, and the
+  record still shows its old value. Show `airAppWriteMessage(outcome)` (en, zh-CN, zh-TW, ja; pass
+  `messages: { saved, queued }` for your own wording), and do not render a queued write as if it landed.
+  For bulk writes, `toAirAppWriteOutcome(response)` gives the same shape, with `recordIds`.
+- **The app's own rules stay in the provider:** the procedure allowlist check, how a record maps onto
+  the UI's row shape, how keys are spelled. The helpers take and return field values keyed by the Base's
+  slugs; convert at the edge if the UI uses another spelling.
+- `upsert` updates against the `headCommitId` it just read, and fills the match field into a create
+  when `fields` leaves it out, so the next upsert finds that record instead of creating another.
+- `updateRecord` takes the `baseCommitId` you read the record at. After a write that was **saved**,
+  read the record again before the next write: its head moved, and a stale one is refused as a
+  conflict. A **queued** write changed nothing yet, so only the pending-review count needs a refresh.
+- The write procedures an app may use are named in the blueprint's
+  `permissions.change_request_procedures`: `records.changeRequest` to change a record,
+  `bases.createChangeRequest` to create one. The provider checks the allowlist before calling.
 
 ## Persistent Configuration And Native Nodes
 
@@ -411,14 +477,34 @@ Three different questions need three different answers — do not conflate them:
 
 ## Optional Actions
 
-If the approved blueprint contains an action:
+If the approved blueprint contains an action, the scaffold already renders it: a button on the open
+record opens a form for the action's `fields` (text, longtext, markdown, number, checkbox, select, url,
+email, phone, date), with an optional note for the reviewer. Keep to that shape when you extend it:
 
-- implement only `kind: "change_request"`;
-- show the proposed fields and message before submission;
-- create a pending CR;
-- never call review or merge from the AirApp;
-- refresh pending CR state after submission;
-- display the new CR id to the user.
+- implement only `kind: "change_request"`, and only for a record the person has open;
+- show the proposed fields and message before submission, and send only the fields that changed;
+- write through the provider's `updateRecord` (the SDK helper), so `autoMerge` stays unset;
+- say what happened with `airAppWriteMessage(outcome)`: "Saved." when it landed, "Sent for review."
+  when it is waiting for someone with write access, and leave the record showing its old value in the
+  second case;
+- never call review or merge from the AirApp, and never force review: Busabase decides from the
+  person's own permission;
+- prevent a second submission while one is in flight;
+- after a queued write refresh the pending-review count; after a saved one read the record again.
+
+**The scaffold has no "new record" form, on purpose.** An action edits the record the person has
+open. Creating one needs decisions the blueprint cannot make for you — which fields are asked for,
+their defaults, how a relation is chosen, what makes a retried submit the same record — so there is no
+generic version to ship. When the approved scope calls for it, add it to the provider next to
+`updateRecord`:
+
+- call `createRecord({ baseId, fields, message, idempotencyKey })` from `createAirAppRecords`, and
+  allow it by naming `bases.createChangeRequest` in `permissions.change_request_procedures`;
+- send an `idempotencyKey` so a submit retried after a timeout is the same record, not a second one;
+- read the outcome like any other write: a **queued** create has no record yet (`outcome.recordId`
+  is absent), so show the sentence and stay on the form or the list — do not navigate to a record
+  that does not exist; a **saved** one names it in `outcome.recordId`;
+- leave `autoMerge` unset, as everywhere else.
 
 ## Writing An Attachment Cell
 
