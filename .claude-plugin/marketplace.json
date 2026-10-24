@@ -7,13 +7,13 @@
     "url": "https://busabase.com"
   },
   "metadata": {
-    "description": "Approval-first Busabase knowledge and workspace app workflows for Claude Code"
+    "description": "Busabase, the open-source database and workspace for AI agents, in Claude Code"
   },
   "plugins": [
     {
       "name": "busabase",
       "source": "./claude",
-      "description": "Drive a Busabase workspace and create complete workspace apps — approval-first, human stays in control.",
+      "description": "Drive a Busabase workspace and create complete workspace apps. Writes land at once with write access and wait for review otherwise.",
       "category": "productivity",
       "homepage": "https://busabase.com",
       "author": {

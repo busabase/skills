@@ -2,8 +2,8 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | **繁體中文** | [日本語](./README.ja.md)
 
-適用於 [Busabase](https://busabase.com) 的智慧代理技能與外掛。Busabase 是一個審核優先的知識庫：
-AI 提出變更，由人工審核，只有獲准的變更才會合併。
+適用於 [Busabase](https://busabase.com) 的智慧代理技能與外掛。Busabase 是面向 AI Agent 的開源資料庫與工作區：
+每次寫入都是附帶說明與差異的變更請求，有寫入權限就直接生效，否則等人審核。
 
 兩個技能、五種安裝方式，請選擇你的智慧代理支援的方式。
 

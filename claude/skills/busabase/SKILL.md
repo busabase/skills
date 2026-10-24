@@ -1,12 +1,14 @@
 ---
 name: busabase
-description: Use the bundled Busabase MCP tools to search approval-first workspace knowledge, propose reviewable changes, and act on ChangeRequests only within explicit user approval boundaries. Before doing any work, find the space's playbooks (skills and custom prompts) for the job.
+description: "Use the bundled Busabase MCP tools to work in a Busabase workspace, the open-source database and workspace for AI agents: find the space's playbooks (skills and custom prompts) first, then read and write records, docs, skills and apps. Writes land with write access and wait for review otherwise; approve or merge a waiting change request only when the user explicitly asks."
 ---
 
 # Busabase
 
-Busabase is an approval-first knowledge base. Agents propose changes as ChangeRequests; reviewed
-changes become canonical only after an explicit merge decision.
+Busabase is the open-source database and workspace for AI agents: agents and people share the
+same structured data, docs, skills, and apps. Every write is a ChangeRequest with a message and a
+diff. It lands at once when your connection has write access to the target, and waits for a
+person's review otherwise.
 
 This Claude Code plugin supplies the hosted MCP connection and browser-based OAuth. Do not ask the
 user for an API key, read `~/.busabase/.env`, or use curl as a substitute for the bundled MCP tools.

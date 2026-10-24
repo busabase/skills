@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "busabase",
-  "version": "0.4.5",
-  "description": "Approval-first Busabase knowledge workflows and guided workspace app creation for Claude Code.",
+  "version": "0.4.6",
+  "description": "The open-source database and workspace for AI agents: drive a Busabase workspace and create complete workspace apps from Claude Code.",
   "author": {
     "name": "Busabase",
     "url": "https://busabase.com"

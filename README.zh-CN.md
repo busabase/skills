@@ -2,8 +2,8 @@
 
 [English](./README.md) | **简体中文** | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja.md)
 
-适用于 [Busabase](https://busabase.com) 的智能体技能和插件。Busabase 是一个审批优先的知识库：
-AI 提出变更，由人工审核，只有获批的变更才会被合并。
+适用于 [Busabase](https://busabase.com) 的智能体技能和插件。Busabase 是面向 AI Agent 的开源数据库与工作区：
+每次写入都是带说明和差异的变更请求，有写权限就直接生效，否则等人审核。
 
 两个技能，五种安装方式，请选择你的智能体支持的方式。
 

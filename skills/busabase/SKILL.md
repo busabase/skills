@@ -1,12 +1,12 @@
 ---
 name: busabase
-description: Drive any Busabase workspace — the user's database, knowledge base, apps library, and skills registry for AI agents. Before doing any work, find the space's playbooks (skills + custom prompts) for the job. Write through ChangeRequests, which merge immediately with write access and queue for review otherwise. Use busabase-cli for ergonomic commands, curl for the quick API loop, or the OpenAPI spec / MCP for the full surface. Reads the base URL, API key, and target space from ~/.busabase/.env.
+description: "Busabase is the open-source database and workspace for AI agents. Use this skill to read and write a Busabase workspace — records, docs, files, skills and apps — through the CLI, API or MCP. Writes are change requests: they land at once with write access and wait for review otherwise."
 ---
 
 # Busabase
 
-**Busabase is a workspace built for AI agents** — a database, a knowledge base, an apps library, and
-a skills registry that the user and their agents share. You write into it through a
+**Busabase is the open-source database and workspace for AI agents** — the user and their agents
+share the same structured data, docs, files, skills, and apps. You write into it through a
 **ChangeRequest**: every change carries a message, a diff, an author, and an audit trail, instead of
 mutating a table invisibly.
 
@@ -66,7 +66,8 @@ npx --yes busabase-cli@latest playbooks get --kind skill --node-id <nodeId>     
 
 ## Connect
 
-Load the workspace config, then probe which edition you are talking to — before your first write:
+Load the workspace config (`~/.busabase/.env` holds the base URL, API key, and target space), then
+probe which edition you are talking to — before your first write:
 
 ```bash
 set -a; [ -f ~/.busabase/.env ] && . ~/.busabase/.env; set +a
@@ -168,7 +169,8 @@ human's decision; never bypass review that's actually pending.
 
 ## Write for the reviewer
 
-Everything you propose lands in a human's review inbox:
+A human reads what you write — in the review inbox while it waits for review, in the history once
+it has merged:
 
 1. **The PRIMARY field** (the Base's *first* field, often `title`/`name`) is the record's display
    name everywhere — CR titles, relation chips, search. Give it a short, specific, human-readable

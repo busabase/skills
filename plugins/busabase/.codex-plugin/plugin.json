@@ -1,7 +1,7 @@
 {
   "name": "busabase",
-  "version": "0.3.7",
-  "description": "Approval-first Busabase knowledge workflows and guided workspace app creation.",
+  "version": "0.3.8",
+  "description": "The open-source database and workspace for AI agents: drive a Busabase workspace and create complete workspace apps.",
   "author": { "name": "Busabase", "url": "https://busabase.com" },
   "homepage": "https://busabase.com/support",
   "repository": "https://github.com/busabase/skills",
@@ -10,8 +10,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Busabase",
-    "shortDescription": "Approval-first AI knowledge",
-    "longDescription": "Connect Codex to Busabase with browser-based OAuth. Search trusted workspace knowledge, propose reviewable changes, and create complete workspace apps while preserving explicit human approval boundaries.",
+    "shortDescription": "Open-source database for AI agents",
+    "longDescription": "Connect Codex to Busabase with browser-based OAuth. Read and write records, docs, files, skills and apps in the open-source database and workspace for AI agents. Every write is a change request: it lands at once with write access and waits for a person's review otherwise.",
     "developerName": "Busabase",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
