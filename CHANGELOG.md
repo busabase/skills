@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `busabase`: request 24-hour read-only links for chat results, honor explicit durations up to
+  seven days when supported, and display the expiry returned by the server alongside the signed-in
+  dashboard link. CLI, HTTP, and SDK examples now pass the duration explicitly.
+
 - Describe Busabase as the open-source database and workspace for AI agents in the `busabase` skill,
   the plugin and marketplace manifests, and the READMEs. The old "approval-first knowledge base" line
   read as if every write waited for review; a write now lands at once with write access and waits for
