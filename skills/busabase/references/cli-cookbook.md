@@ -133,6 +133,52 @@ curl -X POST "$BUSABASE_BASE_URL/api/v1/nodes/change-requests" \
             ] }'
 ```
 
+### Documents attached to records
+
+Busabase stores and searches text but never generates it. A PDF, docx, pptx, xlsx or scanned image
+is invisible to `grep` and search until an agent supplies its text; text-kind files
+(csv/log/md/json/…) are searchable on upload and need nothing. So when you attach a document
+someone may need to find later, extract its text in the same pass, without being asked:
+
+```bash
+# 1. Upload. 2. Reference the upload output in the record. That mounts the file.
+# 3. Extract locally with whatever you have (pdftotext, pandoc, OCR…). 4. Hand the text back.
+npx --yes busabase-cli@latest assets upload --file ./contract.pdf --context record-field --output json
+npx --yes busabase-cli@latest bases create-change-request --base-id <id> \
+  --fields-json '{"title":"Acme contract","summary":"Two-year renewal, 60-day notice","contract":[<upload output>]}' \
+  --message "Add the Acme contract"
+pdftotext ./contract.pdf ./extracted.txt
+npx --yes busabase-cli@latest assets put-text --asset-id <asset-id> --file ./extracted.txt
+# The file truly has no text (OCR found nothing): stop grep listing it under `missing`.
+npx --yes busabase-cli@latest assets put-text --asset-id <asset-id> --none
+
+# Prove it: search for a phrase from the file, and read coverage.files.missing.
+npx --yes busabase-cli@latest grep --pattern "60-day notice" --sources files --output json
+```
+
+- Record fields get structured values and a short summary. The full text goes through `put-text`,
+  never into a field.
+- Write the record before `put-text`. A file that is not on any record yet is refused with
+  `Asset not found`, even for a write-level key. Until the text lands the file shows up in `missing`.
+- `put-text` needs a write-level key. A changeRequest or read key is refused with
+  `This API key's permission level (changeRequest) does not allow workbench.assets.putText`. A
+  changeRequest record also stays in review and does not mount its file until it is merged, so ask
+  someone with a write-level key to run `put-text` after the merge, and say the text is not supplied
+  yet. Don't report the file as searchable.
+- No extractor for the format, or extraction failed: say so and leave the file in `missing`. Use
+  `--none` only when there really is no text, not to clear the list; grep then counts the file
+  under `unsearchable`.
+- Skip attachments nobody searches by content, such as covers and logos.
+
+Finding that text again differs from searching record fields:
+
+- `--sources records` and `--base-slugs` read field values only. They report the Base as scanned and
+  return nothing, even when the attachment holds the phrase. `--drive-path` covers Drive and Skill
+  files only and misses it too. Use `--sources files` without `--drive-path`, or omit `--sources`.
+- A hit's `owner` names the Base, not the record. To get back to the record:
+  `assets get --asset-id <asset-id> --output json`, read `usages[].recordId` and `fieldSlug`, then
+  `records get --record-id <record-id> --output json`.
+
 ### Scenario prompts on a node you created
 
 `nodes create` takes the list inline; `nodes set-agent-prompts` sets or replaces it later. Both
