@@ -15,8 +15,9 @@
 - `busabase`: a Busabase URL in a message is a locator, not a page to open. The agent reads what it
   points at through Busabase, and a new `read-a-url` reference lists every path shape, how a slug
   becomes a space id, and how to treat another deployment and read-only embed links.
-- `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.22, whose system prompt opens with the new category
-  line and which bundles the latest skills.
+- `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.23, whose system prompt opens with the new category
+  line, which bundles the latest skills (attachment text, space instructions, URL locator), and which
+  is built against `busabase-sdk` 1.0.0.
 - Bump the Claude Code plugin to `0.4.7` and the Codex plugin to `0.3.9`, which both bundle the
   updated `busabase` skill.
 
