@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `busabase`: when a document is attached to a record, extract its text and hand it back with
+  `assets put-text`, so `grep` and search can find the wording. The CLI cookbook now gives the order
+  (write the record first, then supply the text), what each key level may do (a changeRequest or
+  read key is refused), how `--none` moves a scanned file from `missing` to `unsearchable`, why
+  `--sources records` and `--drive-path` cannot see attachment text, and how to get from a hit back
+  to its record with `assets get` and `records get`.
+- `busabase`: read the selected space's global instructions at the start of each task, before
+  searching playbooks (MCP `space_instructions_get`, CLI `busabase-cli space-instructions get`, or
+  HTTP `GET /api/v1/space-instructions`). They carry the team's vision, mission, values and design
+  style, and never grant permissions.
+- `busabase`: a Busabase URL in a message is a locator, not a page to open. The agent reads what it
+  points at through Busabase, and a new `read-a-url` reference lists every path shape, how a slug
+  becomes a space id, and how to treat another deployment and read-only embed links.
+- `dsh-plugin/`: track `@busabase/dsh-plugin` 0.1.22, whose system prompt opens with the new category
+  line and which bundles the latest skills.
+- Bump the Claude Code plugin to `0.4.7` and the Codex plugin to `0.3.9`, which both bundle the
+  updated `busabase` skill.
+
 - `busabase`: request 24-hour read-only links for chat results, honor explicit durations up to
   seven days when supported, and display the expiry returned by the server alongside the signed-in
   dashboard link. CLI, HTTP, and SDK examples now pass the duration explicitly.

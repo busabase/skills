@@ -162,17 +162,23 @@ validatePluginManifest(await readJson("plugin.json"));
 validateMcpConfig(await readJson("mcp.json"));
 /**
  * The plugin-bundled `busabase` skills are what a plugin user's agent reads
- * first. Both must open every task with a playbook lookup, so an edit to one of
- * them cannot quietly drop the rule the other still carries.
+ * first. Both must open every task by reading the space instructions and then looking
+ * up a playbook, so an edit to one of them cannot quietly drop the rule the
+ * other still carries.
  */
 async function validatePlaybookRule() {
-  const heading = "**Before you work anything out, look for a playbook.**";
+  const heading =
+    "**Before you work anything out, read the space instructions, then look for a playbook.**";
   for (const skillPath of [
     "claude/skills/busabase/SKILL.md",
     "plugins/busabase/skills/busabase/SKILL.md",
   ]) {
     const content = await readFile(path.join(root, skillPath), "utf8");
     assert(content.includes(heading), `${skillPath} must carry the playbook-first rule`);
+    assert(
+      content.includes("`space_instructions_get`"),
+      `${skillPath} must name space_instructions_get`,
+    );
     assert(content.includes("`playbooks_search`"), `${skillPath} must name playbooks_search`);
     assert(content.includes("`playbooks_get`"), `${skillPath} must name playbooks_get`);
   }

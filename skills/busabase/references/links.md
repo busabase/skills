@@ -1,5 +1,8 @@
 # Return a clickable result
 
+This file builds URLs for your reply. For the opposite direction (the user hands you a Busabase
+URL and you need what it points at), read [`read-a-url.md`](read-a-url.md).
+
 After every successful mutation, include a short Markdown link in the chat response that opens
 the exact result in Busabase. A bare id or local filesystem path is not enough when a browser
 URL can be constructed.
