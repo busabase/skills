@@ -111,6 +111,10 @@ another origin cannot be read through it: tell the user which deployment it poin
   clearly requires new structure. Show the intended schema first when the structure is not already
   specified.
 - Give each proposal a concise reviewer-facing message that explains what changes and why.
+- To give a space a welcome page (shown at the top of Home to every member who can read it), write
+  the guide as a Doc or HTML node first and read it back, then call `space_welcome_get` and
+  `space_welcome_update` with that node's id and the returned `version` as `expectedVersion`.
+  This is workspace configuration that needs management access; set it only when the user asks.
 - Read the resulting ChangeRequest back when the tool returns its identifier.
 
 ## Review decisions

@@ -22,6 +22,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillDir = path.resolve(scriptDir, "..");
 const templateDir = path.join(skillDir, "assets", "airapp-template");
 
+const { checkSiteWorker } = await import("../assets/airapp-template/scripts/check-site-worker.mjs");
+
 const FIELD_TYPES = new Set([
   "text",
   "longtext",
@@ -706,8 +708,17 @@ export async function scaffoldProject({
     await writeFile(path.join(output, "airapp.json"), await readFile(manifestTemplate, "utf8"));
   } else {
     await writeFile(path.join(output, "package.json"), packageJson, "utf8");
+    await writeFile(
+      path.join(output, "airapp.json"),
+      `${JSON.stringify(
+        { runtime: "node", site: { entry: "vendor/worker.js", assets: "app", access: "read" } },
+        null,
+        2,
+      )}\n`,
+    );
   }
   await rm(manifestTemplate);
+  if (runtime === "python") await rm(path.join(output, "site-worker.js"));
 
   const serverPath = path.join(output, hostFile);
   const serverTemplate = await readFile(serverPath, "utf8");
@@ -740,6 +751,7 @@ export async function scaffoldProject({
       await execFileAsync("npm", ["install", "--save-exact"], { cwd: output, timeout: 120_000 });
       await verifyInstalledSdk(output);
       await execFileAsync("npm", ["run", "build:sdk"], { cwd: output, timeout: 120_000 });
+      await execFileAsync("npm", ["run", "build:site"], { cwd: output, timeout: 120_000 });
     }
   }
   await checkGeneratedProject(output, { requireBundle: !skipInstall });
@@ -780,8 +792,8 @@ const collectTextFiles = async (root, current = root) => {
 
 export async function checkGeneratedProject(projectPath, { requireBundle = true } = {}) {
   const root = path.resolve(projectPath);
-  // A Python app says so in `airapp.json` and has no `package.json`; a Node app
-  // has the reverse. Everything under `app/` is the same for both.
+  // Both hosts declare their runtime. Only Node also has package.json and a
+  // separately bundled website Worker; the browser subtree remains shared.
   const manifestPath = path.join(root, "airapp.json");
   const manifest = (await pathExists(manifestPath))
     ? JSON.parse(await readFile(manifestPath, "utf8"))
@@ -801,6 +813,7 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
     "app/js/providers/busabase-provider.js",
     "app/js/providers/demo-provider.js",
     "scripts/check.mjs",
+    "scripts/check-site-worker.mjs",
   ];
   const missing = [];
   for (const relative of required)
@@ -831,6 +844,19 @@ export async function checkGeneratedProject(projectPath, { requireBundle = true 
   } else if (manifest.runtime !== "python" || typeof manifest.start !== "string") {
     throw new Error('airapp.json must declare runtime "python" and a start command.');
   }
+  if (isNode) {
+    if (
+      manifest.site?.entry !== "vendor/worker.js" ||
+      manifest.site?.assets !== "app" ||
+      manifest.site?.access !== "read"
+    )
+      throw new Error("Node starter requires its read-only site manifest.");
+    if (!(await pathExists(path.join(root, "site-worker.js"))))
+      throw new Error("Missing site-worker.js source.");
+    if (requireBundle && !(await pathExists(path.join(root, "vendor/worker.js"))))
+      throw new Error("Missing site Worker bundle: run npm run build:site.");
+  }
+  if (isNode && requireBundle) await checkSiteWorker(root);
   if (requireBundle && (await stat(bundlePath)).size < 10_000)
     throw new Error("Browser SDK bundle is incomplete.");
   if (requireBundle) {

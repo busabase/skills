@@ -19,7 +19,19 @@ if (!["node", "python"].includes(runtime))
 const isNode = runtime === "node";
 const serverFile = isNode ? "server.js" : "server.py";
 
+if (
+  manifest.site &&
+  (runtime !== "node" ||
+    manifest.site.entry !== "vendor/worker.js" ||
+    manifest.site.assets !== "app" ||
+    manifest.site.access !== "read")
+)
+  throw new Error("Starter site must use its read-only Node Worker and app assets.");
+
 const required = [
+  ...(manifest.site
+    ? ["site-worker.js", "vendor/worker.js", "app/js/providers/site-provider.js"]
+    : []),
   ...(isNode ? ["package.json", "server.js"] : ["airapp.json", "server.py"]),
   // The browser half is the same for both runtimes, and it imports all three
   // bundles at load: the client, the AirApp helpers and the connect gate. A
@@ -58,6 +70,11 @@ if (missingFiles.length) {
         : ""
     }`,
   );
+}
+
+if (manifest.site) {
+  const { checkSiteWorker } = await import("./check-site-worker.mjs");
+  await checkSiteWorker(root);
 }
 
 const packageJson = isNode ? JSON.parse(contents["package.json"]) : {};

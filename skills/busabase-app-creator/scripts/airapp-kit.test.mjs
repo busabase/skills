@@ -306,19 +306,46 @@ test("emits and consumes custom per-Base read budgets", async () => {
   assert.match(provider, /limit: base\.readLimit/);
   const check = await checkGeneratedProject(outputPath, { requireBundle: false });
   assert.equal(check.ok, true);
-  const vendorPath = path.join(outputPath, "app/vendor");
-  await mkdir(vendorPath, { recursive: true });
-  await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
-  await writeFile(
-    path.join(vendorPath, "busabase-airapp.js"),
-    "export { detectAirAppRuntime, shouldUseLocalAirAppGateway, createAirAppRecords, airAppWriteMessage };",
-    "utf8",
-  );
-  await writeFile(path.join(vendorPath, "busabase-airapp-gate.js"), "x".repeat(1_001), "utf8");
-  const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
-    cwd: outputPath,
+  const manifest = JSON.parse(await readFile(path.join(outputPath, "airapp.json"), "utf8"));
+  assert.deepEqual(manifest.site, { entry: "vendor/worker.js", assets: "app", access: "read" });
+
+  // The generated budget gate is shared by both runtimes. Exercise it without
+  // installing a Worker parser: Node's actual parser has its own test suite.
+  const pythonOutputPath = path.join(temporary, "generated-python");
+  await scaffoldProject({
+    blueprintPath,
+    outputPath: pythonOutputPath,
+    sdkVersion: "0.99.0",
+    runtime: "python",
+    skipInstall: true,
   });
-  assert.match(generatedCheck.stdout, /AirApp checks OK/);
+  for (const root of [outputPath, pythonOutputPath]) {
+    const vendorPath = path.join(root, "app/vendor");
+    await mkdir(vendorPath, { recursive: true });
+    await writeFile(path.join(vendorPath, "busabase-sdk.js"), "x".repeat(10_001), "utf8");
+    await writeFile(
+      path.join(vendorPath, "busabase-airapp.js"),
+      "export { detectAirAppRuntime, shouldUseLocalAirAppGateway, createAirAppRecords, airAppWriteMessage };",
+      "utf8",
+    );
+    await writeFile(path.join(vendorPath, "busabase-airapp-gate.js"), "x".repeat(1_001), "utf8");
+  }
+  await assert.rejects(checkGeneratedProject(outputPath), /Missing site Worker bundle/);
+  await assert.rejects(
+    execFileAsync(process.execPath, ["scripts/check.mjs"], { cwd: outputPath }),
+    (error) => /Missing: vendor\/worker\.js/.test(error.stderr),
+  );
+  const generatedCheck = await execFileAsync(process.execPath, ["scripts/check.mjs"], {
+    cwd: pythonOutputPath,
+  });
+  assert.match(generatedCheck.stdout, /AirApp checks OK \(python\)/);
+  const pythonConfigPath = path.join(pythonOutputPath, "app/js/config.js");
+  const pythonConfig = await readFile(pythonConfigPath, "utf8");
+  await writeFile(pythonConfigPath, pythonConfig.replace('"readLimit": 14', '"readLimit": 15'));
+  await assert.rejects(
+    execFileAsync(process.execPath, ["scripts/check.mjs"], { cwd: pythonOutputPath }),
+    (error) => /Configured Base reports readLimit does not match blueprint/.test(error.stderr),
+  );
 });
 
 test("rejects invalid per-Base read budgets", () => {
@@ -692,15 +719,14 @@ test("a Node scaffold carries only the Node host", async () => {
   const outputPath = path.join(temporary, "generated");
   await writeFile(blueprintPath, JSON.stringify(validBlueprint(), null, 2), "utf8");
   await scaffoldProject({ blueprintPath, outputPath, sdkVersion: "0.99.0", skipInstall: true });
-  // The Python host and its manifest are dead weight in a Node app, and would be deployed with it.
-  for (const spare of [
-    "server.py",
-    "airapp.json.template",
-    "airapp.json",
-    "package.json.template",
-  ]) {
+  // Keep the Node manifest and site source, but discard the Python host and templates.
+  for (const spare of ["server.py", "airapp.json.template", "package.json.template"]) {
     await assert.rejects(readFile(path.join(outputPath, spare), "utf8"), /ENOENT/, spare);
   }
+  const manifest = JSON.parse(await readFile(path.join(outputPath, "airapp.json"), "utf8"));
+  assert.deepEqual(manifest.site, { entry: "vendor/worker.js", assets: "app", access: "read" });
+  assert.equal(manifest.requiredEngine, undefined);
+  await readFile(path.join(outputPath, "site-worker.js"), "utf8");
   await readFile(path.join(outputPath, "server.js"), "utf8");
   await readFile(path.join(outputPath, "package.json"), "utf8");
 });

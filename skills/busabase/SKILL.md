@@ -31,6 +31,12 @@ eyes regardless of what your key could do.
 a CRM an agent enriches, compliance checklists with a full audit trail, a private knowledge base,
 and AirApps that render all of it back as a real UI.
 
+Building or changing an AirApp — including which engine it runs on — belongs to the
+`busabase-app-creator` skill; its `references/runtime-and-sdk.md` says which engine fits which
+scenario. "In browser", "This machine" and "Cloud sandbox" run only while an app is open or started.
+"Website" is the one always-on engine: it publishes the app at a fixed address, on a deployment that has
+it configured (on Busabase Cloud, the Plus plan and above).
+
 ## On every task: read space instructions, then find a playbook
 
 Connect once per session (next section). On each new task — read-only questions included —
@@ -256,6 +262,38 @@ are also the playbooks the next agent finds, so this is not a box to tick:
 They are addressed by node id, so they can only be stored once the node exists. If your create
 went to review instead of merging, `nodes create` says so in `agentPromptsWrite` — tell the user
 the prompts still need setting after the CR merges, rather than letting it look done.
+
+## Setting up a space's welcome page
+
+When the user asks you to prepare a space for someone else — a customer, a new teammate — give it
+a welcome page: an ordinary Doc or HTML node that Home shows at the top for every member who can
+read it. Write the guide as a node first and read it back, then run
+`busabase-cli space-welcome get --output json` and
+`busabase-cli space-welcome set --node <nodeId> --expected-version <version>` with the version you
+just read (`--clear` removes it). It is workspace configuration, not a ChangeRequest, and needs an
+owner/admin with a `manage` key — set it only when the user asks. An older server answers that it
+does not support the welcome page yet: tell the user to upgrade it instead of retrying.
+
+## Running a workflow
+
+A Workflow node is a saved process: steps that call out, wait, ask a person to approve, and can
+create, change, or delete records. When the user asks you to run one, use `busabase-cli workflows …`
+(MCP: `workflows_*`):
+
+- `list --node-id <workflowNodeId>` and `get --run-id <id>` show the runs and what each finished
+  step saw. A run that says `waiting_approval` is waiting for someone.
+- `start --node-id <id> [--record-id <id>] [--payload-json <json>]` needs a `write` key. The run acts
+  as the key's owner but never beyond this key's level. Its steps can send webhooks and change
+  records, so start one only when the user asks.
+- `cancel --run-id <id>` stops a queued, waiting, or approval-paused run for good. A run in the middle
+  of a step answers 409: try again once that step has finished.
+- `decide --run-id <id> --decision approved|rejected` — **only when the user told you to decide.**
+  Most approval steps are a person's call and answer 403 ("takes a person's decision"). Do not look
+  for another way around it: tell the user the run is waiting for them. A step can opt agents in
+  ("Let agents decide"), and you then still need a `write` key.
+
+If your key is revoked, expires, or is lowered while a run waits, the run fails with that reason
+instead of carrying on with the owner's access. Say so to the user; do not retry with another key.
 
 ## Return a clickable result
 

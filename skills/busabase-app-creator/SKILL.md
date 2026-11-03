@@ -59,7 +59,7 @@ symlinks to this skill, not separate ones — four entry names, one contract.
 - **Pick a runtime first: `node` (default) or `python`.** The browser half of an AirApp — everything under `app/` — is identical either way; only the process serving it differs. Choose `python` when the app's own work is Python's (data, scraping, ML), and `node` otherwise. See "Python AirApps" below for the one thing they cannot do.
 - **When scaffolding a new app**, use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one (`airapp-kit.mjs scaffold ... --runtime python`); do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
 - **That is a scaffolding default, not a verdict on an app you did not write.** A framework AirApp is
-  valid: `vite@7.3.1` boots under the in-browser engine, and the `remote` engine is an ordinary
+  valid: `vite@7.3.1` boots under the in-browser engine, and the `remote` engine ("Cloud sandbox") is an ordinary
   container where Next/React is a shipped demo. In `maintain`, read "Which Stack Is Allowed" in
   `references/runtime-and-sdk.md` before judging an existing app; never treat a framework dependency
   as a violation, and never propose rewriting a working framework app into vanilla JS. Also do not run
@@ -380,6 +380,14 @@ overwrite a non-empty directory; update an existing canonical project through ma
 of replacing it blindly.
 
 The scaffold refuses an unmaterialized blueprint. It copies the tested Hono/vanilla shell, pins the resolved SDK (0.99.0 or newer), writes exact Folder/Node/Base/View/resource ids plus non-secret Vault requirements into deployment config, installs dependencies, verifies the SDK client export and the browser AirApp helpers, creates the browser bundles (`app/vendor/busabase-sdk.js` for the client, `busabase-airapp.js` for the AirApp helpers, `busabase-airapp-gate.js` for the connect gate), and creates a lockfile. The bundles are part of the reviewed AirApp source so Nodepod does not run a build tool. Customize the generated domain UI and projections to match the approved blueprint; do not leave generic placeholder labels or demo entities in production mode.
+
+Node scaffolds also include a read-only Worker website alongside the Node preview server. Ship
+`airapp.json`, `site-worker.js`, the built `vendor/worker.js`, and `app/`; run `npm run build:site`
+again after changing Worker source or configuration. Website reads are limited to the blueprint
+Bases and field slugs, and its provider disables edits. Review which fields may become public
+before going live. Never add a generic authenticated API proxy. Follow
+`references/runtime-and-sdk.md` for custom write routes and explicit site access. Python remains
+Local/Remote only: choose the Node/Worker starter for a website.
 
 Keep the providers separate:
 
