@@ -28,7 +28,7 @@ rule to enforce against an app someone else built. Before judging an existing ap
 
 Busabase starts an AirApp with `npm install` then `npm run dev` by default; an `airapp.json` may
 override `runtime` (`node` | `python`), `install`, `start`, `port`, and `preferredEngine` /
-`requiredEngine`. Engine values are `browser`, `local`, `remote` (older manifests may carry the
+`requiredEngine`. Engine values are `browser`, `local`, `remote`, `site` (older manifests may carry the
 retired aliases `nodepod`, `local-node`, `sandock`, accepted only in `preferredEngine`).
 
 | Engine | Where it runs | What it can run |
@@ -43,17 +43,195 @@ JS, and do not treat a framework dependency as evidence of a contract violation.
 is a deployed tree containing only build output with no source that could produce it — a different
 question entirely, handled in `references/maintenance.md`.)
 
-Two things to know before promising a framework app will run:
+## Pick The Engine By Scenario
 
-- **The write gate is engine-blind.** `assertAirAppRunnable` rejects a `dev` script starting `vite`,
-  `webpack`, `next`, `parcel`, `rollup`, `react-scripts`, `nuxt`, `astro`, or `remix` with
-  `AIRAPP_NOT_RUNNABLE` unless the exact pin is allowlisted (today: `vite@7.3.1` only) — *regardless of
-  which engine the app targets*. Declaring `start` (or a non-`node` `runtime`) in `airapp.json` exempts
-  the app from that check entirely, which is how the Next.js demo ships. That exemption is the
-  mechanism, not a loophole to reach for: use it when the app genuinely declares its own commands.
-- **`remote` does not forward WebSocket upgrades** (they get a `501`), so framework HMR over WS does
-  not work through the preview proxy. Assets must use relative paths, install has a 10-minute budget,
-  and the sandbox has a wall-clock deadline.
+Three engines are temporary runs: `browser` runs in the tab that opened the app and stops with it, while
+`local` and `remote` runs belong to the signed-in user who started them and end when they idle or expire.
+That says nothing about who the app is for — internal daily use is normal, and a public share runs
+read-only on `browser`. The fourth, `site`, is a deployment instead: it stays up with nobody watching. The
+picker labels them "In browser", "This machine", "Cloud sandbox" (the wire value of that one is still
+`remote`) and "Website". Choose by what the app needs, and say the choice in the blueprint:
+
+| The app… | Declare in `airapp.json` | Picker label |
+| --- | --- | --- |
+| is an internal view or tool over workspace data in plain JavaScript (this skill's scaffold) | nothing — the default is `browser` | In browser |
+| needs the owner's own machine, files or local toolchain (Desktop / Self-hosted) | `preferredEngine: "local"` | This machine |
+| needs Python, native dependencies, a framework `browser` cannot boot, or isolation | `preferredEngine: "remote"` | Cloud sandbox |
+| must be opened by customers or the public on a stable address, always on | `requiredEngine: "site"` plus a `site` block (shape below) | Website |
+
+- On Busabase Cloud, the cloud sandbox and the website need the Plus plan or above. A locked engine
+  shows an upgrade prompt rather than failing, so say so up front when the app depends on it. An engine
+  the deployment has not configured shows as disabled, and only an administrator can change that.
+- Prefer `preferredEngine`. Use `requiredEngine` only when no other engine can run the app at all: it
+  removes the owner's per-node choice and makes the app refuse to run where that engine is missing.
+- When the user asks for a public website (a shop, a landing page, a price list for customers), use
+  `site`. Do not present a public share link (it runs in each visitor's own tab, read-only) or a sandbox
+  preview URL (it expires) as a website.
+
+### Starter website support
+
+The Node scaffold now includes `airapp.json.site` (`entry: "vendor/worker.js"`, `assets: "app"`, `access: "read"`), editable `site-worker.js`, and a `build:site` script. Scaffolding builds the Worker after the browser SDK. After changing its source or `app/js/config.js`, run `npm run build:site` and include `vendor/worker.js` in the uploaded files. Keep the top-level `vendor/` folder: the deployment collector intentionally includes it. The server does not build it for you. This adds Website support without changing the existing Node preview engine or local OAuth gateway.
+
+The generated website is a read-only projection of the blueprint Bases and declared fields. It uses bounded `/site/page`, `/site/count`, and `/site/record` routes, never a general `/api/v1` proxy or workspace-wide review queue. The site provider has no editing operation even when the internal app allows edits. Public forms require separately authored, validated business routes and an explicitly chosen access level; do not automatically copy internal write permissions into `site.access`. Review which configured fields may become public before going live.
+
+Python starters keep their Python runtime and do not declare `site`: the Website engine rejects Python. For a website, scaffold the Node/Worker version instead; keep a Python app on Local or Remote when it needs Python behavior.
+
+### The shape a `site` app must have
+
+There is no build step on the server. What you write into the node is what deploys, so bundle first.
+
+```json
+{ "requiredEngine": "site", "site": { "entry": "vendor/worker.js", "assets": "public" } }
+```
+
+- `site` is what opts the app in. Without that block the app cannot deploy, whatever the engine setting says.
+- `site.entry` is one already-bundled ES module with a default export that has `fetch`, as for a Cloudflare
+  Worker. It may import only `cloudflare:*`: no `node:*`, no npm packages, no second file. Leave `entry` out
+  for a purely static site.
+- `site.assets` is the static folder, `public` by default. A static site must have `<assets>/index.html`.
+- Every HTML page needs `<meta charset="utf-8">`, because Cloudflare serves `text/html` with no charset and
+  anything non-ASCII turns to garbage without it.
+- Python, `node:fs`, a long-running server or a missing entry stop the deploy, and the App tab names the
+  reason in the person's language. Files outside `entry` and `assets` never deploy.
+
+Run deploys a members-only preview to the App tab. **Go live** then publishes that same version to the
+address shown in the node's settings, where a Public switch can take it offline. After any edit the address
+keeps serving the old version until someone runs it again and goes live, so tell the person that step is
+theirs. Moving the app to Trash takes the site offline; deleting it for good removes it.
+
+Today a site has no custom domain. Say so before promising one.
+
+### A site that reads and writes workspace data: `site.access`
+
+A site's Worker uses the same `/api/v1` and the same `busabase-sdk` as every other Busabase client. The only
+difference is who it is: a visitor is not signed in, so each deploy gives the Worker an API key of its own.
+
+| Binding | What it is |
+| --- | --- |
+| `env.BUSABASE_API_KEY` | Secret. An ordinary API key owned by the person who deployed: for a preview, the member whose run made it; live, whoever clicked Go live |
+| `env.BUSABASE_BASE_URL` | Where this Busabase is. Pass it as the SDK's `baseUrl`; never hard-code `busabase.com` |
+| `env.BUSABASE_SPACE_ID` | This workspace. The key works here and nowhere else |
+| `env.BUSABASE_AIRAPP_RUNTIME` | `"site"` |
+
+A Worker has no `process.env`, so pass all three to the client yourself; `new Busabase()` with no arguments
+finds nothing.
+
+Ask for the level the site needs in `airapp.json`. Leave it out and the key is read-only:
+
+```json
+{ "requiredEngine": "site", "site": { "entry": "vendor/worker.js", "assets": "public", "access": "write" } }
+```
+
+| `access` | The site can | Use it for |
+| --- | --- | --- |
+| `"read"` (default) | read | a catalogue, a price list, published posts |
+| `"changeRequest"` | read, and propose changes that wait for a member to review | submissions someone must check before they count |
+| `"write"` | read, create, update and delete | an order form, a booking that must land at once |
+
+- **Going live is the consent.** There is no other approval and no settings switch. Changing `access` changes
+  the version, so it only takes effect after a new run and Go live. Tell the person what level the site asks
+  for, and why, before they go live.
+- **The key is never more than its owner.** It acts as that person, so it can do only what they can do in
+  this workspace; it cannot reach their other workspaces or their personal Vault values; it stops working if
+  they leave. It shows in their API key list as `Site: <app name>` (`Site preview: <app name>`); deleting it
+  there cuts the site off until the next Go live.
+- **The preview runs on real data,** with its own key at the same level, like every other engine. Write
+  against a test Base while you build if the real one must not change.
+- **Lifecycle:** every deploy replaces the key. Turning Public off or moving the app to Trash disables the
+  live key at once; Public on enables it again; deleting the app deletes it.
+- Writes go through ChangeRequests like any API write, and the history names the key.
+
+**The key reaches everything its level allows in this workspace, not only the Bases your app uses.** Your
+Worker is the only thing between a stranger and that. So:
+
+- Expose specific routes with one fixed job each (`GET /api/products`, `POST /api/orders`). Never pass a
+  visitor's path, Base, record id, filter or body through to the API, and never build a generic proxy.
+- Name the Bases and fields in the Worker. Validate what a visitor sends (type, length, allowed values)
+  before you write it, and return only the fields the page needs.
+- Ask for the lowest level that works. A catalogue is `read`; only ask for `write` when the site must save
+  something.
+- Never send the key to the browser, put it in `public/`, or log it.
+- There is no CAPTCHA. A public form can be spammed; say so before promising one for something a stranger
+  could abuse.
+
+**Bundle the SDK into the Worker.** `site.entry` must be one file with no imports, so write the Worker as a
+source file that imports `busabase-sdk`, then bundle it:
+
+```bash
+npm install busabase-sdk esbuild
+npx esbuild src/worker.js --bundle --format=esm --platform=neutral --outfile=vendor/worker.js
+```
+
+Commit both: `src/worker.js` so the next agent can change it, `vendor/worker.js` because that is what deploys.
+The bundle includes SDK code, so keep it under `vendor/`, which the source-policy checker skips.
+The app's own Worker source remains checked. A
+`package.json` that only builds the bundle is fine for a site (`requiredEngine: "site"`); it needs no `dev`
+script. Never store `node_modules/`. Uploads are scanned for secrets, so a test that fakes a key must use a
+value that cannot pass for one (`"test-key"`, not a long random string after `apiKey =`).
+
+A shop that lists products and takes orders. `src/worker.js`:
+
+```js
+import { createBusabaseClient } from "busabase-sdk";
+import { createAirAppRecords } from "busabase-sdk/airapp";
+
+// Base ids from the workspace; fields are the Bases' slugs.
+const PRODUCTS = "<products base id>";
+const ORDERS = "<orders base id>";
+
+const text = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+export default {
+  async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+    const client = createBusabaseClient({
+      baseUrl: env.BUSABASE_BASE_URL,
+      apiKey: env.BUSABASE_API_KEY,
+      spaceId: env.BUSABASE_SPACE_ID,
+    });
+    const records = createAirAppRecords(client, { appId: "toy-shop" });
+
+    if (pathname === "/api/products" && request.method === "GET") {
+      const page = await records.readPage({ baseId: PRODUCTS, limit: 100 });
+      return Response.json(
+        page.records.map((record) => ({ name: record.fields.name, price: record.fields.price })),
+      );
+    }
+
+    if (pathname === "/api/orders" && request.method === "POST") {
+      const body = await request.json().catch(() => null);
+      const order = {
+        name: text(body?.name, 100),
+        email: text(body?.email, 200),
+        item: text(body?.item, 200),
+      };
+      const orderId = text(body?.orderId, 100);
+      if (!order.name || !order.email || !order.item || !orderId) {
+        return Response.json({ error: "Please fill in every field." }, { status: 400 });
+      }
+      try {
+        // The same orderId twice (a double click, a retry) creates one record.
+        await records.createRecord({
+          baseId: ORDERS,
+          fields: order,
+          message: "Order from the website",
+          idempotencyKey: orderId,
+        });
+        return Response.json({ ok: true });
+      } catch (error) {
+        console.error("Order failed", error?.status ?? error?.code ?? error);
+        return Response.json({ error: "We could not take this order just now." }, { status: 503 });
+      }
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
+```
+
+The page in `public/` calls `/api/products` and `/api/orders` on its own origin, makes one `orderId`
+(`crypto.randomUUID()`) when the form loads and keeps it until the order succeeds, and says plainly when an
+order did not go through. Every HTML page still needs `<meta charset="utf-8">`.
 
 ### Why the `browser` engine pins Vite so tightly
 
@@ -134,8 +312,10 @@ Do not conflate deployment actions with runtime data access.
 | --- | --- | --- |
 | Agent creating Folder/Bases/AirApp/CRs | Busabase CLI, REST, or `createBusabaseClient` | Cloud API key or Desktop anonymous access |
 | AirApp browser reading its Bases | `createBusabaseClient` against its own origin | ambient logged-in browser session |
+| A published site's Worker (`site` engine) | `createBusabaseClient` with `env.BUSABASE_BASE_URL` | the site's own API key, `env.BUSABASE_API_KEY` |
 
-Never pass the Agent's API key into generated AirApp files.
+Never pass the Agent's API key into generated AirApp files. A site's key is put there by Busabase at deploy
+time; never copy it anywhere else.
 
 ## One Path, Every Environment
 
@@ -147,6 +327,8 @@ The SDK ships a single client. The AirApp always calls `/api/v1/…` on its **ow
 | Deployed in Busabase (Local Node engine) | Busabase itself, via the same-origin reverse proxy | the viewer's session cookie |
 | Public embed | the embed runtime relays it to a capability-scoped, read-only route | the embed's capability, never the viewer |
 | Local `pnpm dev` | this project's own dev proxy in `server.js` | browser OAuth; owner-only per-AirApp token registration under `~/.busabase/airapps` |
+
+A published site's Worker is the one exception: it runs on Cloudflare, not on Busabase's origin, so it calls `env.BUSABASE_BASE_URL` with its own key (see `site.access` above).
 
 There is no Cloud/Desktop path fork and no bridge prefix. Do not hard-code an absolute Busabase URL, and do not reintroduce `/__busabase_api__/` — that bridge prefix is gone, nothing serves it, and an AirApp that uses it works in none of the rows above.
 

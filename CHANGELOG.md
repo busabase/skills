@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `busabase-app-creator`: scaffold a read-only Website Worker with blueprint-scoped reads,
+  field filtering, a read-only browser provider, and Worker source checks. Explain engine
+  selection, deployment access, and when to choose the Node/Worker starter.
+- `busabase`: document welcome-page configuration and permission-aware Workflow operations.
+  Both MCP plugin guides explain setting a welcome page only at the user's request.
+- Bump the Claude Code plugin to `0.4.8` and the Codex plugin to `0.3.10`.
+
 - `busabase`: when a document is attached to a record, extract its text and hand it back with
   `assets put-text`, so `grep` and search can find the wording. The CLI cookbook now gives the order
   (write the record first, then supply the text), what each key level may do (a changeRequest or
