@@ -4,6 +4,7 @@ import { appConfig } from "./config.js";
 import { messages } from "./messages.js";
 import { getProvider } from "./providers/index.js";
 import { connectionHintKey, getRuntime, runtimeLabel, shouldUseLocalGateway } from "./runtime.js";
+import { setupSidebar } from "./sidebar.js";
 
 const state = {
   provider: null,
@@ -113,10 +114,7 @@ const filteredRecords = () => {
 const currentRecord = () =>
   recordsForBase().find((item) => item.id === state.selectedRecordId) || state.detailRecord;
 
-const setMobileSidebar = (open) => {
-  document.body.classList.toggle("sidebar-open", open);
-  byId("sidebarScrim").hidden = !open;
-};
+const closeMobileSidebar = setupSidebar(messages);
 const setText = (id, value) => {
   const element = byId(id);
   if (element) element.textContent = value;
@@ -619,7 +617,7 @@ async function syncRoute() {
   state.query = params.get("q") || "";
   state.detailError = "";
   byId("searchInput").value = state.query;
-  setMobileSidebar(false);
+  closeMobileSidebar();
   render();
   if (
     !state.selectedRecordId ||
@@ -702,7 +700,7 @@ byId("baseNav").addEventListener("click", (event) => {
     "overview" in button.dataset
       ? "#/overview"
       : `#/base/${encodeURIComponent(button.dataset.base)}`;
-  setMobileSidebar(false);
+  closeMobileSidebar();
 });
 
 // The whole row opens the record, not just its first cell. The link inside the
@@ -726,9 +724,6 @@ byId("searchInput").addEventListener("input", (event) => {
   renderList();
 });
 byId("loadMore").addEventListener("click", loadMore);
-byId("sidebarOpen").addEventListener("click", () => setMobileSidebar(true));
-byId("sidebarClose").addEventListener("click", () => setMobileSidebar(false));
-byId("sidebarScrim").addEventListener("click", () => setMobileSidebar(false));
 byId("backButton").addEventListener("click", () => {
   if (history.state?.fromList) history.back();
   else window.location.hash = listUrl();
@@ -747,7 +742,7 @@ window.addEventListener("hashchange", () => {
   if (state.payload) syncRoute();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || !byId("settingsModal").hidden) return;
+  if (event.defaultPrevented || event.key !== "Escape" || !byId("settingsModal").hidden) return;
   if (state.selectedRecordId && state.detailPresentation !== "page") byId("backButton").click();
 });
 
@@ -761,10 +756,4 @@ byId("settingsClose").addEventListener("click", () => setSettings(false));
 byId("settingsModal").addEventListener("click", (event) => {
   if (event.target === byId("settingsModal")) setSettings(false);
 });
-window.addEventListener("resize", () => {
-  if (!window.matchMedia("(max-width: 720px)").matches) {
-    setMobileSidebar(false);
-  }
-});
-
 load();

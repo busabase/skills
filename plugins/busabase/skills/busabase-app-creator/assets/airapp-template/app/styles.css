@@ -1350,6 +1350,29 @@ body.layout-split .detail-panel {
   font-size: var(--text-base);
 }
 
+@media (min-width: 721px) {
+  body.sidebar-collapsed .app-shell {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  body.sidebar-collapsed .sidebar {
+    padding-inline: 12px;
+  }
+  body.sidebar-collapsed .brand-row {
+    grid-template-columns: 32px;
+    padding: 0;
+  }
+  body.sidebar-collapsed .brand-mark,
+  body.sidebar-collapsed .brand-copy,
+  body.sidebar-collapsed .attention,
+  body.sidebar-collapsed .base-nav,
+  body.sidebar-collapsed .settings-button {
+    display: none;
+  }
+  body.sidebar-collapsed:not(.searching) .view-title .count {
+    display: inline-block;
+  }
+}
+
 /* ── Phone ───────────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   .app-shell {
