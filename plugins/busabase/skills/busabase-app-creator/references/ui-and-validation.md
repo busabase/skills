@@ -285,6 +285,9 @@ band starts costing the list its rows:
   and switching rows keeps it open, Escape closes it, `split` shows the queue and the record side by
   side; **Open full page** and a reloaded `?peek=` / `/record` URL land on the same record;
 - navigation, metrics, filters, list, and detail work;
+- the sidebar panel button collapses desktop navigation to a narrow rail and expands it again,
+  with a matching accessible label and `aria-expanded`; navigating or using mobile navigation
+  must not reset the desktop choice;
 - no overlap or page-level overflow;
 - loading/empty/error states render;
 - no resource id is visible anywhere. Walk every view, open the first record in each, and assert
@@ -295,6 +298,8 @@ band starts costing the list its rows:
 Verify phone at `390x844`:
 
 - the navigation drawer opens/closes with scrim;
+- closing it or pressing Escape returns focus to its opener; resizing across 720px clears the
+  mobile drawer and scrim without losing the independent desktop collapse state;
 - list and detail each use the full available width, whatever the Base's detail mode;
 - back returns to the same list context;
 - sticky controls do not cover content;
