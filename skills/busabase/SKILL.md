@@ -22,10 +22,12 @@ Busabase
 **Why it matters:** the change request is what makes agent work legible and reversible — you can see
 what an agent changed, why, and roll it back. Review is a *permission* setting on top of that, not a
 mandatory step: with write access your change lands in one call, and a proposal-only key (or an
-explicit `autoMerge: false`) is what routes it to a human instead. **You never decide this yourself:**
-omit `autoMerge` on every write and read the response's `status` to see what happened; pass explicit
-`autoMerge: false` only when *you* judge a specific change risky enough to deserve a second pair of
-eyes regardless of what your key could do.
+explicit `autoMerge: false`) is what routes it to a human instead. **You never decide this yourself by default:**
+omit `autoMerge` on every write and read the response's `status` to see what happened. Pass explicit
+`autoMerge: false` (CLI/HTTP) or `requireReview` (MCP/`record_change_request` and the other change-request
+tools) in two cases: you judge a specific change risky enough to deserve a second pair of eyes, or the
+user explicitly asks to only propose and wait for a person. A write-capable key would otherwise publish
+immediately. Do not approve or merge that proposal unless they ask.
 
 **Common things people manage with it:** a content pipeline (blog / social / landing-page drafts),
 a CRM an agent enriches, compliance checklists with a full audit trail, a private knowledge base,
@@ -201,10 +203,27 @@ one-line description defeats the reason the body is centralized.
 
 ## The one rule
 
-`list → propose a ChangeRequest → (reviewed or merged, depending on permission) → read back` —
-for records, Skill file edits, and structure (Base / folder / Doc / File) alike. **Never approve
-or merge a still-`in_review` CR yourself unless the user explicitly asks** — approval is the
-human's decision; never bypass review that's actually pending.
+`inspect the target → propose a ChangeRequest → check the write response` — for records, Skill
+file edits, and structure (Base / folder / Doc / File) alike.
+
+Use the response to decide what happened: `materialized: true` returns the landed object;
+`materialized: false` returns a CR, which can already be merged on an idempotent retry.
+For every CR, `status: merged` means landed; `in_review` or `approved` still waits for a decision
+or merge. Report other statuses accurately, and check batch results item by item.
+HTTP success alone does not mean a pending change landed.
+Check the target and the results needed for the user's task in that response, then stop when it
+confirms success — even a short acknowledgement can be sufficient. Do not issue a GET just to
+repeat a successful write response or fetch every record in a completed batch.
+
+Read only when required result data is missing, the outcome is uncertain (timeout, disconnect,
+or an error after a possible commit), an asynchronous operation must finish, or the user requests
+additional verification. Query the specific operation or target, and resolve uncertain outcomes
+before retrying. Keep necessary pre-write reads, version checks, and upload confirmations.
+For attachments, check returned references and needed metadata; do not download file contents
+or add extra hash verification by default, and do not download historical attachments to verify an append.
+
+**Never approve or merge a still-`in_review` CR yourself unless the user explicitly asks** —
+approval is the human's decision; report that it is waiting rather than treating it as landed.
 
 ## Write for the reviewer
 
@@ -267,12 +286,28 @@ the prompts still need setting after the CR merges, rather than letting it look 
 
 When the user asks you to prepare a space for someone else — a customer, a new teammate — give it
 a welcome page: an ordinary Doc or HTML node that Home shows at the top for every member who can
-read it. Write the guide as a node first and read it back, then run
+read it. Write the guide as a node first and confirm it landed from the write response, then run
 `busabase-cli space-welcome get --output json` and
 `busabase-cli space-welcome set --node <nodeId> --expected-version <version>` with the version you
 just read (`--clear` removes it). It is workspace configuration, not a ChangeRequest, and needs an
 owner/admin with a `manage` key — set it only when the user asks. An older server answers that it
 does not support the welcome page yet: tell the user to upgrade it instead of retrying.
+
+## Inviting teammates (Cloud)
+
+When the user asks to bring people into the space, use `busabase-cli members …` (MCP: `members_*`).
+The user must be an owner or admin; a `write` key invites as `member`, and `--role admin` needs a
+`manage` key — never downgrade an admin request silently.
+
+- **By email:** ask for any missing address (never guess one), repeat the exact addresses and roles,
+  and get a yes before `members invite --email <address>` — it sends the email at once, one address
+  per call.
+- **No addresses:** `members create-invite-link` and give the user its `url` (web defaults: member,
+  never expires, no approval).
+- `list-invitations` / `cancel-invitation`, `list-invite-links` / `revoke-invite-link`, and
+  `list-join-requests` / `review-join-request` — approve or reject only on the user's decision.
+- A 404 means an older server or the open-source / Desktop edition, which has no members: send the
+  user to `<base>/dashboard?settings=space&tab=people` instead.
 
 ## Running a workflow
 
@@ -285,6 +320,10 @@ create, change, or delete records. When the user asks you to run one, use `busab
 - `start --node-id <id> [--record-id <id>] [--payload-json <json>]` needs a `write` key. The run acts
   as the key's owner but never beyond this key's level. Its steps can send webhooks and change
   records, so start one only when the user asks.
+- `retry --run-id <id>` runs a **failed** run again from the step it stopped on, as a new run that
+  keeps the earlier steps' outputs and does not repeat them. The failed step runs again, so a request
+  it already sent is sent again: retry only when the user asks. A run can be retried once (409 after
+  that, naming the retry); a run that stopped on a step since deleted answers 400.
 - `cancel --run-id <id>` stops a queued, waiting, or approval-paused run for good. A run in the middle
   of a step answers 409: try again once that step has finished.
 - `decide --run-id <id> --decision approved|rejected` — **only when the user told you to decide.**
@@ -294,6 +333,35 @@ create, change, or delete records. When the user asks you to run one, use `busab
 
 If your key is revoked, expires, or is lowered while a run waits, the run fails with that reason
 instead of carrying on with the owner's access. Say so to the user; do not retry with another key.
+
+When you build one (the graph is the node's content), prefer code over special steps:
+
+- A `function` step with `code` runs that JavaScript on the server: `input` holds the run's data,
+  `await fetch()` answers like the standard fetch (`res.json()`), and the returned object is the
+  step's output (`steps.<id>.<field>`). Use it to call an agent's API, post to WeCom/Slack, or reshape
+  data. Keys in code are visible to anyone who can open the workflow. For packages, Node's `crypto`,
+  Python, or minutes of work, set `runIn: "sandbox"` with `language` (`"javascript"` or `"python"`)
+  and `packages` (space-separated npm/pip specs): the code is the same function body, runs on a
+  machine started for the step, and the run waits for it (a request trigger answers `202` first).
+  Sandboxes need a Sandock and, on Cloud, a plan that includes AirApp remote engines.
+- A `webhook` step with `signingSecret` (a random 16–100 character string such as `whsec_` plus 32
+  URL-safe characters) signs its request so the receiver can verify it came from the step:
+  `X-Busabase-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<exact body>" with the
+  secret>`. Tell the user to give the receiver the secret and to reject a `t` older than five
+  minutes. The secret is readable by anyone who can open the workflow, so use one secret per
+  receiver.
+- A trigger with `eventName: "webhook"` and a random `hookToken` (32+ URL-safe characters) listens at
+  `/api/workflow-hooks/<workflowNodeId>/<hookToken>` once `settings.executionMode` is `"event"`. The
+  request is in `steps.trigger.payload.request` (`method`, `query`, `headers`, `body`). A code step
+  that returns `{ response: … }` answers the caller; otherwise the caller gets `202 { runId }`.
+- `eventName: "schedule"` with `schedule: { unit: "days", at: "10:00", timezone: "Asia/Shanghai" }`
+  runs every day at that local time.
+- To act on many records (a scheduled run has none), add an `action` step with
+  `actionName: "find_records"`, `baseId`, an optional `viewId` (only what that View shows), and
+  `limit` (default 50, at most 200). Its output is `records`, `count`, `total`, `truncated`. With
+  `forEach: true` the run ends there and each record gets its own run from the next step, about that
+  record (`update_record` with no `targetRecordId` changes it); more matches than `limit` start no
+  run and fail the step, so pick a View that bounds the set.
 
 ## Return a clickable result
 

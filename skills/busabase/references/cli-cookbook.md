@@ -14,6 +14,9 @@ call plain `busabase-cli`:
 npx --yes busabase-cli@latest whoami                  # active space + user
 npx --yes busabase-cli@latest bases list              # the tables
 npx --yes busabase-cli@latest records list --base-id <base-id> --limit 20 --output json
+# → { records: [{ id, headCommit: { payload: { <field slug>: <value>, … } } }], nextCursor }
+# Business values are ONLY records[].headCommit.payload. `records` and `nextCursor` are the
+# page wrapper, not fields. Do not invent a column from the wrapper or from commit metadata.
 npx --yes busabase-cli@latest change-requests list \
   --status-json '["in_review","approved","conflict"]' --limit 20 --output json
 npx --yes busabase-cli@latest change-requests list \
@@ -53,10 +56,16 @@ npx --yes busabase-cli@latest docs read-lines --node-id <node-id> --start-line 1
 # own extractor and hand the result back so they stop being invisible to search:
 npx --yes busabase-cli@latest assets put-text --asset-id <asset-id> --file ./extracted.txt
 
-# propose (server decides review-vs-merge for you) → read back:
+# propose (server decides review-vs-merge for you) → check the response:
 npx --yes busabase-cli@latest bases create-change-request --base-id <id> \
   --fields-json '{"title":"…","body":"…"}' \
-  --message "Add Acme Corp — qualified lead from the June webinar"
+  --message "Add Acme Corp — qualified lead from the June webinar" --output json
+# materialized: true → check the returned record; false → check CR status.
+# A retry may return materialized: false with status: merged (already landed).
+# in_review/approved still waits; check every result in a batch.
+# Once the response confirms the task succeeded, no follow-up GET is needed.
+# Read a specific target only for missing required data or an uncertain outcome;
+# wait for asynchronous work or perform extra verification only when needed.
 # Update many existing records in one atomic review. Each fields object is a
 # partial patch; omitted keys stay unchanged and null clears a field.
 npx --yes busabase-cli@latest records bulk-update-change-request --base-id <id> \
@@ -84,7 +93,8 @@ npx --yes busabase-cli@latest nodes update-description --node-id <node-id> \
 
 # A View update changes only the supplied config keys. This keeps existing
 # filters/sorts/widths when adding a visible column; pass `sorts: []` to clear
-# the sort intentionally. Read the resulting View back after the CR lands.
+# the sort intentionally. Check the returned View or CR; fetch the View only
+# when required result data is missing.
 npx --yes busabase-cli@latest views change-request --action update --view-id <view-id> \
   --patch-json '{"config":{"visibleFieldSlugs":["title","campaign","date"]}}' \
   --message "Show Campaign on the Activity table"
@@ -109,6 +119,13 @@ npx --yes busabase-cli@latest bases create-field --base-id <base-id> \
 npx --yes busabase-cli@latest assets upload --file ./cover.svg --context record-field --output json
 # Put the JSON output directly into an attachment field array:
 # {"cover_image":[{"id":"...","assetId":"...","attachmentId":"...","url":"...","fileName":"cover.svg","mimeType":"image/svg+xml","size":1234}]}
+
+# drive fields hold the same refs plus a folder path per file (folders exist only through paths,
+# like a Drive node). Same --max-files / --allowed-mime flags. Paths are relative ("a/b.pdf", never
+# "/a" or ".."), unique per cell, and a ref without "path" sits at the root under its fileName:
+npx --yes busabase-cli@latest bases create-field --base-id <base-id> --slug docs --name "Docs" --field-type drive
+# {"docs":[{"assetId":"...","attachmentId":"...","url":"...","fileName":"main.pdf","mimeType":"application/pdf","size":1234,"path":"contracts/2026/main.pdf"}]}
+# Moving a file = rewriting its "path" in a record update; send the whole array back.
 
 # clean up a bad proposal without merging:
 npx --yes busabase-cli@latest change-requests close --change-request-id <id> --reason "Wrong folder"
