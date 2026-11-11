@@ -111,8 +111,8 @@ Building the URLs:
   shape. For a confirmed workspace-subdomain URL, preserve that origin and use its short
   `/dashboard/<target-path>` route instead.
 - Prefer an exact URL already returned by the live API or CLI over one you assemble yourself.
-  Otherwise construct it only from the confirmed base URL, Space ID, and identifiers read back
-  after the write.
+  Otherwise construct it only from the confirmed base URL, Space ID, and identifiers in the
+  write response or an existing confirmed read. Fetch only identifiers the link still needs.
 - **Never put an API key in a URL.** The one credential that legitimately rides in a link is the
   embed capability token the server itself placed in `url` / `iframeUrl`: it is read-only,
   scoped to that single target, expires at its returned `expiresAt`, and can be revoked. That is

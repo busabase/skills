@@ -12,7 +12,10 @@ export function setupSidebar(messages) {
     document.body.classList.toggle("sidebar-open", drawerOpen);
     scrim.hidden = !drawerOpen;
     openButton.setAttribute("aria-expanded", String(drawerOpen));
-    panelButton.setAttribute("aria-expanded", String(phone.matches ? drawerOpen : !desktopCollapsed));
+    panelButton.setAttribute(
+      "aria-expanded",
+      String(phone.matches ? drawerOpen : !desktopCollapsed),
+    );
     const label = phone.matches
       ? messages.closeNavigation
       : desktopCollapsed

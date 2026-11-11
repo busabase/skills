@@ -1,8 +1,11 @@
 {
   "name": "busabase",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "The open-source database and workspace for AI agents: drive a Busabase workspace and create complete workspace apps.",
-  "author": { "name": "Busabase", "url": "https://busabase.com" },
+  "author": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
   "homepage": "https://busabase.com/support",
   "repository": "https://github.com/busabase/skills",
   "license": "MIT",
@@ -14,7 +17,10 @@
     "longDescription": "Connect Codex to Busabase with browser-based OAuth. Read and write records, docs, files, skills and apps in the open-source database and workspace for AI agents. Every write is a change request: it lands at once with write access and waits for a person's review otherwise.",
     "developerName": "Busabase",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://busabase.com",
     "privacyPolicyURL": "https://busabase.com/privacy-policy",
     "termsOfServiceURL": "https://busabase.com/terms-of-service",

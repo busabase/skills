@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `busabase`: invite teammates on Cloud via `busabase-cli members …` / MCP `members_*` —
+  confirm addresses before sending mail, share invite links when there are none, and fall
+  back to Space Settings → Members on older or open-source servers.
+- `busabase` / plugin guides: treat a successful write response as the landed result
+  (`materialized` / CR `status`) instead of always reading back; fetch only when the
+  response is missing needed data or the outcome is uncertain.
+- `busabase-app-creator`: AirApp template desktop sidebar collapses to a narrow rail and
+  expands again (ported from public skills #31).
+- Bump the Claude Code plugin to `0.4.9` and the Codex plugin to `0.3.11`.
+
 - `busabase-app-creator`: scaffold a read-only Website Worker with blueprint-scoped reads,
   field filtering, a read-only browser provider, and Worker source checks. Explain engine
   selection, deployment access, and when to choose the Node/Worker starter.
