@@ -1,6 +1,6 @@
 {
   "name": "busabase",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "The open-source database and workspace for AI agents: drive a Busabase workspace and create complete workspace apps.",
   "author": {
     "name": "Busabase",

@@ -1,0 +1,24 @@
+{
+  "name": "__APP_SLUG__",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "scripts": {
+    "build:sdk": "esbuild node_modules/busabase-sdk/dist/index.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-sdk.js && esbuild node_modules/busabase-sdk/dist/airapp.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-airapp.js && esbuild node_modules/busabase-sdk/dist/airapp-gate.js --bundle --format=esm --platform=browser --outfile=app/vendor/busabase-airapp-gate.js && cp node_modules/busabase-sdk/dist/airapp-gate.css app/vendor/busabase-airapp-gate.css",
+    "build:site": "esbuild site-worker.js --bundle --format=esm --platform=neutral --outfile=vendor/worker.js",
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.0.8",
+    "busabase-sdk": "__SDK_VERSION__",
+    "hono": "4.12.29"
+  },
+  "devDependencies": {
+    "esbuild-wasm": "0.28.1"
+  }
+}

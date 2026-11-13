@@ -1,34 +1,695 @@
 ---
 name: busabase-package-creator
 description: >-
-  Author or revise a Busabase package — the installable bundle that apps, templates and skills
-  ship as — with a correct manifest, contents and versioning. Entry name for package-authoring
-  work; the full format contract lives in the busabase-app-creator skill, which this alias
-  delegates to.
+  Author or revise a Busabase package — the installable bundle that apps, templates and skills ship
+  as — with a correct manifest, contents and versioning. Entry name for package-authoring work; it
+  carries the complete app-creator contract — the package format, its correctness rules and its
+  review gates — in full. Connection and write rules come from the companion `busabase` skill, and
+  this entry says how to get it when it is not installed.
 ---
 
-# Busabase Package Creator (alias)
+# Busabase App Creator
 
-This is an **entry-name alias** for [`busabase-app-creator`](../busabase-app-creator/SKILL.md) —
-four entry names, one contract. The package format, its correctness rules and its review gates
-are defined there, not here; do not improvise a package format from this file.
+Create one isolated Busabase workspace and AirApp, author an installable template as files on
+disk, or maintain one explicitly identified existing AirApp. This skill is the single technical
+source of truth for AirApp modeling, the template/package format, security, runtime engineering,
+deployment, and maintenance; higher-level workflow skills delegate those concerns here.
 
-If `busabase-app-creator` is not installed in your environment, install it first:
+The contract here is **format and correctness, not taste**. It says what a valid app and a valid
+template must contain — the resources, the manual, the runtime rules, the review gates — and stops
+there. Product voice, visual style, layout conventions and interaction polish belong to the user,
+or to a higher-level skill that layers them on top (the way `kelly-app-skill-creator` does); this
+skill must never grow opinions that would fight such a layer.
+
+The two layers that exist today: `busabase-template-creator` for the public
+`busabase/templates` catalog, and `kelly-app-skill-creator` for `mr-kelly/skills`. Both call
+this skill for correctness and add only a publishing bar on top. Note that
+`busabase-package-creator`, `busabase-skill-creator`, and `busabase-app-package-creator` are
+published as full copies of this skill, not separate ones — four entry names, one contract. The
+copies are generated from this one on every publish, so only their name and description differ.
+
+## Non-Negotiable Contract
+
+- Use `$busabase` for connection, API, ChangeRequest, and approval behavior. Read its `SKILL.md` before any remote operation.
+- **Ship the manual and the prompts, not just the resources.** Whatever this run produces, its
+  Folder ends with one `skill` node named after the app, and **every node it creates carries
+  scenario agent prompts** that open by pointing the agent at that skill. A folder whose nodes
+  only offer their node type's generic prompts is unfinished: the person who installs it is left
+  with "there is data, now what". Write both as you go: the skill node as the app takes shape, each node's
+  prompts as that node is created (step 5, item 6). Shape and bar: step 10.
+- Establish the route at the start and never mix routes mid-run: **reinstall** (a built bundle just needs to exist in this Space — see step 1), **`create` workspace-first**, **`create` package-first** (see § "Two Ways In"), or **`maintain`**. In `create`, produce a new Folder, at least one new workflow Base, required native resources, and a new AirApp; never attach to or modify an existing business Base. In `maintain`, follow `references/maintenance.md`; the app may continuously create or change related workspace resources when those changes are included in the approved maintenance scope.
+- Ask exactly one decision question per message. Present two or three concrete options labeled `A`, `B`, and optionally `C`; mark one as recommended when appropriate, then invite the user to reply with a letter or type a custom answer. Never ask a bare open-ended interview question.
+- Ask the user to choose Busabase Cloud or Desktop before connecting.
+- Establish source ownership before scaffolding. For a standalone AirApp, ask whether source should
+  use a temporary directory or a user-specified persistent directory. When a higher-level App-in-Skill
+  creator delegates here, do not ask again: use that skill's AirApp project root as the complete,
+  persistent source. **That root is `<skill-root>/content/<name>-app/`** — the template layout, which
+  is what a skill carrying an app looks like. A skill still holding its project at `<skill-root>/app/`
+  predates that and is awaiting migration: read it where it is, and do not relocate it as a side
+  effect of unrelated work (moving it also touches harness paths and root scripts, so it belongs to a
+  deliberate migration). Resolve the root by looking for `package.json` under `content/<name>-app/`
+  first, then `app/`. Either way it contains `package.json`, `server.js`, the browser `app/` subtree,
+  checks, and lockfile; it remains runnable with `pnpm dev`, but delegated creation does not start
+  local development unless the user explicitly requests local preview or debugging.
+- Treat the persistent local project as canonical. Submit the same reviewed project file tree to
+  AirApp, excluding local-only files such as `.env`, `node_modules`, and logs. Do not maintain a
+  second AirApp implementation, and never leave a remote-only edit: read it back, back-port it to the
+  canonical local project, and re-run checks before continuing.
+- **Pick a runtime first: `node` (default) or `python`.** The browser half of an AirApp — everything under `app/` — is identical either way; only the process serving it differs. Choose `python` when the app's own work is Python's (data, scraping, ML), and `node` otherwise. See "Python AirApps" below for the one thing they cannot do.
+- **When scaffolding a new app**, use Hono plus vanilla HTML/CSS/JavaScript for a `node` app, or the stdlib `server.py` template for a `python` one (`airapp-kit.mjs scaffold ... --runtime python`); do not introduce React, Vite, JSX, or an application-framework build pipeline in either. Bundle the installed SDK locally during scaffolding; deployed `start` must only run the server.
+- **That is a scaffolding default, not a verdict on an app you did not write.** A framework AirApp is
+  valid: `vite@7.3.1` boots under the in-browser engine, and the `remote` engine ("Cloud sandbox") is an ordinary
+  container where Next/React is a shipped demo. In `maintain`, read "Which Stack Is Allowed" in
+  `references/runtime-and-sdk.md` before judging an existing app; never treat a framework dependency
+  as a violation, and never propose rewriting a working framework app into vanilla JS. Also do not run
+  `airapp-kit check` against a project this skill did not scaffold — it fails with
+  `React/Vite are forbidden.`, which is a false red, not a finding.
+- In `maintain`, before reading the canonical tree as a normal target, check whether the deployed tree
+  could produce itself — see "Is There Source Here At All?" in `references/maintenance.md`. A `dist`-only
+  push with no producer in the tree and no source findable anywhere is a Stop Condition, not a base to
+  build on: never patch a minified bundle to satisfy a requested change.
+- Resolve the latest published `busabase-sdk` (0.99.0 or newer), verify that it exports
+  `createBusabaseClient`, the local AirApp OAuth gateway, `describeBusabaseAirAppRuntime`, the Node
+  credential-store entry, and the browser AirApp helpers on `busabase-sdk/airapp`
+  (`detectAirAppRuntime`, `createAirAppRecords`, `airAppWriteMessage`), then pin the exact version in
+  the generated app. The scaffold does all of this and refuses an older SDK.
+- **Use the SDK's AirApp helpers; do not write your own.** The runtime probe, the record reads and
+  writes, and the "saved or waiting for review" outcome and sentence all come from
+  `busabase-sdk/airapp`, which the scaffold already vendors as `app/vendor/busabase-airapp.js`
+  (`detectAirAppRuntime`, `createAirAppRecords`, `toAirAppWriteOutcome`, `airAppWriteMessage`). A
+  per-app copy of any of them is how the same bug ended up fixed by hand in dozens of apps.
+  `references/runtime-and-sdk.md` says how each is used.
+- Use `createBusabaseClient` against `window.location.origin` in browser code. Never hard-code an
+  absolute Busabase URL, never use the obsolete `/__busabase_api__/` bridge prefix, and never put an
+  API key, Bearer token, OAuth token, session cookie, or secret in browser code
+  or AirApp files. Only loopback local development uses the Hono OAuth boundary defined in
+  `references/runtime-and-sdk.md`. A deployed AirApp must skip the OAuth gate and use the viewer's
+  same-origin ambient session; environment credentials remain an explicit automation/testing
+  override, not the user onboarding path.
+- In `create`, keep the first version read-only unless the user explicitly requests a small action. In either mode, any requested write goes through a ChangeRequest made by the SDK's record helpers, with `autoMerge` left unset: Busabase merges it for a viewer with write access and queues it for review for one without, and the app says which happened. The AirApp never calls review or merge, and never forces review on its own.
+- In `create`, access only resources created during this run. In `maintain`, use exact existing resource ids and explicitly materialize ids for newly approved resources; never discover or repurpose unrelated resources by a matching name or slug. Model new concerns with native Busabase resources.
+- Declare third-party integrations and Vault requirements in the blueprint without values. Browser AirApps cannot read Vault. Secret-consuming work must run through a trusted Busabase Workflow or explicitly configured Agent path.
+- Load persistent application configuration and workflow/domain state from Busabase through
+  `busabase-sdk`, choosing native nodes by capability: Folder/Node for hierarchy and identity, Base
+  and View for structured operational state, Doc for durable narrative configuration, Drive/File for
+  assets, and Vault references for secrets. Generated local config may contain exact materialized ids,
+  procedure allowlists, limits, schema versions, and non-secret readiness metadata only. Do not use
+  local JSON, SQLite, browser storage, or a demo provider as a second persistent source of truth.
+- In `create`, after structure creation, write every materialized Folder, Node, Base, View, and resource id back into the blueprint. Generated runtime code must then reach those resources by a stable handle rather than by listing the workspace and matching a name or slug. Which handle depends on how the artifact binds — see § "Two Ways To Bind" below; both are correct, and the wrong one for the route produces an app that cannot work.
+- Give every data-reading workflow an explicit budget. Default interactive pages to at most 50 records per Base and 20 relevant pending ChangeRequests, use server-side filters/sorts, run independent reads in parallel, preserve `nextCursor`, and fetch only one page per user action. Never hide a full scan behind loading, search, filtering, refresh, navigation, detail opening, "jump to page N", a capped `while (cursor && n < 4)` loop, a `Promise.all` over `totalPages`, or a "fallback" for a filter that seemed not to apply — see `references/runtime-and-sdk.md` § A full scan in disguise. Full exports and offline analysis require a separate, explicit batched workflow.
+- Generate the UI in the user's conversation language. Keep messages centralized so a later iteration can add locales.
+- In `create`, generate three to five realistic seed records by default and write them through ChangeRequests like every other write: omit `autoMerge`, and they land or queue according to the credential's permission.
+- In delegated App-in-Skill `create` mode, use `target-first` validation by default: run deterministic
+  static/project checks, submit the reviewed canonical tree as an AirApp CR, and obtain UI acceptance
+  from merged HEAD inside the target Busabase. Use `local-preview` only when the delegating skill or
+  user explicitly requests `pnpm dev`, a local URL, preview, or debugging. Standalone AirApp creation
+  retains local-preview acceptance unless the user explicitly selects target-first. In `maintain`,
+  apply the validation and acceptance gates in `references/maintenance.md`.
+- **Write the way `$busabase` says: omit `autoMerge` and read the response's `status`.** Review is a permission setting, not a step this skill imposes — a credential that can write publishes immediately, a weaker one gets a ChangeRequest, and either outcome is correct. Do not pass `autoMerge: false` to manufacture a review gate the workspace did not ask for; pass it only when *you* judge one specific change risky enough to deserve a second pair of eyes regardless of what the credential could do. What this skill does gate is **scope**: in `create`, only the exact Folder/Base/field/relation structure the user approved in the current conversation may be written at all, and in `maintain`, only the approved change set.
+- **The human gate is scope, not each write.** Several agents and people often work in the same Space at once; asking a human to click merge on every write the approved scope already covers only slows that down without adding safety. So once the scope is approved, write AirApp code and seed data the permission-aware way and carry on. Three things still stop for a human: anything outside the approved scope; a change you judge risky — deleting or overwriting data someone else wrote, a destructive schema change — which you send with explicit `autoMerge: false` and say why; and a write that came back as a pending ChangeRequest because the credential cannot merge it. Never approve or merge a pending ChangeRequest yourself — yours or another agent's — unless the user asks for that specific one.
+
+## Two Ways To Bind
+
+An artifact reaches its resources one of two ways, and the route decides which.
+Naming this is not pedantry: the same config field is required in one and
+forbidden in the other, so a provider copied across the boundary is an app that
+can never load.
+
+| Binding | Ids in the app config | Resolution | Belongs to |
+| --- | --- | --- | --- |
+| `pinned` | Yes — Space id and every Folder/Node/Base/View id | Used directly; no discovery | **workspace-first `create`** and `maintain`, where the ids exist before the app is scaffolded |
+| `runtime` | No | `inspectProvisionedResources` matches each Base by its stamped `resourceKey` | **package-first `create`** and every installed template, where the ids do not exist until someone installs |
+
+Resolving by `resourceKey` is not the name-and-slug rediscovery this skill
+forbids. The key is stamped at install time and is unique to that installed
+app, so it cannot land on an unrelated resource that merely shares a name — the
+failure mode the prohibition exists to prevent.
+
+Two rules keep the pair honest:
+
+- **`pinned` must never fall back to discovery when an id is missing.** A
+  fallback turns a loud configuration error into an app that quietly reads and
+  writes the wrong resource. Fail with the missing slugs instead.
+- **A `pinned` artifact must never be published as a template.** A template
+  materializes fresh resources in the installer's Space; pinned ids name the
+  author's. Publishing one ships the author's node ids to every installer, and
+  the install *succeeds* before the app reads nothing — or, on a collision,
+  someone else's data. `content/<base>/base.json` is a resource *declaration*;
+  pinned ids are the *materialization result*. Shipping the result as the
+  declaration is a category error.
+
+So the lifecycle runs one way only: a template binds `runtime`, is installed,
+and only then may that one instance be pinned. Pinning is an operation on a
+deployment, never a property of a distribution.
+
+The same law covers skills themselves: a **pointer stub** — a repo-local
+`SKILL.md` that names a deployed skill node's id and fetches its body at use
+time (§ "Two Ways In") — is a pin on a deployment. It is how one workspace
+skill serves many repositories, and it is never published as a template.
+
+## Read References Deliberately
+
+Read each selected reference completely before acting:
+
+| Need | Reference |
+| --- | --- |
+| Interview order, stopping rule, blueprint shape | `references/interview-and-blueprint.md` |
+| Resource placement, native Views, Vault and execution security | `references/resource-model-and-security.md` |
+| SDK, same-origin `/api/v1` access, browser loading, local development against real data | `references/runtime-and-sdk.md` |
+| Frontend architecture, responsive UX, states and test matrix | `references/app-engineering.md` |
+| Structure creation, AirApp deployment, seed CRs, approval rules | `references/deployment-and-review.md` |
+| Shared shell, domain customization, local and target verification | `references/ui-and-validation.md` |
+| Existing AirApp identity, continuous resource/UI evolution, and canonical readback | `references/maintenance.md` |
+| Package layout, `busabase.json`, SKILL.md frontmatter, validation — **required before writing any file package-first** | `references/template-format.md` |
+
+Always read the `busabase` skill before connecting or writing. It is normally installed beside this one (`../busabase/SKILL.md`); if it is not, install it with `npx skills add busabase/skills --skill busabase`, or read it at https://github.com/busabase/skills/blob/main/skills/busabase/SKILL.md. Treat live OpenAPI as authoritative when an endpoint shape is uncertain.
+
+## Workflow
+
+### 1. Establish The Run
+
+First distinguish a **reinstall** from `create`/`maintain`: does a complete, already-built AirApp
+bundle exist on disk (a delegated App-in-Skill's `<skill-root>/app/`, or any other pre-built,
+previously-reviewed project) that just needs to exist in *this* Space — no interview, no new
+blueprint, the code is not changing? If so, skip the rest of this workflow and use
+`publishAirApp` from `busabase-sdk/airapp` (see `references/deployment-and-review.md` §
+"Reinstalling An Already-Built Bundle"). It resolves the Folder from `provisionDeclaredResources`'s
+declaration, creates the AirApp when the Space has never had it or proposes an update when it does,
+and lands permission-aware like every other write — merged outright when the credential can write
+to the Folder, a ChangeRequest when it cannot — but it removes hand-constructing that
+ChangeRequest file-by-file, which is what previously made every reinstall an agent session
+instead of a script. This is also the answer to "the setup script only made the Bases, not the
+AirApp": that script's data-layer provisioning was never supposed to include AirApp deployment in
+the same request (see the note on `AirAppNodeDeclaration` in `airapp.ts` — executable code is
+a separate request from the data layer's structural one), and it
+should call `publishAirApp` as its own explicit next step instead of leaving the AirApp for someone
+to notice is missing.
+
+Otherwise, ask these questions one at a time as lettered choices, skipping only facts already stated:
+
+1. Create a new workspace app or maintain an existing AirApp?
+2. Deploy to Busabase Cloud or Desktop?
+3. For a standalone AirApp, keep generated source in a temporary directory or a persistent directory?
+   For a delegated App-in-Skill, record the provided `<skill-root>/app/` project root and skip this
+   question.
+4. Record validation mode. Delegated App-in-Skill creation defaults to `target-first`; select
+   `local-preview` only from an explicit user request. For standalone creation, keep the existing
+   local-preview default unless the user explicitly asks for target-first.
+5. In `create`, where does this start — **workspace-first** or **package-first**? See § "Two Ways
+   In" below. Skip this question in `maintain`.
+6. In `create`, what should the AirApp help people see or manage? In `maintain`, which exact Space,
+   AirApp node id, and behavior/runtime change are in scope?
+
+For Cloud, use the connection selected by `busabase-cli login` and confirm the target Space. For Desktop, confirm the local Busabase URL. Never print `.env` contents or token values; show only sanitized readiness.
+
+### 1a. Two Ways In
+
+`create` has two starting points. They differ only in where the files first exist; they converge on
+the same finished thing, and neither is allowed to skip the other's proof.
+
+Which to pick is decided by what is being produced, not by preference:
+
+- Producing a **skill** (a directory that will live in a skills repository) → package-first. A skill
+  that carries an app is a template; authoring it any other way means writing files and then
+  reconciling them with a Space afterwards.
+- Producing an **app for one workspace**, with no distributable artifact asked for → workspace-first.
+- Unsure, or the shape is still being decided → workspace-first, and export at the end if it turns
+  out to be worth sharing.
+- Producing **repo access to a skill already deployed in a workspace** ("our other repositories
+  want this same skill") → neither route. Do not export a copy per repo — copies drift. Write a
+  **pointer stub** in each consuming repo instead: a minimal local `SKILL.md` carrying only the
+  real trigger `description` in frontmatter, the fetch command below, and the Space/node table.
+
+  ```bash
+  npx --yes busabase-cli@latest skills read-file --node-id <id> --file-path SKILL.md --output json
+  ```
+
+  Both flags earn their place, for different reasons. `--output json` is what returns the body at
+  all: the default text output collapses it to a one-line preview — measured against a real
+  server, a 40 KB skill comes back as 426 bytes ending in an ellipsis, where the JSON form
+  returns all 40652 characters plus the `contentHash`. `@latest` guards the other failure: `npx`
+  will serve a cached older CLI that may lack the subcommand entirely.
+
+  A stub pins ids, so the `pinned` rules above apply verbatim: never publish one as a template,
+  and a failed fetch is a stop — the agent must not improvise the procedure from the one-line
+  description.
+
+**Workspace-first** (what to pick when the shape is still being decided). Build the
+Folder, Bases and AirApp in a live Space through the workflow below, get it running against real
+data, and — only if the user wants it distributable — export it afterwards (§ "Publishing the
+finished app as an installable template"). The template is then a recording of something that
+demonstrably worked.
+
+**Package-first** (the route for authoring a skill or template: a new app-skill, a contribution to
+`busabase/templates`, or work without a Space to build in). **Read
+`references/template-format.md` completely before writing the first file** — it carries the layout,
+the manifest and frontmatter shapes, the record cap, and what disqualifies a template. Write the
+package on disk, then install it into a scratch Space to verify:
 
 ```bash
-npx skills add busabase/skills --skill busabase-app-creator
+npx --yes busabase-cli@latest install <path-or-repo-url> --into-folder <scratch>
 ```
 
-Then load its `SKILL.md` and follow it. For this entry name, your task is the package slice of
-that contract:
+Keep `@latest` on every `npx` call: without it, npx runs any `busabase-cli` it already finds (a
+global install, or a `node_modules` in a parent directory), which can be an old
+`check`/`install`/`export`. For a long loop, `npm i -g busabase-cli@latest` once per session and
+call plain `busabase-cli`.
 
-- Decide what the package carries (an AirApp blueprint, a template, a skill, or a bundle) and lay
-  out the files exactly as the contract's package format specifies.
-- Write the manifest and the agent-facing manual the contract requires — an installing agent must
-  be able to install and verify the package from the manual alone.
-- Version deliberately; never reuse a version for changed contents.
-- Verify by installing the package into a scratch Space before calling it done.
+**A package-first run is not finished until it has been installed and opened.** This is not
+ceremony. A package can satisfy every static rule — the validator green, the catalog listing it —
+while the app's own provisioning is broken, because installing from a package reads
+`content/<base>/base.json` and never exercises the declaration the app itself provisions from. That
+exact defect shipped once: a Base slug was dropped from the app's config, the template installed
+perfectly, and the app could not create its own tables. Only a real install-and-open finds it.
 
-Packaging one specific existing AirApp is also reachable as `busabase-app-package-creator`;
-publishing to the public `busabase/templates` catalog adds the `busabase-template-creator`
-layer on top of the same contract.
+Both paths obey everything else in this document. Package-first does not license hand-writing an
+AirApp that ignores the runtime contract, and workspace-first does not license shipping a template
+whose `SKILL.md` was never written.
+
+### 2. Route By Mode
+
+For `maintain`, read and follow `references/maintenance.md` completely. Start from the canonical app
+and preserve everything outside the approved change set. The approved iteration may create, update,
+move, or remove related resources, schema, data, files, and UI. Do not continue through the
+create-only isolated-workspace workflow.
+
+For `create`, continue with steps 3–9. All isolation and blueprint approval rules remain mandatory.
+
+Steps 3–9 are written in workspace-first terms. On the **package-first** route the same steps apply
+with their write target changed — the discipline carries over, the API calls do not happen until the
+verification install:
+
+| Step | Workspace-first does | Package-first does instead |
+| --- | --- | --- |
+| 3–4 Discover, blueprint | identical — the interview and the approved blueprint do not change | identical |
+| 5 Create structure | create Folder/Bases/Views in the Space | write `busabase.json`, `content/_folder.json`, `content/<base>/base.json` |
+| 6 Scaffold the AirApp | scaffold, then deploy | scaffold at `content/<name>-app/` (with `_node.json`; `.busabaseignore` for tests/lockfiles) |
+| 7 Validate | local checks + UI acceptance | identical local checks; UI acceptance happens in step 9's scratch install |
+| 8 Deploy as ChangeRequest | submit the AirApp CR | nothing — the install in step 9 is what proposes it |
+| 9 Seed and verify | seed CRs, run merged HEAD | write `records.ndjson` (≤50/Base), run `busabase-cli index . --repo <owner/repo> -o templates.json`, then `busabase-cli install` into a scratch Space, merge, open the app, read data back |
+
+Write the manual as you go, not at the end: on this route `SKILL.md` is authored directly (there is
+no Skill node to export from), and it must name only resources `content/` actually ships.
+
+### 3. Discover The Product
+
+Follow the choice-first interaction contract in `references/interview-and-blueprint.md`. Continue one lettered question at a time until the following are known:
+
+- app name and one-sentence outcome;
+- audience and their recurring job;
+- business objects and their relationships;
+- native artifacts: Views, Docs, files, Whiteboards, Forms, Workflows, or HTML;
+- lifecycle/status values and important dates;
+- first screen, list/detail views, metrics, filters, and search;
+- the detail mode per Base (`ui.detail_modes`): `page` when the record is a workplace of its own
+  (related lists, long content, shared links), `drawer` when people scan many records
+  and touch one or two fields, `split` when the view is a queue worked one record at a time;
+- human-attention states;
+- whether any small ChangeRequest-producing action is required;
+- whether an external integration needs a trusted Workflow/Agent and named Vault requirements;
+- brand constraints or permission to infer a quiet operational style.
+
+Do not ask the user to design tables. Translate their story into a minimal coherent model, warn when the model is large, and preserve the user's choice if they confirm the larger scope.
+
+### 4. Present One Approval Blueprint
+
+Create a machine-readable `blueprint.json` and show the user a concise human view containing:
+
+1. User Story.
+2. Page and navigation map.
+3. Folder/resource graph, including Bases, native Views, Docs, Drives, and optional nodes.
+4. Fields, types, required values, select choices, and View configuration.
+5. Seed-record and initial-artifact outline.
+5a. **Per-node scenario list — what a person will be able to ask an agent to do with each node.**
+   Derive it from the User Story's recurring job and the Actions allowlist you just wrote; do not
+   invent a second vocabulary. One line per scenario, phrased the way the user would say it ("log
+   a customer visit"), grouped by the node it belongs to. This is what becomes each node's
+   `agentPrompts` in step 5, and it belongs in the approval because "what can I ask it to do" is
+   the question the user is actually approving.
+6. Procedure capability matrix, per-screen data budgets, and action allowlist.
+7. Vault requirement names and trusted execution owner, never secret values.
+8. Product onboarding version, required fields, Busabase completion resource, validation, and unlocked capabilities; or an explicit empty contract with rationale.
+9. Explicit exclusions and risks.
+
+Run:
+
+```bash
+node <skill-dir>/scripts/airapp-kit.mjs validate-blueprint --blueprint <path>/blueprint.json
+```
+
+Ask for one explicit blueprint decision: approve, revise, or stop. Do not create remote structure before approval.
+
+### 5. Create The Approved Structure
+
+After approval:
+
+1. Re-read the target Space/workspace and check for slug collisions.
+2. Generate unique slugs; never reuse matching existing nodes.
+3. Create the Folder, Bases, fields, relations, native Views, Docs, Drives, and approved optional resources represented by the blueprint.
+   A new Base comes with a default "Grid view" (every record and field) unless you skip it, and a
+   Base opens on its leftmost View. So when the blueprint gives a Base its own Views, create that
+   Base with `--skip-default-view` (`node_create` `skipDefaultView`, REST `defaultView: false`) and
+   then its Views in blueprint order — the first one is what the Base opens on, and a later
+   `export --template` ships exactly these. When the blueprint gives a Base no Views, keep the
+   default Grid view and record its `view_id` like any other. A Base must always keep one View.
+4. Omit `autoMerge`: the user approved this exact structure, so whatever the credential can merge lands now. Pass explicit `autoMerge: false` only for a step you judge risky (see the scope rule above).
+5. Read the materialized resources back and write every Folder/Node/Base/View/resource id into `blueprint.json` before scaffolding.
+6. **Write each node's `agentPrompts` the moment that node exists**, from its scenario list in the
+   approved blueprint (step 4, item 5a) — see step 10 for the shape, the CLI call and the writing
+   bar. A node is not "created" until someone opening it can see what to ask for; deferring this
+   to the end produces prompts written from memory of an app you have stopped looking at.
+
+If the returned status is not materialized/merged, stop and report the CR instead of pretending the structure exists.
+
+### 6. Scaffold And Customize The AirApp
+
+Resolve the latest SDK version and scaffold:
+
+```bash
+node <skill-dir>/scripts/airapp-kit.mjs scaffold \
+  --blueprint <path>/blueprint.json \
+  --output <chosen-source-dir>
+```
+
+For a delegated App-in-Skill, `<chosen-source-dir>` is exactly `<skill-root>/app/`. The generated
+project therefore lives at `<skill-root>/app/package.json`, while its browser files live at
+`<skill-root>/app/app/`. This nested name is intentional: the outer directory is the skill's bundled
+project, and the inner directory is the AirApp static file tree. The scaffold still refuses to
+overwrite a non-empty directory; update an existing canonical project through maintain mode instead
+of replacing it blindly.
+
+The scaffold refuses an unmaterialized blueprint. It copies the tested Hono/vanilla shell, pins the resolved SDK (0.99.0 or newer), writes exact Folder/Node/Base/View/resource ids plus non-secret Vault requirements into deployment config, installs dependencies, verifies the SDK client export and the browser AirApp helpers, creates the browser bundles (`app/vendor/busabase-sdk.js` for the client, `busabase-airapp.js` for the AirApp helpers, `busabase-airapp-gate.js` for the connect gate), and creates a lockfile. The bundles are part of the reviewed AirApp source so Nodepod does not run a build tool. Customize the generated domain UI and projections to match the approved blueprint; do not leave generic placeholder labels or demo entities in production mode.
+
+Node scaffolds also include a read-only Worker website alongside the Node preview server. Ship
+`airapp.json`, `site-worker.js`, the built `vendor/worker.js`, and `app/`; run `npm run build:site`
+again after changing Worker source or configuration. Website reads are limited to the blueprint
+Bases and field slugs, and its provider disables edits. Review which fields may become public
+before going live. Never add a generic authenticated API proxy. Follow
+`references/runtime-and-sdk.md` for custom write routes and explicit site access. Python remains
+Local/Remote only: choose the Node/Worker starter for a website.
+
+Keep the providers separate:
+
+- Demo provider: deterministic local UI data only.
+- Busabase provider: only approved canonical resources and pending CR summaries through the SDK against `/api/v1` on the app's own origin. It reads and writes records through `createAirAppRecords`, keeps only the app's own rules (its procedure allowlist, how a record maps onto the UI's rows), and never exposes Vault or silently falls back to Demo data.
+
+The scaffold also renders each blueprint action of kind `change_request` as a small form on the open record (`ui.actions[].fields`, editable field types only), and tells the person whether the change was saved or is waiting for review. A read-only app renders none of it. Extend that path rather than writing a second one. It edits an open record only: **there is no "new record" form**, deliberately (see `references/runtime-and-sdk.md` § Optional Actions), so add one when the approved blueprint needs it.
+
+The local Hono scaffold must also include the OAuth routes and proxy contract in
+`references/runtime-and-sdk.md`. A generated setup screen may customize labels and layout, but it
+must use `createBusabaseAirAppLocalGateway()` and call that contract only on a loopback document
+origin rather than implement a second token
+store or send credentials to browser JavaScript. In AirApp, never show the local connection screen
+or call `/auth/status` or `/auth/start`.
+
+Keep the data-access budget explicit in the UI. Each Base uses its blueprint `read_limit` (default
+50, allowed 1–50) and the generated config's `readLimit`; pending ChangeRequests remain capped at 20
+when rendered. Every continuation fetches one bounded page. Show `+` or equivalent when
+`nextCursor` exists and provide Load More rather than a hidden all-pages loop. Search and filters
+must either state that they apply to loaded rows or issue a debounced, server-filtered paged query;
+they must not silently scan the whole Base.
+
+### 7. Validate And Obtain UI Acceptance
+
+Always run:
+
+```bash
+pnpm check                 # node runtime
+node --check server.js     # node runtime
+node scripts/check.mjs     # python runtime (no package.json, so no `pnpm check`)
+python3 -m py_compile server.py   # python runtime
+```
+
+`pnpm check` is the scaffold's own gate. When the app ships inside a package or template, also run
+the platform's checker on that package; its `airapp` layer applies the same contract (runtime
+detection, bounded reads, and `airapp/forced-review` for any `autoMerge` that is not a literal
+`true`):
+
+```bash
+npx --yes busabase-cli@latest check <package-dir>
+```
+
+An app pinned to one workspace's ids (workspace-first) is not publishable as a template, so its
+`package/workspace-ids` findings are expected there; read the `airapp` layer.
+
+## Python AirApps
+
+Scaffold one with the same script and `--runtime python`:
+
+```bash
+node <skill-dir>/scripts/airapp-kit.mjs scaffold --blueprint <path>/blueprint.json \
+  --output <chosen-source-dir> --runtime python
+```
+
+A `python` app ships `airapp.json`, `server.py` and the same `app/` subtree as a Node app, and **no
+`package.json`** (Busabase would read one as a Node app). It declares its own commands, because
+there are no npm scripts for Busabase to read:
+
+```jsonc
+{ "runtime": "python", "install": "…", "start": "python3 server.py" }
+```
+
+Do not declare a `port`. Without one the host engine hands the app a free port in `PORT` (which
+`server.py` reads) and finds it from the `listening on port N` line; a fixed `3000` makes the second
+Python app on that machine, or anything else already on 3000, die with `Address already in use`.
+
+**The browser half needs the same three bundles as a Node app.** `app/index.html` and `app/js/` import
+`app/vendor/busabase-sdk.js`, `busabase-airapp.js` and `busabase-airapp-gate.js` at load. A Python
+app has no `package.json` to run `build:sdk` from, so the scaffold builds them in a throwaway
+directory from the template's own `build:sdk` script and copies them into `app/vendor/`. Without
+them the app opens as an empty page with a 404 for the gate bundle as the only clue; `node
+scripts/check.mjs` now fails on their absence.
+
+**A Python AirApp is hosted-only, and this is not a gap to work around.** The `/auth/*` routes and
+the credentialled `/api/v1` proxy in `server.js` come from `busabase-sdk`'s local AirApp OAuth
+gateway, and exist so an app running *outside* Busabase can obtain a credential of its own. That
+gateway is deliberately not reimplemented in Python: porting an auth flow into a second language is
+how two implementations drift, and the one that drifts is a security boundary.
+
+Inside Busabase nothing is missing — the browser's `/api/v1` calls are same-origin and carry the
+viewer's session, so no gateway is involved. Run standalone, the connect gate appears (as for a Node
+app) and `server.py` answers `/auth/*` with an explanation rather than a bare 404. If an app
+genuinely needs to run standalone with its own credential, write it in `node`.
+
+Then follow the selected validation mode in `references/ui-and-validation.md`.
+
+For `target-first`, do not start `pnpm dev` and do not report a localhost URL. Static checks plus the
+approved blueprint authorize writing the AirApp the permission-aware way (step 8). Desktop, phone,
+interaction, ambient-session, and real-data acceptance happen against merged HEAD in step 9 — say in
+the report that UI acceptance is still to come until that Run has happened.
+
+For an explicitly selected `local-preview`, run `pnpm dev`, open the actual local URL with
+`?demo=1`, and verify desktop and 390px mobile layouts before submission.
+
+In local-preview mode, verify against **real** data before submitting anything. Open the local URL without
+`?demo=1`, choose Busabase Cloud or enter a custom Busabase origin, and complete the browser OAuth
+flow. Do not require a CLI login, device code, or pasted API key for this interactive path.
+
+Environment bootstrap remains available for non-interactive CI and explicit operator testing:
+
+```bash
+BUSABASE_BASE_URL=http://localhost:15419 pnpm dev              # Desktop / OSS
+BUSABASE_BASE_URL=https://busabase.com \
+  BUSABASE_API_KEY=… BUSABASE_SPACE_ID=… pnpm dev              # Cloud
+```
+
+Confirm the configured Bases return real records. The interactive local path authenticates the user
+through a delegated API permission grant; the deployed AirApp instead uses the viewer's ambient
+session, so the target Run in step 9 still proves that distinct permission and embed path.
+
+In local-preview mode, iterate until the user explicitly accepts the UI before submission. In
+target-first mode, iterate after each target Run; each revision is its own AirApp ChangeRequest,
+written the same permission-aware way.
+
+### 8. Deploy The AirApp Through A ChangeRequest
+
+Create a new AirApp under the new Folder with the complete validated file tree and `mergeMode: "replace"`. Omit `autoMerge` and read the result: a credential that can write to the Folder publishes the app outright, a weaker one yields a pending ChangeRequest, and both are correct outcomes to report. Record whether validation was `target-first` or `local-preview`.
+
+Report what happened — the AirApp node id when it merged, the CR id when it is waiting for a
+human — and the main security facts:
+
+- the deployed app authenticates as the viewing user's browser session;
+- no API key is embedded;
+- listed read procedures;
+- listed ChangeRequest-producing procedures, if any;
+- no direct canonical mutation.
+
+If it merged, go straight to step 9. If it is pending because the credential cannot merge it, tell
+the user it needs someone with write access on the Folder; do not approve it yourself unless the user
+asks for that specific CR. The seed records do not depend on the AirApp, so still write them (step 9)
+while it waits — only the target Run waits for the AirApp to merge.
+
+### 9. Seed And Verify Real Data
+
+Write three to five realistic records through ChangeRequests, permission-aware like everything else. Respect relation dependencies: read back merged parent records before using their canonical ids in child relations unless the live API explicitly supports temporary record refs.
+
+Once the AirApp and the seed records are merged (by your write, or by a human for any that queued):
+
+1. Read canonical records back.
+2. Ask the user to Run the merged AirApp in the target Busabase.
+3. Verify the selected deployment path, Base discovery, non-empty data, empty states, browser
+   console, desktop layout, and 390px phone layout. In target-first mode this is the required first
+   UI acceptance gate, not a follow-up to localhost acceptance.
+4. Diagnose bridge/session/space/schema failures separately.
+
+Running a pending AirApp CR is not supported. Never claim target verification before merged HEAD is actually run.
+
+### 10. The Manual And The Prompts — Shape, And Final Sweep
+
+Written throughout the run, not here: the skill node as the app takes shape, and each node's
+prompts as that node is created (step 5, item 6). This step is where their shape is defined, and
+where you sweep for anything that got missed before calling the run finished.
+
+The resources are only half of what installs. The other half is *how a non-expert drives them*,
+and it lives in two places:
+
+**The Folder's skill node.** One `skill` node in the Folder, named after the app — what the Bases
+mean, what each field is for, the workflow, and what the app must never do. Package-first, this is
+the root `SKILL.md` the installer lifts into that node; workspace-first, create the node directly.
+`$busabase` tells every agent to read it before writing in that Folder, so it is the one document
+that makes the app self-driving. A Folder may hold more than one skill; keep each node's name
+equal to its skill's frontmatter `name`.
+
+**Scenario prompts on every node.** These are not invented here — they are the per-node scenario
+list the user already approved in the blueprint (step 4, item 5a), written out in full. Each Base,
+Doc, AirApp and Drive gets the ones that belong to it.
+
+**Where a scenario comes from.** The blueprint's User Story names one audience and one recurring
+job; the Actions allowlist names what the app may do. A scenario is the intersection: a thing that
+audience does, often, using this node. `As a sales rep, I want to keep visit notes with the
+account` + a `Visits` Base ⇒ "log a customer visit", "show me everything we discussed with this
+account this quarter". If a would-be prompt is not traceable to the story, either it does not
+belong to this app or the story was incomplete — fix the story, not the prompt list.
+
+**The bar.** A prompt earns its place when it says what the PERSON wants, in their words, and the
+agent has to work out the operations. Two failure modes, both easy to fall into:
+
+| ❌ | ✅ | Why |
+| --- | --- | --- |
+| "Create a record in Visits" | "Log a customer visit" | The first is the API with a Base name pasted in; the node type's own prompts already cover it. |
+| "Update the status field to closed-won" | "Mark this deal as won and note why" | The first tells the agent which column to write; the second tells it what happened, which is what the skill's workflow is FOR. |
+| One prompt per field | 2–5 per node, one per recurring job | A prompt list as long as the schema is a schema, not a menu of things worth asking. |
+
+Write 2–5 per node. Fewer than two usually means the node has no job of its own and the prompts
+belong on its parent; more than five usually means field-level operations crept in.
+
+Every body opens by naming the skill:
+
+```
+Read the `crm-visits` skill in this folder and follow its workflow, then add a visit record with
+today's date, the contact I name, and a one-line summary.
+```
+
+Write only the task. Busabase opens every prompt with the sentence that names its node —
+`Target: the Busabase Base "Visits" (nodeId: nod_…), in space "Acme" (spaceId: spc_…).` — the same
+one the built-in prompts open with, so do not write `{target}`. Older bodies that still contain it
+keep working: a line that is only `{target}` is dropped, and one inside a sentence reads as the
+node's name.
+
+Write them with the CLI, which validates before it sends:
+
+```bash
+npx --yes busabase-cli@latest nodes set-agent-prompts --node-id <nodeId> --file prompts.json
+```
+
+`prompts.json` is a list of `{ key, label, body, intent? }`. `label` is what the user picks from
+the list (≤80 chars); `body` is the task the agent receives, after the node/space target line
+Busabase adds ahead of it; `intent` is `read-only` or `change` (default `change`).
+Limits: 50 prompts per node, 8 KiB per body per locale. Both `label` and `body` accept an
+i18n object (`{ "en": "…", "zh-CN": "…" }`) when the app is multilingual.
+
+Package-first, write the same list into each node's sidecar (`agentPrompts` in `_node.json`,
+`_folder.json`, `base.json`, a `file` node's `.node.json`, or a Doc's frontmatter) so it survives
+export → install. `busabase-cli check` warns for a package with no skill node and for any node
+without prompts.
+
+**Final sweep.** Before the completion criteria: list the Folder's nodes, and for each one confirm
+it has prompts that a person — not an API — would recognise as their own job. Package-first, run
+`busabase-cli check` and read its `template/node-without-prompts` warning as a to-do list rather
+than noise. A node that reaches this sweep with nothing on it was created without the step-5 half
+of its definition; go back and write them against the node as it actually turned out.
+
+## Completion Criteria
+
+For `create`, finish only when all are true:
+
+- approved Folder, Bases, Views, artifacts, and optional resources exist in the selected Cloud Space or Desktop workspace;
+- AirApp source passes its checks and either target-first acceptance in merged Busabase HEAD or an
+  explicitly selected local-preview acceptance followed by target Run;
+- the AirApp write landed — merged outright, or left as a ChangeRequest the credential could not merge — and the result was read back rather than assumed;
+- canonical seed records are read back;
+- the Folder has a `skill` node named after the app, and every node this run created carries
+  scenario agent prompts whose bodies name that skill, each traceable to a scenario in the approved blueprint (steps 4–5, shape in step 10);
+- merged AirApp runs against real data in the target environment;
+- runtime config contains the exact materialized Folder/Node/Base/View/resource ids and non-secret Vault requirements, and every interactive read path is bounded, appropriately filtered, and visibly paginated;
+- no secret appears in files, logs, screenshots, or chat;
+- local interactive authentication uses PKCE and an owner-only per-AirApp registration under
+  `~/.busabase/airapps`; no CLI login or browser-visible credential is required;
+- actual node URLs, CR ids, source directory, SDK version, and remaining limitations are reported.
+- when delegated by an App-in-Skill creator, the delegating skill's AirApp project root
+  (`<skill-root>/content/<name>-app/`, or `<skill-root>/app/` for a skill not yet migrated) remains
+  the canonical local project, `pnpm dev` remains supported without being started by default, and the
+  merged AirApp is traceable to that same reviewed source tree.
+
+For a **package-first** `create` run, additionally: the package installs into a scratch Space with
+no warnings, its AirApp opens and reads real data there, `SKILL.md` names only resources the
+package actually ships, and the installed nodes show their authored prompts (not their node type's
+defaults) when opened in the scratch Space. A validator pass is a precondition, never the finish line.
+
+For `maintain`, use the separate completion criteria in `references/maintenance.md`.
+
+## Publishing the finished app as an installable template
+
+Only when the user asks for it. A working app in one workspace is the deliverable; a template is a
+further step that says "anyone should be able to install this".
+
+Do not hand-write the package layout — export the app you just built and verified, so the published
+template is the thing that actually ran rather than a second description of it:
+
+```bash
+npx --yes busabase-cli@latest export <folder-slug> -o ./<name> --template
+```
+
+That writes the layout the Template Center reads: the folder's Skill node lifted to the package root
+as `SKILL.md`, `busabase.json` with the catalog metadata, and the resources under `content/`. The
+Base slugs come back as the app declared them, not as the prefixed ones the workspace installed
+them under. If the folder has no Skill node yet, a `SKILL.md` draft is generated from its structure
+— full of TODOs on purpose, because an agent acts on what that file says and a plausible guess about
+what a table means is worse than an obvious blank. Fill them in with the user.
+
+Before opening the pull request, check it:
+
+```bash
+npx --yes busabase-cli@latest check ./<name> --strict                                       # the contract
+npx --yes busabase-cli@latest index . --repo busabase/templates -o templates.json --check   # the catalog
+cd templates/<name> && node scripts/sync-content.mjs --check                   # only if it has one
+```
+
+`check` reads the rules above off a directory and reports each applicable layer separately —
+**package**, **skill**, **template**, **airapp**. A layer that does not apply reports `–`, never
+`✓`. It is static: nothing is installed and none of the template's own code runs, so it is the
+check to run repeatedly while building rather than only before submitting. Errors are what break
+an installing user; warnings are defaults worth defending in review, and `--strict` fails on them
+too. Point it at a repo root to sweep every template, `--only airapp` while iterating on the app,
+and `--json` in CI.
+
+The second command answers a different question — whether the repository's catalog file is
+current — and neither one implies the other.
+
+Templates are submitted by pull request to <https://github.com/busabase/templates>, whose
+`AGENTS.md` carries that repository's own conventions (where a template goes, what is generated,
+what disqualifies one). Read it before opening the PR; do not restate or override it here.
+
+## Stop Conditions
+
+Stop and ask for direction when:
+
+- target environment or Space is ambiguous;
+- authentication is unavailable;
+- in `create`, the user has not approved the blueprint;
+- a requested action would bypass ChangeRequests;
+- live API behavior conflicts with this Skill;
+- the SDK lacks `createBusabaseClient` or fails Nodepod validation;
+- Cloud/Desktop Run cannot be verified after merge;
+- in `maintain`, the deployed tree is build output with no producer in it and no source findable
+  anywhere — see "Is There Source Here At All?" in `references/maintenance.md`.

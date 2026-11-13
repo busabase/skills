@@ -4,9 +4,10 @@ Use this reference after blueprint approval.
 
 ## Connect Safely
 
-Read `../busabase/SKILL.md`. For Cloud, use the already-selected `busabase-cli` connection or local
+Read the `busabase` skill first (where to find it: "Always read the `busabase` skill" in this skill's
+`SKILL.md`). For Cloud, use the already-selected `busabase-cli` connection or local
 shell environment, confirm the selected Space, and sanitize all connection reporting. If no
-credential exists, sign in with the two-turn flow in `../busabase/references/connect-and-space.md`
+credential exists, sign in with the two-turn flow in the `busabase` skill's `references/connect-and-space.md`
 (`busabase-cli login --no-wait`, then `--resume-code` in a later turn); never ask for a key in chat. For
 Desktop, probe the configured local URL without assuming authentication.
 

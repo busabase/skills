@@ -95,7 +95,7 @@ Claude 與 Codex 內建技能都採用 MCP 優先方式：它們依賴 OAuth 與
 | 技能 | 功能 |
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | 透過 HTTP 操作 Busabase 工作區：列出 Base 和記錄、提出 ChangeRequest，並合併已核准的變更。完整的 CLI / API / MCP 參考。 |
-| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | 日常營運工作區——建前查重、先看 schema 再寫、附件掛載並做到全文可檢索、稽核與清理——堅持先讀後寫與回讀核驗。 |
+| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | 日常營運工作區——建前查重、先看 schema 再寫、附件掛載並做到全文可檢索、稽核與清理——堅持先讀後寫，並核對實際寫入結果。 |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 將產品構想轉換為完整的 Busabase 工作區應用程式，使用原生資源、受限資料存取和可審核的 AirApp。 |
 | [`busabase-template-creator`](./skills/busabase-template-creator/SKILL.md) | 在 app-creator 合約之上，編寫範本並發佈到公開的 `busabase/templates` 目錄。 |
 | [`busabase-app-package-creator`](./skills/busabase-app-package-creator/SKILL.md) | `busabase-app-creator` 的別名，用於把現有 AirApp 打包成可安裝的套件。 |

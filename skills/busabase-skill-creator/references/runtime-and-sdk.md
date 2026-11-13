@@ -1,0 +1,765 @@
+# Runtime And SDK
+
+Use this reference while generating the project and implementing the Busabase provider.
+
+## Default Scaffold Stack
+
+What this skill **scaffolds for a new app**. It is a default for code this skill writes, not a
+platform limit and not a conformance test to apply to an existing app — see "Which Stack Is Allowed"
+below before judging one:
+
+- Hono server with `@hono/node-server`.
+- Vanilla HTML/CSS/JavaScript browser code.
+- No runtime build step, React, Vite, JSX, SWC, native binary, subprocess, browser automation, or server-side secret.
+- `busabase-sdk` pinned to the exact latest version resolved during scaffolding (0.99.0 or newer: the
+  first with the browser AirApp helpers on `busabase-sdk/airapp`, which the app imports from a
+  vendored bundle).
+
+These constraints are authoritative for higher-level App-in-Skill creators too. They may define the
+product workflow and UI requirements, but must not replace this runtime with a conflicting language,
+framework, package, authentication, or deployment model.
+
+## Which Stack Is Allowed
+
+The list above is this skill's **default for new apps**, chosen to keep generated AirApps boring and
+reviewable as plain file diffs. It is not a statement about what the platform can run, and it is not a
+rule to enforce against an app someone else built. Before judging an existing app — especially in
+`maintain` mode — know which engine it targets, because they differ sharply.
+
+Busabase starts an AirApp with `npm install` then `npm run dev` by default; an `airapp.json` may
+override `runtime` (`node` | `python`), `install`, `start`, `port`, and `preferredEngine` /
+`requiredEngine`. Engine values are `browser`, `local`, `remote`, `site` (older manifests may carry the
+retired aliases `nodepod`, `local-node`, `sandock`, accepted only in `preferredEngine`).
+
+| Engine | Where it runs | What it can run |
+| --- | --- | --- |
+| `browser` (Nodepod) | the viewer's tab, a browser Worker/Service Worker Node runtime | Pure JavaScript generally works; **native binaries and real OS processes do not**. Of the bundler dev servers, only `vite@7.3.1` is verified to boot — see below. Python is ineligible by construction. |
+| `local` | a bare OS process on the machine hosting Busabase | the host's own Node/Python toolchain, no bundler restriction of its own. Offered only where the host *is* the user's machine (Self-hosted / Desktop / Local). |
+| `remote` (Sandock) | a container provisioned per run | an ordinary Debian + Node 24 + Python image with a shell — **frameworks and native deps run normally**. Next.js 16 + React 19 + Tailwind 4 is a shipped demo (`requiredEngine: "remote"`). |
+
+So: **a React/Vite/Next AirApp is not a defect.** On `browser` it must pin `vite@7.3.1` exactly; on
+`local` or `remote` it is ordinary work. Do not propose rewriting a working framework app into vanilla
+JS, and do not treat a framework dependency as evidence of a contract violation. (What *is* a problem
+is a deployed tree containing only build output with no source that could produce it — a different
+question entirely, handled in `references/maintenance.md`.)
+
+## Pick The Engine By Scenario
+
+Three engines are temporary runs: `browser` runs in the tab that opened the app and stops with it, while
+`local` and `remote` runs belong to the signed-in user who started them and end when they idle or expire.
+That says nothing about who the app is for — internal daily use is normal, and a public share runs
+read-only on `browser`. The fourth, `site`, is a deployment instead: it stays up with nobody watching. The
+picker labels them "In browser", "This machine", "Cloud sandbox" (the wire value of that one is still
+`remote`) and "Website". Choose by what the app needs, and say the choice in the blueprint:
+
+| The app… | Declare in `airapp.json` | Picker label |
+| --- | --- | --- |
+| is an internal view or tool over workspace data in plain JavaScript (this skill's scaffold) | nothing — the default is `browser` | In browser |
+| needs the owner's own machine, files or local toolchain (Desktop / Self-hosted) | `preferredEngine: "local"` | This machine |
+| needs Python, native dependencies, a framework `browser` cannot boot, or isolation | `preferredEngine: "remote"` | Cloud sandbox |
+| must be opened by customers or the public on a stable address, always on | `requiredEngine: "site"` plus a `site` block (shape below) | Website |
+
+- On Busabase Cloud, the cloud sandbox and the website need the Plus plan or above. A locked engine
+  shows an upgrade prompt rather than failing, so say so up front when the app depends on it. An engine
+  the deployment has not configured shows as disabled, and only an administrator can change that.
+- Prefer `preferredEngine`. Use `requiredEngine` only when no other engine can run the app at all: it
+  removes the owner's per-node choice and makes the app refuse to run where that engine is missing.
+- When the user asks for a public website (a shop, a landing page, a price list for customers), use
+  `site`. Do not present a public share link (it runs in each visitor's own tab, read-only) or a sandbox
+  preview URL (it expires) as a website.
+
+### Starter website support
+
+The Node scaffold now includes `airapp.json.site` (`entry: "vendor/worker.js"`, `assets: "app"`, `access: "read"`), editable `site-worker.js`, and a `build:site` script. Scaffolding builds the Worker after the browser SDK. After changing its source or `app/js/config.js`, run `npm run build:site` and include `vendor/worker.js` in the uploaded files. Keep the top-level `vendor/` folder: the deployment collector intentionally includes it. The server does not build it for you. This adds Website support without changing the existing Node preview engine or local OAuth gateway.
+
+The generated website is a read-only projection of the blueprint Bases and declared fields. It uses bounded `/site/page`, `/site/count`, and `/site/record` routes, never a general `/api/v1` proxy or workspace-wide review queue. The site provider has no editing operation even when the internal app allows edits. Public forms require separately authored, validated business routes and an explicitly chosen access level; do not automatically copy internal write permissions into `site.access`. Review which configured fields may become public before going live.
+
+Python starters keep their Python runtime and do not declare `site`: the Website engine rejects Python. For a website, scaffold the Node/Worker version instead; keep a Python app on Local or Remote when it needs Python behavior.
+
+### The shape a `site` app must have
+
+There is no build step on the server. What you write into the node is what deploys, so bundle first.
+
+```json
+{ "requiredEngine": "site", "site": { "entry": "vendor/worker.js", "assets": "public" } }
+```
+
+- `site` is what opts the app in. Without that block the app cannot deploy, whatever the engine setting says.
+- `site.entry` is one already-bundled ES module with a default export that has `fetch`, as for a Cloudflare
+  Worker. It may import only `cloudflare:*`: no `node:*`, no npm packages, no second file. Leave `entry` out
+  for a purely static site.
+- `site.assets` is the static folder, `public` by default. A static site must have `<assets>/index.html`.
+- Every HTML page needs `<meta charset="utf-8">`, because Cloudflare serves `text/html` with no charset and
+  anything non-ASCII turns to garbage without it.
+- Python, `node:fs`, a long-running server or a missing entry stop the deploy, and the App tab names the
+  reason in the person's language. Files outside `entry` and `assets` never deploy.
+
+Run deploys a members-only preview to the App tab. **Go live** then publishes that same version to the
+address shown in the node's settings, where a Public switch can take it offline. After any edit the address
+keeps serving the old version until it is deployed again. You can do that yourself, with the person's own
+permission: `busabase-cli airapps site-deploy-preview --node-id <id>`, then, when the person asks for it,
+`busabase-cli airapps site-go-live --node-id <id>` (MCP `airapps_site_*`, HTTP `/api/v1/airapps/{nodeId}/site…`).
+Go live only publishes the version that was previewed: `preview-stale` means the files changed after the
+preview, so deploy the preview again. `site-state` says what is live. Moving the app to Trash takes the site
+offline; deleting it for good removes it.
+
+A live site can have custom domains (`airapps site-bind-domain --hostname shop.company.com`): the person
+adds the returned DNS records at their DNS provider, and `site-domains` shows when it is connected.
+
+### A site that reads and writes workspace data: `site.access`
+
+A site's Worker uses the same `/api/v1` and the same `busabase-sdk` as every other Busabase client. The only
+difference is who it is: a visitor is not signed in, so each deploy gives the Worker an API key of its own.
+
+| Binding | What it is |
+| --- | --- |
+| `env.BUSABASE_API_KEY` | Secret. An ordinary API key owned by the person who deployed: for a preview, the member whose run made it; live, whoever went live (the button, or `site-go-live` with their key) |
+| `env.BUSABASE_BASE_URL` | Where this Busabase is. Pass it as the SDK's `baseUrl`; never hard-code `busabase.com` |
+| `env.BUSABASE_SPACE_ID` | This workspace. The key works here and nowhere else |
+| `env.BUSABASE_AIRAPP_RUNTIME` | `"site"` |
+
+A Worker has no `process.env`, so pass all three to the client yourself; `new Busabase()` with no arguments
+finds nothing.
+
+Ask for the level the site needs in `airapp.json`. Leave it out and the key is read-only:
+
+```json
+{ "requiredEngine": "site", "site": { "entry": "vendor/worker.js", "assets": "public", "access": "write" } }
+```
+
+| `access` | The site can | Use it for |
+| --- | --- | --- |
+| `"read"` (default) | read | a catalogue, a price list, published posts |
+| `"changeRequest"` | read, and propose changes that wait for a member to review | submissions someone must check before they count |
+| `"write"` | read, create, update and delete | an order form, a booking that must land at once |
+
+- **Going live is the consent.** There is no other approval and no settings switch. Changing `access` changes
+  the version, so it only takes effect after a new run and Go live. Tell the person what level the site asks
+  for, and why, before they go live.
+- **The key is never more than its owner.** It acts as that person, so it can do only what they can do in
+  this workspace; it cannot reach their other workspaces or their personal Vault values; it stops working if
+  they leave. It shows in their API key list as `Site: <app name>` (`Site preview: <app name>`); deleting it
+  there cuts the site off until the next Go live.
+- **The preview runs on real data,** with its own key at the same level, like every other engine. Write
+  against a test Base while you build if the real one must not change.
+- **Lifecycle:** every deploy replaces the key. Turning Public off or moving the app to Trash disables the
+  live key at once; Public on enables it again; deleting the app deletes it.
+- Writes go through ChangeRequests like any API write, and the history names the key.
+
+**The key reaches everything its level allows in this workspace, not only the Bases your app uses.** Your
+Worker is the only thing between a stranger and that. So:
+
+- Expose specific routes with one fixed job each (`GET /api/products`, `POST /api/orders`). Never pass a
+  visitor's path, Base, record id, filter or body through to the API, and never build a generic proxy.
+- Name the Bases and fields in the Worker. Validate what a visitor sends (type, length, allowed values)
+  before you write it, and return only the fields the page needs.
+- Ask for the lowest level that works. A catalogue is `read`; only ask for `write` when the site must save
+  something.
+- Never send the key to the browser, put it in `public/`, or log it.
+- There is no CAPTCHA. A public form can be spammed; say so before promising one for something a stranger
+  could abuse.
+
+**Bundle the SDK into the Worker.** `site.entry` must be one file with no imports, so write the Worker as a
+source file that imports `busabase-sdk`, then bundle it:
+
+```bash
+npm install busabase-sdk esbuild
+npx esbuild src/worker.js --bundle --format=esm --platform=neutral --outfile=vendor/worker.js
+```
+
+Commit both: `src/worker.js` so the next agent can change it, `vendor/worker.js` because that is what deploys.
+The bundle includes SDK code, so keep it under `vendor/`, which the source-policy checker skips.
+The app's own Worker source remains checked. A
+`package.json` that only builds the bundle is fine for a site (`requiredEngine: "site"`); it needs no `dev`
+script. Never store `node_modules/`. Uploads are scanned for secrets, so a test that fakes a key must use a
+value that cannot pass for one (`"test-key"`, not a long random string after `apiKey =`).
+
+A shop that lists products and takes orders. `src/worker.js`:
+
+```js
+import { createBusabaseClient } from "busabase-sdk";
+import { createAirAppRecords } from "busabase-sdk/airapp";
+
+// Base ids from the workspace; fields are the Bases' slugs.
+const PRODUCTS = "<products base id>";
+const ORDERS = "<orders base id>";
+
+const text = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+export default {
+  async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+    const client = createBusabaseClient({
+      baseUrl: env.BUSABASE_BASE_URL,
+      apiKey: env.BUSABASE_API_KEY,
+      spaceId: env.BUSABASE_SPACE_ID,
+    });
+    const records = createAirAppRecords(client, { appId: "toy-shop" });
+
+    if (pathname === "/api/products" && request.method === "GET") {
+      const page = await records.readPage({ baseId: PRODUCTS, limit: 100 });
+      return Response.json(
+        page.records.map((record) => ({ name: record.fields.name, price: record.fields.price })),
+      );
+    }
+
+    if (pathname === "/api/orders" && request.method === "POST") {
+      const body = await request.json().catch(() => null);
+      const order = {
+        name: text(body?.name, 100),
+        email: text(body?.email, 200),
+        item: text(body?.item, 200),
+      };
+      const orderId = text(body?.orderId, 100);
+      if (!order.name || !order.email || !order.item || !orderId) {
+        return Response.json({ error: "Please fill in every field." }, { status: 400 });
+      }
+      try {
+        // The same orderId twice (a double click, a retry) creates one record.
+        await records.createRecord({
+          baseId: ORDERS,
+          fields: order,
+          message: "Order from the website",
+          idempotencyKey: orderId,
+        });
+        return Response.json({ ok: true });
+      } catch (error) {
+        console.error("Order failed", error?.status ?? error?.code ?? error);
+        return Response.json({ error: "We could not take this order just now." }, { status: 503 });
+      }
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
+```
+
+The page in `public/` calls `/api/products` and `/api/orders` on its own origin, makes one `orderId`
+(`crypto.randomUUID()`) when the form loads and keeps it until the order succeeds, and says plainly when an
+order did not go through. Every HTML page still needs `<meta charset="utf-8">`.
+
+### Why the `browser` engine pins Vite so tightly
+
+This applies to the `browser` (Nodepod) engine only — on `local` and `remote` a bundler is just a
+bundler. It was verified against real boots, not assumed — real `onServerReady` events and real 200
+responses through the SW proxy, using Nodepod's own `examples/issue-44-react-dev-server` and
+`examples/vite-dev-exit-1` regression pages run against the Nodepod release current at the time
+(1.9.20, then published as `@scelar/nodepod`; not re-run on `@r1ck404/nodepod` 1.11.x)
+(the exit-code-only check that page's own summary uses is a false-positive trap: a `npm run dev`
+process can exit 0 *after* an unhandled rejection already killed the dev server before it bound a
+port — check for a real `onServerReady`/200, not a clean exit code):
+
+- **Unpinned or old Vite (5.x/6.x, and any fresh `npm create vite` scaffold)** throws
+  `Cannot destructure property 'createServer' of '(intermediate value)'` out of its esbuild WASM
+  init before the dev server binds a port. Confirmed broken.
+- **Vite 8's default bundler, rolldown**, ships a native `.node`-class WASM binding Nodepod's
+  browser-emulated npm cannot resolve (`Cannot find native binding`), traced back to
+  `SharedArrayBuffer is not defined` breaking rolldown's own WASI random-data syscall. This is a
+  structural mismatch (the `browser` row's "native binaries... do not" above), not something a config
+  tweak fixes. Confirmed broken even with zero CSP/CORS restrictions on the host page.
+- **The one exception: `vite@7.3.1` exactly.** The plain esbuild JSX transform boots. So does
+  `@vitejs/plugin-react` (Babel), and so does its Babel Fast Refresh variant — all three were
+  real-booted, so **`@vitejs/plugin-react` is permitted, not prohibited**. Only the SWC variant,
+  `@vitejs/plugin-react-swc`, fails, for the same native-binary reason as rolldown. `7.3.1` is the
+  exact pin `packages/busabase-core/src/logic/airapp-runnable.ts`'s `assertAirAppRunnable` write gate
+  allows through as `KNOWN_RUNNABLE_BUNDLER_VERSIONS`; every other bundler version is rejected at
+  write time with `AIRAPP_NOT_RUNNABLE`, precisely because it isn't runnable. Note the gate reads the
+  *bundler* pin only — it never inspects which React plugin is installed.
+- **Even the verified `7.3.1` pin needs host cooperation**: Nodepod lazy-loads `esbuild-wasm` from
+  `esm.sh` and (for the SQLite demo) `wa-sqlite`/`brotli-wasm` from `cdn.jsdelivr.net`. A host CSP
+  without those origins in `script-src` blocks the fetch and produces the exact same
+  `createServer` crash as an unpinned version — this is what actually broke it in production
+  before `apps/busabase/next.config.mjs`'s `NODEPOD_TOOL_CDN_ORIGINS` allowlist was added.
+  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` are
+  not required for the `7.3.1` boot itself (it passed without them in testing) but are Nodepod's
+  own documented recommendation for the full SharedArrayBuffer path.
+
+This skill still scaffolds Hono plus vanilla JS by default — that default is about keeping
+generated AirApps boring, reviewable as plain file diffs, and free of a build step the runtime
+doesn't need, not about Vite being unable to run at all. If a blueprint has an explicit,
+user-authorized reason to need Vite/React (e.g. porting an existing Vite app in `maintain` mode),
+pin exactly `vite@7.3.1` with the esbuild JSX transform, and confirm the target Busabase's AirApp
+CSP allows `esm.sh`/`cdn.jsdelivr.net` before promising it will run — do not scaffold `vite@8` or
+an unpinned `vite` range on the assumption a newer version is safer. None of that applies if the app
+targets `remote`: there a bundler runs in an ordinary container, and the constraints that bite are
+the ones listed under "Which Stack Is Allowed" (no WebSocket upgrade, relative assets, install
+budget).
+
+## Canonical Local Source
+
+There are two source-ownership modes:
+
+| Caller | Canonical project root | Local command |
+| --- | --- | --- |
+| Standalone AirApp creation | approved temporary or persistent directory | `pnpm dev` |
+| Higher-level App-in-Skill creator | `<skill-root>/app/` | `cd <skill-root>/app && pnpm dev` |
+
+The canonical project root is the complete generated Hono project: `package.json`, `server.js`,
+`scripts/`, `airapp-blueprint.json`, and the browser `app/` subtree. For App-in-Skill packages this
+means `<skill-root>/app/app/` contains browser assets; the repeated directory name is intentional.
+
+AirApp deployment must serialize the same reviewed project tree. Exclude only local-only material
+such as `.env*`, `node_modules/`, logs, and editor files. Do not rewrite the app into a remote-only
+variant, generate a parallel implementation, or treat the merged AirApp as an independent source of
+truth. Maintenance starts by comparing canonical local source with merged AirApp HEAD; any accepted
+remote-only change is back-ported locally and verified before another deployment.
+
+`pnpm` is the canonical local invocation for bundled skill apps. Package scripts stay conventional,
+so AirApp/Nodepod can run `start` without a package-manager-specific application build. Scaffolding
+may install and prebundle dependencies locally, but deployed `start` remains exactly
+`node server.js`.
+
+## Two Authentication Contexts
+
+Do not conflate deployment actions with runtime data access.
+
+| Context | Client | Auth |
+| --- | --- | --- |
+| Agent creating Folder/Bases/AirApp/CRs | Busabase CLI, REST, or `createBusabaseClient` | Cloud API key or Desktop anonymous access |
+| AirApp browser reading its Bases | `createBusabaseClient` against its own origin | ambient logged-in browser session |
+| A published site's Worker (`site` engine) | `createBusabaseClient` with `env.BUSABASE_BASE_URL` | the site's own API key, `env.BUSABASE_API_KEY` |
+
+Never pass the Agent's API key into generated AirApp files. A site's key is put there by Busabase at deploy
+time; never copy it anywhere else.
+
+## One Path, Every Environment
+
+The SDK ships a single client. The AirApp always calls `/api/v1/…` on its **own origin**, so the same source runs unchanged in four places:
+
+| Where it runs | What serves `/api/v1` | What authenticates |
+| --- | --- | --- |
+| Deployed in Busabase (Nodepod) | Busabase itself; the service worker passes the path through | the viewer's session cookie |
+| Deployed in Busabase (Local Node engine) | Busabase itself, via the same-origin reverse proxy | the viewer's session cookie |
+| Public embed | the embed runtime relays it to a capability-scoped, read-only route | the embed's capability, never the viewer |
+| Local `pnpm dev` | this project's own dev proxy in `server.js` | browser OAuth; owner-only per-AirApp token registration under `~/.busabase/airapps` |
+
+A published site's Worker is the one exception: it runs on Cloudflare, not on Busabase's origin, so it calls `env.BUSABASE_BASE_URL` with its own key (see `site.access` above).
+
+There is no Cloud/Desktop path fork and no bridge prefix. Do not hard-code an absolute Busabase URL, and do not reintroduce `/__busabase_api__/` — that bridge prefix is gone, nothing serves it, and an AirApp that uses it works in none of the rows above.
+
+## Browser Client
+
+```js
+import { createBusabaseClient } from "../vendor/busabase-sdk.js";
+import { appConfig } from "./config.js";
+
+export function createRuntimeClient() {
+  return createBusabaseClient({
+    baseUrl: window.location.origin,
+    ...(appConfig.spaceId ? { spaceId: appConfig.spaceId } : {}),
+  });
+}
+```
+
+## Which Runtime Am I? — `BUSABASE_AIRAPP_RUNTIME`
+
+**Never classify the runtime from the URL.** Hostname tests fail in both directions:
+
+- Busabase-hosted AirApps are served from `localhost` / `127.0.0.1` / a `.localhost` host all the
+  time — Desktop and OSS run on `http://localhost:15419`. So "localhost ⇒ standalone" is wrong.
+- A standalone `npm run dev` is routinely reached over a LAN IP or a signed dev tunnel such as
+  `https://3111-t14e66e832aa5e6a.dev.budaapps.com`. So "not localhost ⇒ hosted" is wrong — and this
+  direction is the damaging one. The app skips its own connection gate, calls `/api/v1` with no
+  credential, and shows `Busabase connection required` with no action the user can take.
+
+Busabase spawns the AirApp's own process in every hosted row, so it simply *tells* the app what it
+is. `packages/busabase-core/src/domains/airapp/utils/airapp-runtime-env.ts` owns the contract; both
+engines inject it (`local-runtime.ts`/`sandock-runtime.ts` into the spawned process env,
+`nodepod-runner.ts` into `Nodepod.boot` + the `npm run dev` spawn). Only Busabase ever sets it, so **absence is the positive
+fact "standalone"**.
+
+| `BUSABASE_AIRAPP_RUNTIME` | Runtime | `/api/v1` is authenticated by |
+| --- | --- | --- |
+| `browser` | in-browser engine, dashboard preview | the viewer's session cookie |
+| `local` / `remote` | server-side process, reverse-proxied onto a sub-path | the viewer's session cookie |
+| `embed` | public embed | the embed's capability, never the viewer |
+| *(unset)* | standalone `npm run dev` | this app's own dev proxy / OAuth registration |
+
+The app's host (`server.js`, or `server.py` for a Python AirApp) re-exposes it to the browser, which
+cannot read env vars, and `app/js/runtime.js` is the only module allowed to answer the question — by
+asking the SDK (below), not by probing on its own. Both ship in the template; keep them. The contract
+is the same in either language — only the host that serves it differs.
+
+```js
+import { describeBusabaseAirAppRuntime } from "busabase-sdk/airapp-node";
+
+// The SDK owns the presence-based `hosted` decision and preserves unknown
+// future engine names instead of treating them as standalone.
+const airappRuntime = describeBusabaseAirAppRuntime();
+app.get("/__airapp/runtime", (context) => context.json(airappRuntime));
+```
+
+The browser half is the SDK's, not the app's. `detectAirAppRuntime()` from `busabase-sdk/airapp`
+(vendored as `app/vendor/busabase-airapp.js`) asks that endpoint and encodes every rule a hand-written
+probe has to get right: the **relative** path `__airapp/runtime` (no leading slash — under the Local
+Node engine a leading slash resolves against busabase's origin root), a JSON `content-type` check (a
+hosted origin's catch-all route can answer `200` with an HTML shell, and `response.ok` alone would
+read that as a successful probe), a 3 s timeout, and `hosted` taken from the server's own boolean —
+never from a list of engine names. The scaffold's `app/js/runtime.js` is just that call:
+
+```js
+// app/js/runtime.js
+import { detectAirAppRuntime, shouldUseLocalAirAppGateway } from "../vendor/busabase-airapp.js";
+
+export const getRuntime = () => detectAirAppRuntime(); // { runtime, hosted, devProxy, determined }
+export const shouldUseLocalGateway = (runtime) => shouldUseLocalAirAppGateway(runtime);
+```
+
+It resolves **three** states, never two — `hosted`, `standalone`, and `unknown` (the probe did not
+answer; `hosted: false, determined: false`, so the connect gate is shown: an unnecessary gate is
+closed by the operator, a missing one strands them). It never rejects, and the answer is shared
+page-wide, so call it wherever you need it. Keep "where am I running" separate from "do I have
+credentials" (`devProxy`, and the `/api/v1` response itself). Collapsing the two axes into one boolean
+is what produces a UI that states a fixed "authenticated" and is wrong the moment it isn't.
+
+`scripts/check.mjs` fails the build on `location.hostname` use, on loopback-literal comparisons, on a
+`runtime.js` that does not call `detectAirAppRuntime()`, on a hand-written `__airapp/runtime` probe,
+and on a connect gate that is not given `shouldGate`. `busabase-cli check` counts a
+`detectAirAppRuntime()` call as the probe.
+
+An app scaffolded before 0.99.0 carries its own `runtime.js` probe and record helpers, and keeps
+working. Moving it onto the SDK's helpers is a change of its own: in `maintain`, make it only when the
+approved scope includes it, and never as a side effect of an unrelated edit.
+
+## Local Development Against Real Data
+
+Interactive apps authenticate through browser OAuth only when running standalone — that is, when
+`BUSABASE_AIRAPP_RUNTIME` is unset, never because of what the hostname looks like. Use the setup UI
+only for an independently opened local `npm run dev` process. That setup offers the canonical
+Busabase Cloud origin and one custom-origin option, then submits to Hono's server-side OAuth start
+route. Do not direct the user to `busabase-cli login`, device-code login, or an API-key field.
+
+Use `createAirAppConnectGate()` from `busabase-sdk/airapp-gate` for the browser half of this
+boundary — the connect screen, the Space-selection screen, and the state machine that decides which
+one is owed. Do not hand-roll this UI per app; every App-in-Skill that did carried a duplicated
+~160-line renderer plus a byte-identical stylesheet across dozens of apps before this existed. Pass
+`shouldGate: () => !isDemo() && shouldUseLocalGateway(runtime)` explicitly — never let the gate infer
+whether it is needed from a status probe, for the same reason hostname detection is banned below. Import
+`busabase-sdk/airapp-gate.css` (or vendor it, matching how `busabase-sdk` itself is vendored) for the
+default look; it is themed entirely through `--bb-gate-*` custom properties, so match `appConfig`'s
+accent color by overriding them rather than forking the renderer. `gate.pass({ onReady })` returns
+`true` once the app may load data; call `gate.status()` afterward if the UI needs to display the
+connected Space (e.g. in a settings panel).
+
+The Hono boundary must:
+
+1. create a `busabase-airapp` OAuth request with PKCE S256 through `busabase-sdk`;
+2. keep state and verifier server-side for at most five minutes;
+3. accept only an exact loopback callback, then validate state and `iss` before code exchange;
+3b. refuse to start at all when the request's own origin is not loopback, returning a concrete next
+   step rather than redirecting into a callback that can never be accepted. This is the dev-tunnel
+   case (`https://3111-….dev.budaapps.com`): detection now correctly reports `standalone` and shows
+   the gate, but the flow still cannot complete, so say so — "OAuth callbacks only work on this
+   machine's own address; open `http://localhost:<port>` to connect, or start the app with
+   `BUSABASE_BASE_URL` set";
+4. call `exchangeBusabaseOAuthCode()` on the server;
+5. call the Node-only SDK credential helper to register the rotating token set at
+   `~/.busabase/airapps/<app-id>.json`; the directory must be `0700` and the file `0600`;
+6. keep this per-AirApp registration separate from the CLI's active `~/.busabase/.env` profile;
+7. call `getBusabaseAirAppAccessToken()` server-side when proxying `/api/v1`; it refreshes and
+   persists the token set when needed and never includes a credential in a browser response;
+8. call `revokeBusabaseAirAppOAuthCredential()` on logout, then remove the local registration.
+
+Use `createBusabaseAirAppLocalGateway()` from `busabase-sdk/airapp-node` for this boundary. It owns
+the pending PKCE request, credential rotation, auth verification, validated Space persistence,
+logout, and `/api/v1` proxy. Do not copy those mechanics into each app. The browser may request a
+Space through `/auth/space`, but the gateway validates membership and ignores any browser-provided
+`x-busabase-space` header on proxied requests.
+
+Before redirecting the browser, issue the generated authorization GET from Hono with redirects
+disabled and a short timeout. A redirect or successful response proves that the target recognizes
+the public client; `invalid_request` means the selected server needs the local-app OAuth release.
+Return that as a concise setup-page error. This compatibility probe is local onboarding only and
+must not run inside AirApp.
+
+The local OAuth registration is identity bootstrap, not domain configuration or a blueprint
+`vault_requirement`. It must never be committed, synced into an AirApp, or represented as a normal
+Busabase Vault item. Browser code must never receive access/refresh tokens, the PKCE verifier, or a
+Vault value through JavaScript-visible cookies, storage, application state, logs, or errors.
+
+Validate custom origins before any outbound request: accept HTTPS origins without userinfo, query,
+fragment, or path; permit HTTP only for loopback development. Bind the selected origin, redirect URI,
+resource audience, client id, and verifier to the pending state. Do not turn the local proxy into a
+general URL fetcher.
+
+Environment bootstrap remains supported only for explicit non-interactive CI/operator testing:
+
+```bash
+BUSABASE_BASE_URL=http://localhost:15419 pnpm dev              # Desktop / OSS: open, no key
+BUSABASE_BASE_URL=https://busabase.com \
+  BUSABASE_API_KEY=… BUSABASE_SPACE_ID=… pnpm dev              # Cloud
+```
+
+An environment key stays in the shell and is attached server-side. It must never appear in a
+committed file, and the browser must never see one. It does not replace the OAuth setup flow in an
+interactive generated app.
+
+**Asset references must be relative** (`./styles.css`, `./js/app.js`, `../vendor/busabase-sdk.js`). Under the Local Node engine the app is reverse-proxied onto a *sub-path* of busabase's origin, so an absolute `src="/js/app.js"` resolves against the origin root — busabase itself — and 404s. `pnpm check` rejects absolute asset references. `/api/v1/…` is exempt: it is an API call, not an asset.
+
+Without environment bootstrap the app still runs: standalone production mode shows the OAuth
+connection gate and `?demo=1` renders deterministic Demo data. Once connected, authentication
+readiness and resource readiness are separate states. A Busabase-hosted AirApp — recognized by
+`BUSABASE_AIRAPP_RUNTIME`, never by hostname — never calls `/auth/status` or `/auth/start`,
+skips the local OAuth gate, and constructs
+`createBusabaseClient({ baseUrl: window.location.origin })` without a credential. Cloud's `/api/v1`
+auth layer validates the same-origin browser request, resolves the Better Auth session, and scopes
+the request to the viewer's active Space.
+
+The published `busabase-sdk` ESM file can contain bare imports such as `@orpc/client`; a browser cannot resolve those imports directly. During local scaffolding, exact-pinned `esbuild-wasm` bundles the exact-pinned SDK into `app/vendor/busabase-sdk.js` (the client), `app/vendor/busabase-airapp.js` (the `busabase-sdk/airapp` helpers) and `app/vendor/busabase-airapp-gate.js` (the connect gate, with its stylesheet). `npm run build:sdk` rebuilds all of them. Commit the generated files as reviewed AirApp source. `start` only runs `node server.js`, so Nodepod never invokes a build tool, native binary, or subprocess. This is a dependency bridge, not an application framework: the AirApp remains Hono plus vanilla HTML, CSS, and JavaScript. Never expose `node_modules` through a static route or replace this with a third-party CDN.
+
+The Demo provider is dynamically imported before the Busabase provider. Consequently `?demo=1` remains deterministic and can render even before the SDK bundle exists, while production mode loads the SDK only when needed.
+
+## Provider Boundary
+
+Keep these files separate:
+
+```text
+app/js/providers/demo-provider.js
+app/js/providers/busabase-provider.js
+app/js/providers/index.js
+app/js/busabase-client.js
+app/js/config.js
+```
+
+The UI calls only the provider interface. The demo provider is deterministic. The Busabase provider uses only the procedures declared in `blueprint.json` and reads only the exact materialized resource ids written into generated config. Do not list the workspace at runtime to rediscover configured resources by slug.
+
+## Reading And Writing Records
+
+The scaffold's provider is built on `createAirAppRecords` (`busabase-sdk/airapp`, vendored as
+`app/vendor/busabase-airapp.js`); keep it that way instead of re-deriving the plumbing. Apps used to
+carry their own `readPage` / `findRecord` / `upsert` / `isQueued` and their own copy of the "sent for
+review" sentence, and a fix to any of them had to be applied to each copy by hand.
+
+```js
+import { airAppWriteMessage, createAirAppRecords } from "../../vendor/busabase-airapp.js";
+
+const records = createAirAppRecords(client, { appId: appConfig.appId });
+
+const page = await records.readPage({ baseId: base.baseId, limit: base.readLimit, cursor }); // one page
+const row = page.records[0]; // RecordVO + `fields` (current values by slug)
+const match = await records.findRecord({ baseId, fieldSlug: "deal-id", valueText: dealId }); // or null
+const outcome = await records.upsert({ baseId, fieldSlug: "deal-id", valueText: dealId, fields, message });
+// outcome: { status: "saved" | "queued", recordId?, changeRequestId?, action, response }
+state.notice = airAppWriteMessage(outcome, { locale }); // "Saved." / "Sent for review. …"
+```
+
+- **Never pass `autoMerge` from app code.** The helpers do not, and `busabase-cli check` fails
+  (`airapp/forced-review`) on any `autoMerge` that is not a literal `true` — an explicit `false`, a value
+  worked out from where the app runs, or a variable passed through. A person's own write follows their
+  permission: merged for someone with write access, a ChangeRequest for someone without. Both are
+  correct outcomes; report which one happened. The only exception is a write that is itself something
+  outgoing a second person must approve before it is sent — mark it on the line or the line above with
+  `// allow-forced-review: <reason, 20+ characters>`.
+- **Say what happened.** `queued` means the change is waiting for someone with write access, and the
+  record still shows its old value. Show `airAppWriteMessage(outcome)` (en, zh-CN, zh-TW, ja; pass
+  `messages: { saved, queued }` for your own wording), and do not render a queued write as if it landed.
+  For bulk writes, `toAirAppWriteOutcome(response)` gives the same shape, with `recordIds`.
+- **The app's own rules stay in the provider:** the procedure allowlist check, how a record maps onto
+  the UI's row shape, how keys are spelled. The helpers take and return field values keyed by the Base's
+  slugs; convert at the edge if the UI uses another spelling.
+- `upsert` updates against the `headCommitId` it just read, and fills the match field into a create
+  when `fields` leaves it out, so the next upsert finds that record instead of creating another.
+- `updateRecord` takes the `baseCommitId` you read the record at. After a write that was **saved**,
+  read the record again before the next write: its head moved, and a stale one is refused as a
+  conflict. A **queued** write changed nothing yet, so only the pending-review count needs a refresh.
+- The write procedures an app may use are named in the blueprint's
+  `permissions.change_request_procedures`: `records.changeRequest` to change a record,
+  `bases.createChangeRequest` to create one. The provider checks the allowlist before calling.
+
+## Persistent Configuration And Native Nodes
+
+The exact ids in generated config are deployment bootstrap, not a local product-settings database.
+Persistent configuration, workflow state, and domain data live in Busabase and are read through
+`busabase-sdk` from the most appropriate native node:
+
+- Folder and Node identity define the app root, hierarchy, ownership, and resource map.
+- Base and native View hold structured settings, policies, workflow rows, review queues, status, and
+  relations that need filtering or sorting.
+- Doc holds longer durable instructions or narrative configuration; read only the required range.
+- Drive and File hold assets or larger artifacts; list bounded directories and fetch named files on
+  demand.
+- Vault holds secrets, but browser AirApps receive only requirement names/readiness. A trusted
+  Workflow or Agent resolves values and exposes only sanitized results.
+
+Do not persist product configuration in local JSON, SQLite, `app/.data/`, `localStorage`, or Demo
+records. Local shell variables are connection bootstrap only. Demo data is deterministic preview
+state and must never become a fallback after a Busabase provider failure.
+
+Default read surface:
+
+```text
+records.list
+records.count     # only when a screen renders an authoritative total, not a loaded-rows count
+records.groupBy   # only when a screen renders per-bucket counts (board columns, a by-status chart)
+records.listPage  # numbered pagination, or a date-windowed screen (see dateRange below)
+changeRequests.list  # only when pending review data is rendered
+```
+
+Add narrowly scoped procedures only when a screen consumes them, for example native View metadata, one Doc/range, a bounded Drive directory, or one named file/asset. Vault has no browser procedure and must never be represented in the provider interface.
+
+Reads are GET and writes are POST/PUT/DELETE on this surface, but do not lean on the verb for safety: keep the explicit procedure allowlist and the static validation in `pnpm check`.
+
+## Data Access Budget And Pagination Contract
+
+- Define a budget for every interactive read path, not only the first screen. Lists, refreshes, navigation, search, filters, details, and continuation reads must each have a bounded query plan.
+- Fetch one page per configured Base using its blueprint `read_limit`/config `readLimit` (default 50, integer 1–50), and fetch only one additional page for each continuation action — never a loop that walks the cursor to the end during initial loading.
+- Fetch at most 20 relevant pending ChangeRequests, using the server-side status filter, and omit this request when the UI does not render it.
+- Start independent Base and ChangeRequest reads together with `Promise.all`.
+- Preserve every `nextCursor` and choose the continuation UI by layout, not by habit — both of the following are compliant with "one page per user action"; the difference is purely interaction design:
+  - **Load more (cumulative append)** — a button appends the next page to what's already showing. Fits a persistent list+detail split because paging away could orphan the open detail. The scaffold also uses it for its full-width list; `providers/busabase-provider.js`'s `loadMore()` and `app/js/app.js`'s `loadMore()` implement it.
+  - **Numbered pager (Prev / 1 2 3 … / Next)** — replaces the displayed rows with exactly that page. Fits a screen where the list *is* the whole view and selecting a row navigates away to a separate detail screen (nothing next to the list to orphan) — `kelly-crm`'s Contacts/Deals pages (`mr-kelly/skills#131`) are the reference. Prefer `records.listPage` here: it takes `page`/`pageSize` directly and returns `total`/`totalPages`, so jumping to page 7 is one request and the page numbers have an honest total behind them. `records.listPage` takes the same `sort` as `records.list` (one number or date field, `asc`/`desc`, empty values last, ties broken by record id so pages never overlap or skip), so a pager whose order matters — newest follow-up first, say — passes `sort` directly; no View is needed. Write it as `{ fieldSlug, fieldType, direction }` with the field's own type (`date`, `number`): current servers read the type from the Base when `fieldType` is left out and reject a field the Base does not have with a 400, but servers before that change silently ignored a `sort` without `fieldType` and returned the default order in both directions. With both `viewId` and `sort`, the explicit `sort` replaces the View's order and the View's filters still apply. A server older than this option may drop the unknown `sort` and return the default order without an error, so before offering page numbers check that the first page actually comes back in the requested order; if it does not (or the call fails), fall back to Prev/Next — never to walking the cursor. `records.list` only exposes a forward keyset cursor with no offset/skip, so **never** build "jump to page N" on it by loading forward until page N arrives: that is a full scan behind a text box (see "A full scan in disguise" below). Without `records.listPage`, ship Prev/Next only. Degrade to Prev/Next-only (no page numbers) when neither `records.listPage` nor `records.count` is available — there is no honest total to show numbers against.
+  - Don't default to one pattern out of habit; pick the one that matches the screen actually being built, and say which one and why in the blueprint/review notes when it isn't obvious from the layout.
+- Apply the same per-row normalization (field coercion, JSON-string-encoded array fields parsed into real arrays, defaulting) to every page fetched, first or Nth, via one named function per record shape — not a second copy re-derived (or skipped) for later pages, regardless of which continuation UI is used. A normalizer that only runs on page 1 fails silently until a user reaches page 2, and the failure is a render crash on whatever field it skipped, not a compile-time error.
+- **Grouped counts** (a board column header, a "by status" bar chart, a pipeline stage breakdown) have an exact server-side answer: `records.groupBy`. One call returns every bucket's real count for a `select` or `checkbox` field (or a `number`/`date` field with `bucketing: "sql"`), optionally scoped by `viewId`/`filters`/`valueFilters`, without reading a single record into the browser. Use it for any grouped *count*; never derive one by tallying loaded rows.
+- **Sums, averages, minimums and maximums** (a revenue total, an average deal size) have an exact server-side answer too: `records.groupBy` with `aggregates: [{ fn: "sum", fieldSlug: "amount" }]` (`sum` / `avg` / `min` / `max` / `count`). Omit `fieldSlug` to aggregate the whole filtered set as one bucket — that is what a summary tile wants — or pass it to get the aggregate per group. Only number-shaped fields aggregate (anything else is a 400), and an aggregate over a group with no values is `null`, not 0. Scope with `valueFilters` (exact, stays one SQL `GROUP BY`) or a `viewId`. What it cannot do is per-row arithmetic across fields — a weighted pipeline (`amount × probability`), a duration between two dates. For those, compute from the loaded page and label the scope, or have a trusted workflow write the figure into a snapshot record; do not read the rest of the table to make it exact.
+- `records.groupBy` buckets two ways. The default `bucketing: "grid"` groups only `select` and `checkbox` fields, the way the grid renders them (an unset checkbox counts as `false`, an empty string falls in the null bucket) — right for a Kanban column header. `bucketing: "sql"` also groups `number` and `date` fields, gives a missing value its own bucket, and returns keys in their own type — right for anything reproducing SQL. Text fields are rejected in both modes rather than approximated (the indexed projection truncates long values, so two distinct values could collide). A `date` bucket is the stored date value, not the viewer's local day: for day buckets over timestamps, scope the read with `dateRange` instead — see the calendar note below.
+
+  In the provider, it follows the same shape as the existing `countRecords` helper — permission-gated, and returning `null` (never a fabricated empty result) so the UI can hide the breakdown rather than invent one:
+
+  ```js
+  // `groups` is [{ value, count }]. `value` is the raw choice id (or "true"/
+  // "false" for a checkbox); `null` is the bucket of records with no value.
+  // Zero-count buckets are OMITTED — render an empty column from the field's
+  // own choice list, not from this response.
+  const groupRecords = async (client, base, fieldSlug) => {
+    if (!allowedReads.has("records.groupBy")) return null;
+    try {
+      return await client.records.groupBy({ baseId: base.baseId, fieldSlug });
+    } catch {
+      return null;
+    }
+  };
+  ```
+- Push supported filters and sorting into `records.list` instead of fetching a broad page and pretending client-side filtering covers the full Base.
+- **A calendar/date-windowed screen scopes its read to the window it draws**, via `records.listPage`'s `dateRange` (`{ fieldSlug, gte, lt }` — a half-open `[gte, lt)` interval on a `date`/`created_time`/`updated_time` field). Compute the bounds from the grid you are about to render (a month view is typically a 42-day grid starting before the 1st, not just the calendar month) and send them as **absolute UTC instants** — `new Date(localMidnight).toISOString()` already does this conversion. The server compares real timestamps and has no idea what timezone the viewer is in, which is precisely why the bounds are the caller's job: send local-day boundaries converted to UTC, and each viewer gets their own correct grid. Do not fetch the whole Base and bucket by day in the browser.
+- Debounce replaceable queries such as text search, discard stale responses, and reuse already-loaded pages when inputs have not changed.
+- Avoid per-record follow-up calls. Load related data in bounded parallel batches or from data already present in the record response.
+- Never loop through cursors in an interactive request to compute a total. Call `records.count` instead — it is a real, exact server-side count (optionally scoped by `baseId`, a saved `viewId`, and/or ad-hoc `filters`), not an approximation, and it is cheap for the filter shapes an AirApp typically needs (equality/contains text matches, presence checks, checkbox true/false). Full exports and offline research beyond a count still require a separate deliberate design with bounded batches, progress, cancellation/retry behavior, and a clear user action.
+- Do not request procedures or datasets that have no visible consumer.
+
+### A full scan in disguise
+
+"One page per user action" fails most often in code that does not look like a loop over the
+whole table. Every one of these shipped in a real AirApp, each with a reason that sounded fine:
+
+| Shape | What it was "for" | What to do instead |
+| --- | --- | --- |
+| `do { … } while (cursor && pages < 12)` | "fallback" when a filter seemed not to apply | Fix the query: `valueFilters` are exact, `filters` are a best-effort superset; a `date` equals filter is not pushed down by `records.list`, so match on the field type the server honours. Then read one page. |
+| `while (cursor && pageCount < 4)` | "only a few pages" | A cap is not a budget. Read one page; offer Load More. |
+| `Promise.all(Array.from({ length: totalPages - 1 }, …))` | a dashboard summary over the whole table | Counts → `records.count`; per-bucket counts → `records.groupBy`; sums / averages / min / max → `records.groupBy` with `aggregates` (omit `fieldSlug` for one summary bucket). Only per-row arithmetic across fields (a weighted amount, a duration) has no server answer — compute it from the loaded page and label it, or snapshot it from a trusted workflow. Never fetch the rest silently. |
+| `while (loaded <= target * size) await loadMore()` | "jump to page N" | `records.listPage({ page, pageSize, sort })` — one request, in the list's own order. A list merged from several Bases has no single "page N"; give it Prev/Next instead of a jump box. |
+| `allRecords(baseId)` called on navigation | building a lookup map / picker | Read the bounded page you render; resolve the rest with `records.get` for the record named by the URL, or `records.search` for a picker. |
+
+Parallel is not bounded, a cap is not a budget, and a user typing a page number is not consent to
+read every page before it. `scripts/check.mjs` rejects the loop and fan-out shapes above; the
+review has to catch the rest.
+
+These limits are page budgets, not claims about total record count. Reading another page must be a visible user action; append without duplicates for load-more, replace for a numbered pager.
+
+Three different questions need three different answers — do not conflate them:
+
+- **"How many rows have I loaded so far?"** (a browsable list, a feed, a picker) — this is about the page budget above. A displayed count must say or signal when it covers only loaded rows; show `50+` (or similar), never present a partial window as a canonical total.
+- **"What is the total?"** (a summary/stat tile — "Total PRs: 825", "Open issues: 57") — this is not a loaded-rows question at all. Call `records.count` and render its `total` directly. Never derive a summary-tile number from `records.list` page length, and never label a `50+`-style partial count as if it were this kind of total.
+- **"How many in each bucket?"** (board column headers, a by-status chart, "Open 57 / In progress 12 / Done 340") — call `records.groupBy` once and render each bucket's `count`. This is the question that most often gets answered wrongly by draining the Base: a number that climbs while rows load is worse than no number, because the user cannot tell when it has stopped being wrong. The counts are exact from the first paint and do not depend on how many records the screen has fetched.
+
+## Optional Actions
+
+If the approved blueprint contains an action, the scaffold already renders it: a button on the open
+record opens a form for the action's `fields` (text, longtext, markdown, number, checkbox, select, url,
+email, phone, date), with an optional note for the reviewer. Keep to that shape when you extend it:
+
+- implement only `kind: "change_request"`, and only for a record the person has open;
+- show the proposed fields and message before submission, and send only the fields that changed;
+- write through the provider's `updateRecord` (the SDK helper), so `autoMerge` stays unset;
+- say what happened with `airAppWriteMessage(outcome)`: "Saved." when it landed, "Sent for review."
+  when it is waiting for someone with write access, and leave the record showing its old value in the
+  second case;
+- never call review or merge from the AirApp, and never force review: Busabase decides from the
+  person's own permission;
+- prevent a second submission while one is in flight;
+- after a queued write refresh the pending-review count; after a saved one read the record again.
+
+**The scaffold has no "new record" form, on purpose.** An action edits the record the person has
+open. Creating one needs decisions the blueprint cannot make for you — which fields are asked for,
+their defaults, how a relation is chosen, what makes a retried submit the same record — so there is no
+generic version to ship. When the approved scope calls for it, add it to the provider next to
+`updateRecord`:
+
+- call `createRecord({ baseId, fields, message, idempotencyKey })` from `createAirAppRecords`, and
+  allow it by naming `bases.createChangeRequest` in `permissions.change_request_procedures`;
+- send an `idempotencyKey` so a submit retried after a timeout is the same record, not a second one;
+- read the outcome like any other write: a **queued** create has no record yet (`outcome.recordId`
+  is absent), so show the sentence and stay on the form or the list — do not navigate to a record
+  that does not exist; a **saved** one names it in `outcome.recordId`;
+- leave `autoMerge` unset, as everywhere else.
+
+## Writing An Attachment Cell
+
+An `attachment` field's cell is **not** whatever `assets.confirm` hands back. It is an array of
+objects carrying exactly these five keys:
+
+```json
+{ "minutes_pdf": [{
+  "attachmentId": "att…", "fileName": "2026-W36.pdf",
+  "mimeType": "application/pdf", "size": 170470,
+  "url": "https://s1.example.com/attachments/blobs/…"
+}] }
+```
+
+`fileName` and `url` are both required; `name` is not read. Drop one and the whole record change is
+rejected with `Invalid field value: <字段名> has an invalid attachment` — a message that does not
+say which key is missing, so a wrong shape costs a bisect rather than a read. The field is untyped
+in the OpenAPI document (`additionalProperties: {}`), so this contract exists only here and in the
+`busabase` skill; there is nothing to introspect at runtime.
+
+Two ways to produce that object:
+
+```bash
+# CLI: one command does createUploadUrl → PUT → confirm and prints the cell shape
+npx --yes busabase-cli@latest assets upload --file ./slides.pptx --context record-field --output json
+```
+
+```js
+// SDK: the three calls, then assemble the cell — publicUrl becomes url, and you
+// carry fileName / mimeType / size yourself because confirm does not echo them.
+const up = await client.assets.createUploadUrl({ fileName, mimeType, sizeBytes, contentHash });
+if (!up.duplicate) await fetch(up.uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: bytes });
+const done = await client.assets.confirm({ storageKey: up.storageKey, fileName, mimeType, sizeBytes, contentHash });
+const cell = { attachmentId: done.attachmentId, fileName, mimeType, size: bytes.length, url: done.publicUrl };
+```
+
+Then check the URL answers an **anonymous** request. A browser `<img>` or download link carries no
+API key, so an attachment that only resolves with credentials is an attachment the reader cannot
+open.
+
+Writing several files to one cell is a read-modify-write: send the existing array plus the new
+entries, or the ones already archived disappear.
+
+## Error Taxonomy
+
+Do not report every provider failure as missing Bases.
+
+| Code | Meaning |
+| --- | --- |
+| `BRIDGE_UNAVAILABLE` | `/api/v1` did not reach the selected Busabase origin or the Hono proxy is down |
+| `SESSION_REQUIRED` | local AirApp registration or deployed ambient browser session is missing/expired |
+| `OAUTH_CALLBACK_INVALID` | state, issuer, code, redirect, client, or resource binding failed |
+| `LOCAL_CREDENTIAL_REQUIRED` | the local OAuth token set was not registered, is expired, or was revoked |
+| `SPACE_SELECTION_REQUIRED` | no Space is selected, including a multi-Space account awaiting explicit choice |
+| `SPACE_NOT_ALLOWED` | the stored/requested Space is not one the current session/key may target |
+| `SCHEMA_INCOMPLETE` | connection works but configured Base/field is missing |
+| `PROCEDURE_DENIED` | requested procedure is outside the declared allowlist |
+| `SETUP_REQUIRED` | a declared trusted integration is not ready; show requirement names only |
+
+Show one full-screen provider gate with a concrete recovery action. Never show tokens, cookies, or raw private config.
+
+## Platform Security Boundary
+
+A deployed AirApp inherits the Run user's Busabase privileges and is not platform-scoped to this app (a public embed is the exception — it is capability-scoped and read-only). The app's allowlist is an application invariant, not a platform security guarantee. State this in the AirApp CR review summary and keep code review mandatory unless the user explicitly authorizes that CR.
+
+## Merged HEAD Limitation
+
+Target Run executes merged HEAD only. A pending AirApp CR cannot be validated in the real session
+bridge. Local Demo validates UI only; local OAuth validates the delegated API grant and local
+credential proxy, while deployed Run validates the distinct ambient viewer session. Environment-key testing is
+an optional automation path and proves neither user flow. Always perform target Run after merge.
