@@ -9,17 +9,6 @@
   common-error notes WorkBuddy's review asks for. `validate-agent-plugin.mjs` now pins the
   server-side declaration and the single hosted MCP server.
 
-- Shelf discoverability: the three creator aliases (`busabase-app-package-creator`,
-  `busabase-package-creator`, `busabase-skill-creator`) are now full copies of
-  `busabase-app-creator` instead of symlinks — the `skills` CLI and skills.sh do not follow
-  symlinks, so only 3 of the skills were installable/listed. Each copy is the complete skill
-  under a task name; only its `name` and `description` differ, and every copy is regenerated
-  from the one source on each sync. New `busabase-ops`: a full copy of `busabase` under the
-  operator's name. README: skills table now lists all seven skills; the generic MCP section
-  leads with OAuth sign-in (no API key to paste), with Bearer keys as the headless alternative.
-- `busabase`: new "Running a workspace day to day" section — read the schema and the records
-  you will touch first, dedupe before create, cover the whole set in bulk work, a file is
-  filed only when `grep` finds its text, no silent deletes, report partial as partial.
 - `busabase-app-creator`: references to the companion `busabase` skill no longer assume it
   sits in a sibling directory, so an alias installed on its own still knows where to get it.
   AirApp websites: deploy a preview and go live yourself (`airapps site-deploy-preview` /
@@ -133,6 +122,65 @@
 - Preserve the dedicated Claude Code, Codex, and general-client MCP configurations unchanged.
 - Add canonical schema, Agent Skill, client-compatibility, CI, and multilingual documentation
   coverage for the portable package.
+
+## Agent shelf — 2026-11-14
+
+### Your agent can now install Busabase itself — and run it, too
+
+One command — `npx skills add busabase/skills` — now installs every Busabase skill.
+Until this release it did not: three of the creator entry points in this repository were
+symlinks, and the `skills` CLI does not follow symlinks when it discovers skills, so only
+3 of the skills on the shelf could be found and installed. The skills existed the whole
+time; they were simply invisible from the customer's side of the counter. The entry points
+are now published as full copies — each one the complete skill under its task name,
+regenerated from the single source on every sync, so a copy can never drift from the
+original.
+
+New on the shelf: **`busabase-ops`**, the operator's edition of the `busabase` skill — the
+playbook for agents that run a workspace day to day: read the schema and the records you
+will touch before you write, dedupe before you create, file attachments so their text is
+searchable, and verify by reading back what actually landed. The `busabase` skill itself
+gains the same discipline as a new "Running a workspace day to day" section.
+
+Connecting over MCP no longer starts with pasting an API key: the hosted MCP server at
+`https://busabase.com/api/mcp` signs in with browser OAuth, and the docs now lead with
+that; a Bearer key remains available for headless setups.
+
+The shelf has a storefront, too. busabase.com now carries an agent-install section on the
+homepage and a full guide at [busabase.com/agents](https://busabase.com/agents), and the
+agent directory's detail pages show the same one-line install command next to each
+agent's connection steps.
+
+The seven skills:
+
+- `busabase` — drive a Busabase workspace over HTTP: list Bases/records, propose
+  ChangeRequests, and merge approved ones. The full CLI / API / MCP reference.
+- `busabase-ops` — operate a workspace day to day, with read-before-write discipline. A
+  full copy of `busabase` under the operator's name.
+- `busabase-app-creator` — turn a product idea into a complete Busabase workspace app
+  with native resources, bounded data access, and a reviewable AirApp.
+- `busabase-template-creator` — author and publish templates to the public
+  `busabase/templates` catalog, layered on the app-creator contract.
+- `busabase-app-package-creator` — package an existing AirApp into an installable
+  package. A full copy of `busabase-app-creator` under its task name.
+- `busabase-package-creator` — author a Busabase package (manifest, contents,
+  versioning). A full copy of `busabase-app-creator` under its task name.
+- `busabase-skill-creator` — create a Busabase Skill and package it for installation. A
+  full copy of `busabase-app-creator` under its task name.
+
+Details, as recorded when the work landed:
+
+- Shelf discoverability: the three creator aliases (`busabase-app-package-creator`,
+  `busabase-package-creator`, `busabase-skill-creator`) are now full copies of
+  `busabase-app-creator` instead of symlinks — the `skills` CLI and skills.sh do not follow
+  symlinks, so only 3 of the skills were installable/listed. Each copy is the complete skill
+  under a task name; only its `name` and `description` differ, and every copy is regenerated
+  from the one source on each sync. New `busabase-ops`: a full copy of `busabase` under the
+  operator's name. README: skills table now lists all seven skills; the generic MCP section
+  leads with OAuth sign-in (no API key to paste), with Bearer keys as the headless alternative.
+- `busabase`: new "Running a workspace day to day" section — read the schema and the records
+  you will touch first, dedupe before create, cover the whole set in bulk work, a file is
+  filed only when `grep` finds its text, no silent deletes, report partial as partial.
 
 ## 0.4.0 - 2026-08-10
 
