@@ -68,6 +68,13 @@ The `busabase` row should show `Auth` as `OAuth`. If it still shows `Not logged 
 still running. Start a new Codex task after a successful login so the task loads the authenticated
 tool catalog.
 
+### WorkBuddy connector
+
+Install **Busabase** from the WorkBuddy Connector marketplace (WorkBuddy 4.24.0 or later) and
+authorize it in the browser. WorkBuddy runs the OAuth flow in its cloud and keeps the token, so
+there is nothing to configure locally. The package source lives in [`workbuddy/`](./workbuddy/);
+it is submitted to WorkBuddy for review rather than installed from this repo.
+
 ### MCP (any MCP-capable agent)
 
 Point your agent at your workspace's Streamable-HTTP endpoint:
@@ -143,6 +150,9 @@ plugins/busabase/skills/busabase/SKILL.md    Codex needs the skill INSIDE the pl
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              app creator bundled beside its Busabase dependency
 plugins/busabase/assets/                     icons and light/dark logos bundled with Codex
+workbuddy/connector-meta.json         WorkBuddy connector metadata + server-side OAuth declaration
+workbuddy/mcp.json                    hosted MCP server for WorkBuddy
+workbuddy/skills/busabase/SKILL.md    WorkBuddy-specific MCP-first guidance (same shared body)
 .mcp.json                             legacy/general-client local MCP profile
 server.json                           official MCP Registry entry (remote → busabase.com/api/mcp)
 scripts/validate-agent-plugin.mjs     portable and client-package conformance guard

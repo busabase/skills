@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "busabase": {
+      "timeout": 30000,
+      "type": "streamableHttp",
+      "url": "https://busabase.com/api/mcp"
+    }
+  }
+}

@@ -64,6 +64,10 @@ codex mcp list
 間に新しく開いたブラウザータブで認証を完了してください。ログインに成功したら、新しい Codex
 タスクを開始して、認証済みのツールカタログを読み込ませてください。
 
+### WorkBuddy コネクタ
+
+WorkBuddy のコネクタマーケットから **Busabase** をインストールし（WorkBuddy 4.24.0 以降）、ブラウザで認可するだけです。OAuth は WorkBuddy のクラウドが実行してトークンを保管するため、ローカルの設定は不要です。パッケージのソースは [`workbuddy/`](./workbuddy/) にあり、このリポジトリからではなく WorkBuddy の審査を経て公開されます。
+
 ### MCP（MCP 対応の任意のエージェント）
 
 エージェントをワークスペースの Streamable HTTP エンドポイントに接続します。
@@ -132,6 +136,7 @@ plugins/busabase/skills/busabase/SKILL.md    Codex ではスキルをプラグ�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              Busabase 依存スキルとともに同梱されるアプリ作成スキル
 plugins/busabase/assets/                     Codex に同梱されるアイコンとライト/ダークロゴ
+workbuddy/                            WorkBuddy コネクタパッケージ（メタデータ + server-side OAuth 宣言、MCP 設定、生成された skill）
 .mcp.json                             従来/一般クライアント向けローカル MCP 設定
 server.json                           公式 MCP Registry エントリ（リモート → busabase.com/api/mcp）
 scripts/validate-agent-plugin.mjs     ポータブル形式とクライアントパッケージの互換性検証
