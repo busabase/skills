@@ -1,0 +1,27 @@
+{
+  "auth_mode": "server-side",
+  "description": "团队与 AI 智能体共同工作的共享底座：在一个工作区里读写记录、文档与技能，每次变更都可审查、可追溯。",
+  "description_en": "The shared base your team and your agents work from together: read and write records, docs and skills in one workspace, with every change reviewable.",
+  "description_zh": "团队与 AI 智能体共同工作的共享底座：在一个工作区里读写记录、文档与技能，每次变更都可审查、可追溯。",
+  "examples_en": [
+    "Organize this week's customer follow-ups into the customers base and flag the ones still open",
+    "Read the latest version of the launch plan doc and summarize what changed",
+    "Create a record in the projects base: review the quote by next Wednesday"
+  ],
+  "examples_zh": [
+    "把这周的客户跟进记录整理到客户表里，并标出还没跟进的",
+    "查一下「上线计划」文档的最新版本，总结这次改了什么",
+    "在项目表里新建一条记录：下周三前完成报价单复核"
+  ],
+  "minWorkbuddyVersion": "4.24.0",
+  "name": "Busabase",
+  "name_en": "Busabase",
+  "name_zh": "Busabase",
+  "server_auth": {
+    "auth_type": "mcp_oauth",
+    "data": { "mcp_oauth": { "scopes": "mcp", "server_url": "https://busabase.com/api/mcp" } }
+  },
+  "source": "busabase",
+  "type": "mcp",
+  "version": "1.1.0"
+}

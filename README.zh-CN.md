@@ -60,6 +60,10 @@ codex mcp list
 `codex mcp login busabase`，并在该命令仍在运行时，在新打开的浏览器标签页中完成授权。
 登录成功后，请开始一个新的 Codex 任务，以便该任务加载已经过身份验证的工具目录。
 
+### WorkBuddy 连接器
+
+在 WorkBuddy 连接器市场安装 **Busabase**（需 WorkBuddy 4.24.0 及以上），在浏览器里完成授权即可。OAuth 由 WorkBuddy 云端完成并保管令牌，本地无需任何配置。连接器包源文件在 [`workbuddy/`](./workbuddy/)，它提交给 WorkBuddy 审核上架，不从本仓库安装。
+
 ### MCP（任何支持 MCP 的智能体）
 
 将智能体指向你的工作区的 Streamable HTTP 端点：
@@ -125,6 +129,7 @@ plugins/busabase/skills/busabase/SKILL.md    Codex 要求技能必须位于插�
 plugins/busabase/skills/busabase-app-creator/SKILL.md
                                              与 Busabase 依赖一起打包的应用创建器
 plugins/busabase/assets/                     Codex 随附的图标及浅色/深色徽标
+workbuddy/                            WorkBuddy 连接器包（元信息 + server-side OAuth 声明、MCP 配置、生成的 skill）
 .mcp.json                             原有/通用客户端本地 MCP 配置
 server.json                           官方 MCP Registry 条目（远程端点 → busabase.com/api/mcp）
 scripts/validate-agent-plugin.mjs     可移植格式与客户端插件兼容性校验

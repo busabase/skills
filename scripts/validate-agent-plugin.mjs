@@ -172,6 +172,7 @@ async function validatePlaybookRule() {
   for (const skillPath of [
     "claude/skills/busabase/SKILL.md",
     "plugins/busabase/skills/busabase/SKILL.md",
+    "workbuddy/skills/busabase/SKILL.md",
   ]) {
     const content = await readFile(path.join(root, skillPath), "utf8");
     assert(content.includes(heading), `${skillPath} must carry the playbook-first rule`);
@@ -184,8 +185,45 @@ async function validatePlaybookRule() {
   }
 }
 
+/**
+ * The WorkBuddy connector is submitted to WorkBuddy's marketplace rather than
+ * installed from this repo, and its review rejected a package that omitted the
+ * server-side OAuth declaration. Pin the fields that review checks.
+ */
+async function validateWorkBuddyConnector() {
+  const meta = await readJson("workbuddy/connector-meta.json");
+  assert.equal(meta.type, "mcp");
+  assert.equal(meta.source, "busabase");
+  assert.match(meta.version, /^\d+\.\d+\.\d+$/);
+  for (const field of ["name_zh", "name_en", "description_zh", "description_en"]) {
+    assert(typeof meta[field] === "string" && meta[field].length > 0, `connector-meta.json ${field}`);
+  }
+  for (const field of ["examples_zh", "examples_en"]) {
+    assert(Array.isArray(meta[field]) && meta[field].length > 0, `connector-meta.json ${field}`);
+  }
+  assert.equal(meta.auth_mode, "server-side");
+  assert.equal(meta.server_auth?.auth_type, "mcp_oauth");
+  const oauth = meta.server_auth?.data?.mcp_oauth;
+  assert.equal(oauth?.server_url, "https://busabase.com/api/mcp");
+  for (const reserved of ["client_id", "client_secret", "redirect_uri"]) {
+    assert(!(reserved in (oauth ?? {})), `server_auth must not set ${reserved}; WorkBuddy writes it`);
+  }
+  // server_auth takes effect from WorkBuddy 4.24.0.
+  const [major, minor] = String(meta.minWorkbuddyVersion).split(".").map(Number);
+  assert(major > 4 || (major === 4 && minor >= 24), "minWorkbuddyVersion must be >= 4.24.0");
+
+  const mcp = await readJson("workbuddy/mcp.json");
+  const servers = Object.entries(mcp.mcpServers ?? {});
+  assert.equal(servers.length, 1, "workbuddy/mcp.json must hold exactly one server");
+  assert.equal(servers[0][1].type, "streamableHttp");
+  assert.equal(servers[0][1].url, oauth.server_url);
+
+  await stat(path.join(root, "workbuddy/icon.svg"));
+}
+
 await validateSkills();
 await validatePlaybookRule();
 await validateClientCompatibility();
+await validateWorkBuddyConnector();
 
 console.log("Agent Plugins v1.0.0 package and client compatibility checks passed.");
