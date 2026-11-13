@@ -104,7 +104,7 @@ running one of the install commands above.
 | Skill | What it does |
 | --- | --- |
 | [`busabase`](./skills/busabase/SKILL.md) | Drive a Busabase workspace over HTTP: list Bases/records, propose ChangeRequests, and merge approved ones. The full CLI / API / MCP reference. |
-| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | Operate a workspace day to day — dedupe-before-create, schema-first writes, attach-and-make-searchable filing, audits and clean-ups — with read-before-write discipline and read-back verification. |
+| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | Operate a workspace day to day — dedupe-before-create, schema-first writes, attach-and-make-searchable filing, audits and clean-ups — with read-before-write discipline, checking what actually landed. A full copy of `busabase` under the operator's name. |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | Turn a product idea into a complete Busabase workspace app with native resources, bounded data access, and a reviewable AirApp. |
 | [`busabase-template-creator`](./skills/busabase-template-creator/SKILL.md) | Author and publish templates to the public `busabase/templates` catalog, layered on the app-creator contract. |
 | [`busabase-app-package-creator`](./skills/busabase-app-package-creator/SKILL.md) | Alias of `busabase-app-creator` for packaging an existing AirApp into an installable package. |
@@ -127,9 +127,9 @@ mcp.json                              Agent Plugins v1 hosted MCP profile
 skills/busabase/SKILL.md              canonical local/general-purpose skill
 skills/busabase-ops/SKILL.md          day-to-day workspace operator entry point
 skills/busabase-app-creator/SKILL.md  guided Busabase workspace and AirApp creator
-skills/busabase-*-creator/SKILL.md    template creator + three thin alias skills that
-                                      delegate to busabase-app-creator (real files, not
-                                      symlinks — the skills CLI does not follow symlinks)
+skills/busabase-*-creator/SKILL.md    template creator + three alias entries: full copies
+                                      of busabase-app-creator under task names (real files,
+                                      not symlinks — the skills CLI does not follow symlinks)
 .claude-plugin/marketplace.json       Claude Code marketplace listing
 claude/.claude-plugin/plugin.json     Claude Code plugin manifest
 claude/.mcp.json                      hosted OAuth MCP profile for Claude Code

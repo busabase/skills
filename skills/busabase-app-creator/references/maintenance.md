@@ -177,7 +177,7 @@ red here is worse than no check, because it argues for stopping work that should
 "fixing" a healthy app into a shape it was never meant to have. Verify Demo behavior and real bounded reads through the local dev
 proxy. Use an
 already-selected CLI or shell credential without printing it; when absent, sign in with the
-two-turn flow in `../busabase/references/connect-and-space.md` (`busabase-cli login --no-wait`, then
+two-turn flow in the `busabase` skill's `references/connect-and-space.md` (`busabase-cli login --no-wait`, then
 `--resume-code` in a later turn), never a key pasted into chat.
 
 Exercise changed behavior at desktop and 390px when the UI changed. For a runtime-only migration,

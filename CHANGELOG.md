@@ -3,13 +3,21 @@
 ## Unreleased
 
 - Shelf discoverability: the three creator aliases (`busabase-app-package-creator`,
-  `busabase-package-creator`, `busabase-skill-creator`) are now real thin `SKILL.md` files
-  instead of symlinks — the `skills` CLI and skills.sh do not follow symlinks, so only 3 of the
-  skills were installable/listed. They still delegate to the single `busabase-app-creator`
-  contract. New `busabase-ops` skill: the task-named operator entry point (read-before-write,
-  dedupe-before-create, verify-by-read-back), deferring to `busabase` for the full reference.
-  README: skills table now lists all seven skills; the generic MCP section leads with OAuth
-  sign-in (no API key to paste), with Bearer keys as the headless alternative.
+  `busabase-package-creator`, `busabase-skill-creator`) are now full copies of
+  `busabase-app-creator` instead of symlinks — the `skills` CLI and skills.sh do not follow
+  symlinks, so only 3 of the skills were installable/listed. Each copy is the complete skill
+  under a task name; only its `name` and `description` differ, and every copy is regenerated
+  from the one source on each sync. New `busabase-ops`: a full copy of `busabase` under the
+  operator's name. README: skills table now lists all seven skills; the generic MCP section
+  leads with OAuth sign-in (no API key to paste), with Bearer keys as the headless alternative.
+- `busabase`: new "Running a workspace day to day" section — read the schema and the records
+  you will touch first, dedupe before create, cover the whole set in bulk work, a file is
+  filed only when `grep` finds its text, no silent deletes, report partial as partial.
+- `busabase-app-creator`: references to the companion `busabase` skill no longer assume it
+  sits in a sibling directory, so an alias installed on its own still knows where to get it.
+  AirApp websites: deploy a preview and go live yourself (`airapps site-deploy-preview` /
+  `site-go-live`, with the person's permission), and bind custom domains
+  (`airapps site-bind-domain`, `site-domains`).
 
 - `busabase`: invite teammates on Cloud via `busabase-cli members …` / MCP `members_*` —
   confirm addresses before sending mail, share invite links when there are none, and fall

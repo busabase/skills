@@ -96,10 +96,15 @@ There is no build step on the server. What you write into the node is what deplo
 
 Run deploys a members-only preview to the App tab. **Go live** then publishes that same version to the
 address shown in the node's settings, where a Public switch can take it offline. After any edit the address
-keeps serving the old version until someone runs it again and goes live, so tell the person that step is
-theirs. Moving the app to Trash takes the site offline; deleting it for good removes it.
+keeps serving the old version until it is deployed again. You can do that yourself, with the person's own
+permission: `busabase-cli airapps site-deploy-preview --node-id <id>`, then, when the person asks for it,
+`busabase-cli airapps site-go-live --node-id <id>` (MCP `airapps_site_*`, HTTP `/api/v1/airapps/{nodeId}/site…`).
+Go live only publishes the version that was previewed: `preview-stale` means the files changed after the
+preview, so deploy the preview again. `site-state` says what is live. Moving the app to Trash takes the site
+offline; deleting it for good removes it.
 
-Today a site has no custom domain. Say so before promising one.
+A live site can have custom domains (`airapps site-bind-domain --hostname shop.company.com`): the person
+adds the returned DNS records at their DNS provider, and `site-domains` shows when it is connected.
 
 ### A site that reads and writes workspace data: `site.access`
 
@@ -108,7 +113,7 @@ difference is who it is: a visitor is not signed in, so each deploy gives the Wo
 
 | Binding | What it is |
 | --- | --- |
-| `env.BUSABASE_API_KEY` | Secret. An ordinary API key owned by the person who deployed: for a preview, the member whose run made it; live, whoever clicked Go live |
+| `env.BUSABASE_API_KEY` | Secret. An ordinary API key owned by the person who deployed: for a preview, the member whose run made it; live, whoever went live (the button, or `site-go-live` with their key) |
 | `env.BUSABASE_BASE_URL` | Where this Busabase is. Pass it as the SDK's `baseUrl`; never hard-code `busabase.com` |
 | `env.BUSABASE_SPACE_ID` | This workspace. The key works here and nowhere else |
 | `env.BUSABASE_AIRAPP_RUNTIME` | `"site"` |

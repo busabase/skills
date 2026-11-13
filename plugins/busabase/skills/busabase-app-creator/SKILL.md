@@ -27,10 +27,8 @@ The two layers that exist today: `busabase-template-creator` for the public
 `busabase/templates` catalog, and `kelly-app-skill-creator` for `mr-kelly/skills`. Both call
 this skill for correctness and add only a publishing bar on top. Note that
 `busabase-package-creator`, `busabase-skill-creator`, and `busabase-app-package-creator` are
-thin alias skills that delegate to this skill, not separate ones — four entry names, one contract.
-(They were symlinks to this directory until 2026-11; the `skills` CLI and the skills.sh registry
-do not follow symlinks when discovering skills, so the aliases now carry real `SKILL.md` files
-whose only job is to point here.)
+published as full copies of this skill, not separate ones — four entry names, one contract. The
+copies are generated from this one on every publish, so only their name and description differ.
 
 ## Non-Negotiable Contract
 
@@ -166,7 +164,7 @@ Read each selected reference completely before acting:
 | Existing AirApp identity, continuous resource/UI evolution, and canonical readback | `references/maintenance.md` |
 | Package layout, `busabase.json`, SKILL.md frontmatter, validation — **required before writing any file package-first** | `references/template-format.md` |
 
-Always read the sibling Busabase skill at `../busabase/SKILL.md` before connecting or writing. Treat live OpenAPI as authoritative when an endpoint shape is uncertain.
+Always read the `busabase` skill before connecting or writing. It is normally installed beside this one (`../busabase/SKILL.md`); if it is not, install it with `npx skills add busabase/skills --skill busabase`, or read it at https://github.com/busabase/skills/blob/main/skills/busabase/SKILL.md. Treat live OpenAPI as authoritative when an endpoint shape is uncertain.
 
 ## Workflow
 
