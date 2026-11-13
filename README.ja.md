@@ -96,13 +96,18 @@ codex mcp login busabase
 
 | スキル | 機能 |
 | --- | --- |
-| [`busabase`](./skills/busabase/SKILL.md) | HTTP 経由で Busabase ワークスペースを操作します。Base とレコードの一覧取得、ChangeRequest の提案、承認済み変更のマージを行います。 |
+| [`busabase`](./skills/busabase/SKILL.md) | HTTP 経由で Busabase ワークスペースを操作します。Base とレコードの一覧取得、ChangeRequest の提案、承認済み変更のマージを行います。CLI / API / MCP の完全なリファレンスです。 |
+| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | ワークスペースの日々の運用——作成前の重複チェック、スキーマ優先の書き込み、添付して全文検索可能にするファイリング、監査とクリーンアップ——を、読み取り優先と読み戻し検証の規律で行います。 |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 製品アイデアを、ネイティブリソース、制限されたデータアクセス、レビュー可能な AirApp を備えた完全な Busabase ワークスペースアプリに変換します。 |
+| [`busabase-template-creator`](./skills/busabase-template-creator/SKILL.md) | app-creator の契約の上に、公開カタログ `busabase/templates` へテンプレートを作成・公開します。 |
+| [`busabase-app-package-creator`](./skills/busabase-app-package-creator/SKILL.md) | `busabase-app-creator` の別名。既存の AirApp をインストール可能なパッケージにするための入口です。 |
+| [`busabase-package-creator`](./skills/busabase-package-creator/SKILL.md) | `busabase-app-creator` の別名。Busabase パッケージ（マニフェスト、内容、バージョニング）を作成するための入口です。 |
+| [`busabase-skill-creator`](./skills/busabase-skill-creator/SKILL.md) | `busabase-app-creator` の別名。Busabase スキルを作成し、インストール用にパッケージングするための入口です。 |
 
 
 > **インストール可能なテンプレートをお探しですか？** 完全なアプリ（テーブル、AirApp、
 > エージェントが読むマニュアル）は [busabase/templates](https://github.com/busabase/templates)
-> にあります。この 2 つのスキルをインストールする人が、すべてのテンプレートのソースと
+> にあります。これらのスキルをインストールする人が、すべてのテンプレートのソースと
 > スクリーンショットまでダウンロードせずに済むよう、別リポジトリにしています。
 
 ## リポジトリ構成

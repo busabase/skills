@@ -90,12 +90,17 @@ Claude 和 Codex 内置技能都采用 MCP 优先方式：它们依赖 OAuth 和
 
 | 技能 | 功能 |
 | --- | --- |
-| [`busabase`](./skills/busabase/SKILL.md) | 通过 HTTP 操作 Busabase 工作区：列出 Base 和记录、提出 ChangeRequest，并合并已获批准的变更。 |
+| [`busabase`](./skills/busabase/SKILL.md) | 通过 HTTP 操作 Busabase 工作区：列出 Base 和记录、提出 ChangeRequest，并合并已获批准的变更。完整的 CLI / API / MCP 参考。 |
+| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | 日常运营工作区——建前查重、先看 schema 再写、附件挂载并做到全文可检索、审计与清理——坚持先读后写与回读核验。 |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | 将产品构想转化为完整的 Busabase 工作区应用，使用原生资源、受限数据访问和可审核的 AirApp。 |
+| [`busabase-template-creator`](./skills/busabase-template-creator/SKILL.md) | 在 app-creator 合同之上，编写模板并发布到公开的 `busabase/templates` 目录。 |
+| [`busabase-app-package-creator`](./skills/busabase-app-package-creator/SKILL.md) | `busabase-app-creator` 的别名，用于把现有 AirApp 打包成可安装的包。 |
+| [`busabase-package-creator`](./skills/busabase-package-creator/SKILL.md) | `busabase-app-creator` 的别名，用于编写 Busabase 包（清单、内容、版本管理）。 |
+| [`busabase-skill-creator`](./skills/busabase-skill-creator/SKILL.md) | `busabase-app-creator` 的别名，用于创建 Busabase Skill 并打包供安装。 |
 
 
 > **在找可安装的模板？** 完整的应用——数据表、AirApp，以及 Agent 会读的操作手册——在
-> [busabase/templates](https://github.com/busabase/templates)。分开放是为了让安装这两个
+> [busabase/templates](https://github.com/busabase/templates)。分开放是为了让安装这些
 > skill 的人，不必连带下载每个模板的源码和截图。
 
 ## 仓库结构
