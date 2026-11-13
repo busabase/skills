@@ -27,7 +27,10 @@ The two layers that exist today: `busabase-template-creator` for the public
 `busabase/templates` catalog, and `kelly-app-skill-creator` for `mr-kelly/skills`. Both call
 this skill for correctness and add only a publishing bar on top. Note that
 `busabase-package-creator`, `busabase-skill-creator`, and `busabase-app-package-creator` are
-symlinks to this skill, not separate ones — four entry names, one contract.
+thin alias skills that delegate to this skill, not separate ones — four entry names, one contract.
+(They were symlinks to this directory until 2026-11; the `skills` CLI and the skills.sh registry
+do not follow symlinks when discovering skills, so the aliases now carry real `SKILL.md` files
+whose only job is to point here.)
 
 ## Non-Negotiable Contract
 

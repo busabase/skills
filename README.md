@@ -6,7 +6,7 @@ Agent Skills + plugins for [Busabase](https://busabase.com) — the open-source 
 for AI agents. Every write is a change request with a message and a diff: it lands at once with
 write access and waits for a person's review otherwise.
 
-Two skills, five ways to install them — pick whatever your agent supports.
+Seven skills, five ways to install them — pick whatever your agent supports.
 
 ## Install
 
@@ -73,9 +73,12 @@ tool catalog.
 Point your agent at your workspace's Streamable-HTTP endpoint:
 
 - Desktop / local: `http://localhost:15419/api/mcp` (no auth)
-- Cloud: `https://busabase.com/api/mcp` (send `Authorization: Bearer $BUSABASE_API_KEY`)
+- Cloud: `https://busabase.com/api/mcp` — **sign in with OAuth in the browser; there is no API
+  key to paste.** Any client that supports OAuth for remote MCP servers (Claude Code, Codex and
+  a growing list of others) can connect this way. For headless automation, a Bearer API key
+  (`Authorization: Bearer $BUSABASE_API_KEY`) works on the same endpoint.
 
-Codex can use the full Cloud MCP surface directly with standard OAuth:
+Generic OAuth example (Codex shown; the flow is the same for any OAuth-capable client):
 
 ```bash
 codex mcp add busabase --url https://busabase.com/api/mcp
@@ -100,8 +103,13 @@ running one of the install commands above.
 
 | Skill | What it does |
 | --- | --- |
-| [`busabase`](./skills/busabase/SKILL.md) | Drive a Busabase workspace over HTTP: list Bases/records, propose ChangeRequests, and merge approved ones. |
+| [`busabase`](./skills/busabase/SKILL.md) | Drive a Busabase workspace over HTTP: list Bases/records, propose ChangeRequests, and merge approved ones. The full CLI / API / MCP reference. |
+| [`busabase-ops`](./skills/busabase-ops/SKILL.md) | Operate a workspace day to day — dedupe-before-create, schema-first writes, attach-and-make-searchable filing, audits and clean-ups — with read-before-write discipline and read-back verification. |
 | [`busabase-app-creator`](./skills/busabase-app-creator/SKILL.md) | Turn a product idea into a complete Busabase workspace app with native resources, bounded data access, and a reviewable AirApp. |
+| [`busabase-template-creator`](./skills/busabase-template-creator/SKILL.md) | Author and publish templates to the public `busabase/templates` catalog, layered on the app-creator contract. |
+| [`busabase-app-package-creator`](./skills/busabase-app-package-creator/SKILL.md) | Alias of `busabase-app-creator` for packaging an existing AirApp into an installable package. |
+| [`busabase-package-creator`](./skills/busabase-package-creator/SKILL.md) | Alias of `busabase-app-creator` for authoring a Busabase package (manifest, contents, versioning). |
+| [`busabase-skill-creator`](./skills/busabase-skill-creator/SKILL.md) | Alias of `busabase-app-creator` for creating a Busabase Skill and packaging it for installation. |
 
 
 > **Looking for installable templates?** Complete apps — tables, an AirApp and
@@ -117,7 +125,11 @@ This one repo serves every install path above:
 plugin.json                           Agent Plugins v1 portable manifest
 mcp.json                              Agent Plugins v1 hosted MCP profile
 skills/busabase/SKILL.md              canonical local/general-purpose skill
+skills/busabase-ops/SKILL.md          day-to-day workspace operator entry point
 skills/busabase-app-creator/SKILL.md  guided Busabase workspace and AirApp creator
+skills/busabase-*-creator/SKILL.md    template creator + three thin alias skills that
+                                      delegate to busabase-app-creator (real files, not
+                                      symlinks — the skills CLI does not follow symlinks)
 .claude-plugin/marketplace.json       Claude Code marketplace listing
 claude/.claude-plugin/plugin.json     Claude Code plugin manifest
 claude/.mcp.json                      hosted OAuth MCP profile for Claude Code

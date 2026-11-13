@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Shelf discoverability: the three creator aliases (`busabase-app-package-creator`,
+  `busabase-package-creator`, `busabase-skill-creator`) are now real thin `SKILL.md` files
+  instead of symlinks — the `skills` CLI and skills.sh do not follow symlinks, so only 3 of the
+  skills were installable/listed. They still delegate to the single `busabase-app-creator`
+  contract. New `busabase-ops` skill: the task-named operator entry point (read-before-write,
+  dedupe-before-create, verify-by-read-back), deferring to `busabase` for the full reference.
+  README: skills table now lists all seven skills; the generic MCP section leads with OAuth
+  sign-in (no API key to paste), with Bearer keys as the headless alternative.
+
 - `busabase`: invite teammates on Cloud via `busabase-cli members …` / MCP `members_*` —
   confirm addresses before sending mail, share invite links when there are none, and fall
   back to Space Settings → Members on older or open-source servers.

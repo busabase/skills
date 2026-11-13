@@ -65,7 +65,7 @@ codex mcp list
 將智慧代理指向你的工作區 Streamable HTTP 端點：
 
 - 桌面端/本機：`http://localhost:15419/api/mcp`（無需驗證）
-- 雲端：`https://busabase.com/api/mcp`（傳送 `Authorization: Bearer $BUSABASE_API_KEY`）
+- 雲端：`https://busabase.com/api/mcp`——**透過瀏覽器 OAuth 登入，無需貼上 API key**（支援遠端 MCP OAuth 的用戶端均可）；無頭自動化場景也可使用 `Authorization: Bearer $BUSABASE_API_KEY` 存取同一端點
 
 Codex 可以透過標準 OAuth 直接使用完整的雲端 MCP 功能：
 
