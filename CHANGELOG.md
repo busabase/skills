@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Plugin `busabase` skills (Claude Code, Codex, WorkBuddy): new "Running a workspace day to day"
+  section — read the schema and the records you will touch first, dedupe before create, cover the
+  whole set in bulk work, no silent deletes, report partial as partial. It is the same text the
+  `busabase` and `busabase-ops` skills carry, kept identical by a test in the source repository.
+  Claude Code plugin 0.4.10, Codex plugin 0.3.13; the WorkBuddy connector's skill rides the
+  pending 1.1.1 submission.
+
 - WorkBuddy connector: new [`workbuddy/`](./workbuddy/) package for the WorkBuddy Connector
   marketplace (`connector-meta.json` 1.1.1 — 1.1.0 was already taken by an earlier submission — with `auth_mode: "server-side"` and `server_auth`
   `mcp_oauth` dynamic registration, `mcp.json`, icon). Its `busabase` skill is generated from the

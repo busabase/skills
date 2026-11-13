@@ -230,30 +230,31 @@ approval is the human's decision; report that it is waiting rather than treating
 
 ## Running a workspace day to day
 
-Logging leads, filing documents, bulk updates, audits and clean-ups add a few habits to the rule
-above. Confirming the space, keeping credentials out of chat and the write loop itself are not
-repeated here — they live in "On every task", "Connect" and "The one rule".
+**Read before you write, and finish what you start.**
 
-1. **Read the schema and the records you will touch first.** Fields, types and select options come
-   from a read, not a guess. Record ids, field ids and option names are copied from a read or
-   query result in this session, never reconstructed.
-2. **Dedupe before you create.** Search the Base — and the batch you are about to insert — for an
-   existing match on stable identifiers (email, phone, name + company). Update the match instead
-   of minting a duplicate; when two candidates both look real, show the pair and ask. Fill what
-   the source supports and leave unknown fields empty rather than plausible.
-3. **Bulk work covers the whole set.** Page through every target record — don't sample — and write
-   in small batches. Each batch's write response is the check: read it item by item as above, and
-   don't re-fetch what it already confirmed.
-4. **A file is filed only when it can be found.** Attach it to the right record (create the record
-   first when the document *is* the entity), hand its text back with `assets put-text`, and prove
-   it with a `grep` for a phrase from the file — the attachment recipe in
-   [`references/cli-cookbook.md`](references/cli-cookbook.md). "Uploaded" alone is not done.
-5. **No silent deletes.** Deleting records, files or nodes needs the user's explicit ask in this
-   conversation; a clean-up brief authorises tidying, not removal. For an audit, report findings
-   first (duplicates, empty required fields, stale statuses) with counts from real queries, and
-   fix only the classes the user approves.
-6. **Report partial as partial.** Name the space, Base and records you touched (links, per "Return
-   a clickable result"), what changed, and what you deliberately left undone.
+- **Read the schema and the records you will touch first.** Fields, types and select options come
+  from a read, not a guess. Record ids, field ids and option names are copied from a read or
+  query result in this session, never reconstructed.
+- **Dedupe before you create.** Search the Base — and the batch you are about to insert — for an
+  existing match on stable identifiers (email, phone, name + company). Update the match instead
+  of minting a duplicate; when two candidates both look real, show the pair and ask. Fill what
+  the source supports and leave unknown fields empty rather than plausible.
+- **Bulk work covers the whole set.** Page through every target record — don't sample — and write
+  in small batches. Each batch's write response is the check: read it item by item, and don't
+  re-fetch what it already confirmed.
+- **No silent deletes.** Deleting records, files or nodes needs the user's explicit ask in this
+  conversation; a clean-up brief authorises tidying, not removal. For an audit, report findings
+  first (duplicates, empty required fields, stale statuses) with counts from real queries, and
+  fix only the classes the user approves.
+- **Report partial as partial.** Name the space, Base and records you touched (as links where you
+  can), what changed, and what you deliberately left undone.
+- **A file is filed only when it can be found.** Attach it to the right record (create the record
+  first when the document *is* the entity), hand its text back with `assets put-text`, and prove
+  it with a `grep` for a phrase from the file — the attachment recipe in
+  [`references/cli-cookbook.md`](references/cli-cookbook.md). "Uploaded" alone is not done.
+
+Confirming the space, credentials and the write loop itself live in "On every task", "Connect" and
+"The one rule".
 
 ## Write for the reviewer
 
