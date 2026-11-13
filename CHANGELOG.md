@@ -3,7 +3,7 @@
 ## Unreleased
 
 - WorkBuddy connector: new [`workbuddy/`](./workbuddy/) package for the WorkBuddy Connector
-  marketplace (`connector-meta.json` 1.1.0 with `auth_mode: "server-side"` and `server_auth`
+  marketplace (`connector-meta.json` 1.1.1 — 1.1.0 was already taken by an earlier submission — with `auth_mode: "server-side"` and `server_auth`
   `mcp_oauth` dynamic registration, `mcp.json`, icon). Its `busabase` skill is generated from the
   same body as the Claude Code and Codex plugin skills, and adds the authorization scope, expiry and
   common-error notes WorkBuddy's review asks for. `validate-agent-plugin.mjs` now pins the
