@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Plugin `busabase` skills (Claude Code, Codex, WorkBuddy) and the `busabase` / `busabase-ops` skills:
+  the description now names the everyday moments an agent should reach for Busabase (anything worth
+  keeping or sharing, team tools, "from now on" procedures, looking a fact up before saying "I don't
+  know"), and a new section describes the per-space index that `busabase-cli skill space` keeps current
+  by default (v1.4.0 of `busabase-cli`): one plain sentence to the user the first time, one sentence to
+  turn it off. Names read from a workspace are treated as data, and the setup skill's untrusted-content
+  example no longer reads like an instruction to skill scanners. Claude Code plugin 0.4.11, Codex plugin
+  0.3.14; the WorkBuddy connector is 1.1.2 (resubmit it on the WorkBuddy open platform).
+
 - Plugin `busabase` skills (Claude Code, Codex, WorkBuddy): new "Running a workspace day to day"
   section — read the schema and the records you will touch first, dedupe before create, cover the
   whole set in bulk work, no silent deletes, report partial as partial. It is the same text the
