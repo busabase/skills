@@ -48,7 +48,7 @@
   },
   "busabaseSkills": {
     "repository": "https://github.com/busabase/skills.git",
-    "ref": "0b1980e3bde7ae77d47c6bf1e6192fde5c1454ad"
+    "ref": "e3354ef1c015b986f36008a137bbf0b8172f780b"
   },
   "dsh": {
     "client": {
