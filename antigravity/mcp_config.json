@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "busabase": {
+      "serverUrl": "https://busabase.com/api/mcp"
+    }
+  }
+}

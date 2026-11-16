@@ -172,3 +172,9 @@ mcp-publisher publish                            # server.json を公開——�
 MCP Registry の更新を公開する場合にのみ `server.json` の `version` を上げてください。
 GitHub マーケットプレイスのリリースでは、Codex プラグインマニフェストのバージョンを
 個別に上げてください。
+
+## その他の Agent プラットフォーム
+
+各プラットフォームのパッケージと更新手順は [README → More native platforms](README.md#more-native-platforms)。
+
+パッケージのインストール、OAuth 検証、マーケット公開は別の段階です。MiniMax は現在 CLI Skill を提供し、MCP には別途プロバイダー登録が必要です。

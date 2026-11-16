@@ -1,0 +1,16 @@
+{
+  "name": "busabase",
+  "owner": {
+    "name": "Busabase"
+  },
+  "metadata": {
+    "description": "The Busabase plugin for Cursor: shared records, docs, files, skills and apps."
+  },
+  "plugins": [
+    {
+      "name": "busabase",
+      "source": "./cursor",
+      "description": "Connect Cursor to Busabase's MCP server and shared workspace skill."
+    }
+  ]
+}
