@@ -1,0 +1,13 @@
+{
+  "name": "busabase",
+  "version": "1.0.0",
+  "description": "Work with the records, docs, files and skills your team shares in Busabase from Grok Build.",
+  "author": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
+  "homepage": "https://busabase.com",
+  "repository": "https://github.com/busabase/skills.git",
+  "license": "MIT",
+  "keywords": ["busabase", "busabase workspace"]
+}

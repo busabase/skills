@@ -182,6 +182,9 @@ async function validatePlaybookRule() {
     "plugins/busabase/skills/busabase/SKILL.md",
     "workbuddy/skills/busabase/SKILL.md",
     "doubao/skills/busabase/SKILL.md",
+    ...["gemini", "cursor", "grok", "kimi", "kiro", "copilot", "perplexity", "antigravity"].map(
+      (client) => `${client}/skills/busabase/SKILL.md`,
+    ),
   ]) {
     const content = await readFile(path.join(root, skillPath), "utf8");
     assert(content.includes(heading), `${skillPath} must carry the playbook-first rule`);
@@ -275,5 +278,78 @@ await validatePlaybookRule();
 await validateClientCompatibility();
 await validateWorkBuddyConnector();
 
+async function validateNativeAdapters() {
+  for (const [descriptor, source] of [
+    [".github/plugin/marketplace.json", "./copilot"],
+    [".cursor-plugin/marketplace.json", "./cursor"],
+  ]) {
+    const marketplace = await readJson(descriptor);
+    assert.equal(marketplace.name, "busabase");
+    assert.equal(marketplace.plugins.length, 1);
+    assert.equal(marketplace.plugins[0].name, "busabase");
+    assert.equal(marketplace.plugins[0].source, source);
+    await stat(path.join(root, source, "skills/busabase/SKILL.md"));
+  }
+  const endpoint = "https://busabase.com/api/mcp";
+  for (const client of ["cursor", "kiro", "copilot", "perplexity"]) {
+    validatePluginManifest(await readJson(`${client}/plugin.json`));
+    const config = await readJson(`${client}/mcp.json`);
+    validateMcpConfig(config);
+    assert.deepEqual(config.mcpServers, {
+      busabase: { type: "streamable-http", url: endpoint },
+    });
+  }
+  for (const [client, filename] of [
+    ["gemini", "gemini-extension.json"],
+    ["grok", ".grok-plugin/plugin.json"],
+    ["kimi", "kimi.plugin.json"],
+    ["antigravity", "plugin.json"],
+    ["minimax", ".minimax-plugin/plugin.json"],
+  ]) {
+    const manifest = await readJson(`${client}/${filename}`);
+    assert.equal(manifest.name, "busabase");
+    assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+    let config = manifest;
+    if (client === "grok") config = await readJson("grok/.mcp.json");
+    if (client === "antigravity") config = await readJson("antigravity/mcp_config.json");
+    if (client === "minimax") {
+      assert.deepEqual(manifest.mcpServers, []);
+      assert.deepEqual(manifest.apps, []);
+      const canonical = path.join(root, "skills/busabase");
+      const actual = path.join(root, "minimax/skills/busabase");
+      const compare = async (relative = "") => {
+        const entries = await readdir(path.join(canonical, relative), {
+          withFileTypes: true,
+        });
+        assert.deepEqual(
+          (await readdir(path.join(actual, relative))).sort(),
+          entries.map((e) => e.name).sort(),
+        );
+        for (const entry of entries) {
+          const name = path.join(relative, entry.name);
+          if (entry.isDirectory()) await compare(name);
+          else
+            assert.deepEqual(
+              await readFile(path.join(actual, name)),
+              await readFile(path.join(canonical, name)),
+            );
+        }
+      };
+      await compare();
+    } else {
+      const expected =
+        client === "gemini"
+          ? { httpUrl: endpoint }
+          : client === "antigravity"
+            ? { serverUrl: endpoint }
+            : client === "grok"
+              ? { type: "http", url: endpoint, oauth_resource: endpoint }
+              : { url: endpoint };
+      assert.deepEqual(config.mcpServers, { busabase: expected });
+    }
+  }
+}
+
 await validateDoubaoPlugin();
+await validateNativeAdapters();
 console.log("Agent Plugins v1.0.0 package and client compatibility checks passed.");

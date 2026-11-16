@@ -1,0 +1,21 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "busabase",
+  "displayName": "Busabase",
+  "version": "0.4.0",
+  "description": "The open-source database and workspace for AI agents: shared records, docs, files, skills and apps through Busabase MCP.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Connect to my Busabase workspace and read its instructions",
+    "Find the team's saved procedure for my next task",
+    "Build a workspace app on our shared Busabase data"
+  ],
+  "author": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
+  "homepage": "https://busabase.com",
+  "repository": "https://github.com/busabase/skills",
+  "license": "MIT",
+  "keywords": ["busabase", "workspace", "agent-skills", "mcp"]
+}

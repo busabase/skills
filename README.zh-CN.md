@@ -161,3 +161,9 @@ mcp-publisher publish                            # 发布 server.json——立�
 
 仅在发布 MCP Registry 更新时才递增 `server.json` 中的 `version`。GitHub 市场版本发布时，
 请单独递增 Codex 插件清单中的版本号。
+
+## 更多 Agent 平台
+
+各平台原生包、安装与更新步骤见 [README → More native platforms](README.md#more-native-platforms)。
+
+安装包、OAuth 验收和市场上架分别记录；MiniMax 当前提供完整 CLI Skill，MCP 须另行完成平台接入。

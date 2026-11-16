@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "busabase",
+  "displayName": "Busabase",
+  "version": "1.0.0",
+  "description": "Work with the records, docs, files and skills your team shares in Busabase.",
+  "author": "Busabase",
+  "icon": "icon.png",
+  "category": "Productivity",
+  "exampleQueries": [
+    "Find the latest customer follow-up in our Busabase workspace.",
+    "Read our team instructions and save this work as a linked record."
+  ],
+  "apps": [],
+  "mcpServers": [],
+  "skills": ["skills/busabase/SKILL.md"]
+}
