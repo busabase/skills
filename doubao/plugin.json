@@ -1,0 +1,25 @@
+{
+  "name": "busabase",
+  "version": "1.0.0",
+  "description": "在豆包工作中读取和更新 Busabase 团队工作区中的记录、文档与技能，明确每次变更的生效或待审状态。",
+  "extensions": {
+    "com.doubao": {
+      "displayName": { "zh": "Busabase", "en": "Busabase" },
+      "displayDescription": {
+        "zh": "让豆包使用团队与 AI 共享的记录、文档和技能，保存工作结果，并明确每次变更的生效或待审状态。",
+        "en": "Use the records, docs and skills your team and agents share, with each change applied or sent for review according to your permissions."
+      },
+      "icon": "./com.doubao/assets/plugin-icon.png",
+      "mcpServers": {
+        "busabase": {
+          "displayName": { "zh": "Busabase 工作区", "en": "Busabase workspace" },
+          "displayDescription": {
+            "zh": "查询工作区数据、阅读团队文档、保存跟进记录并提交可审查的变更。",
+            "en": "Query workspace data, read team docs, save follow-ups and submit reviewable changes."
+          },
+          "icon": "./com.doubao/assets/plugin-icon.png"
+        }
+      }
+    }
+  }
+}

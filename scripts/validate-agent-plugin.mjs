@@ -62,7 +62,11 @@ function validateMcpServer(name, server) {
   assert.equal(typeof server, "object", `MCP server ${name} must be an object`);
 
   if (server.type === "stdio") {
-    assertOnlyKeys(server, new Set(["type", "command", "args", "env", "cwd"]), `MCP server ${name}`);
+    assertOnlyKeys(
+      server,
+      new Set(["type", "command", "args", "env", "cwd"]),
+      `MCP server ${name}`,
+    );
     assert.equal(typeof server.command, "string");
     if (server.command.startsWith(".")) assert(server.command.startsWith("./"));
     if (server.args) {
@@ -77,14 +81,18 @@ function validateMcpServer(name, server) {
     return;
   }
 
-  assert(["streamable-http", "sse"].includes(server.type), `Unsupported MCP transport: ${server.type}`);
+  assert(
+    ["streamable-http", "sse"].includes(server.type),
+    `Unsupported MCP transport: ${server.type}`,
+  );
   assertOnlyKeys(server, new Set(["type", "url", "headers"]), `MCP server ${name}`);
   const url = new URL(server.url);
   assert(["http:", "https:"].includes(url.protocol));
   assert.equal(url.username, "");
   assert.equal(url.password, "");
   assert.equal(url.hash, "");
-  if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) assert.equal(url.protocol, "https:");
+  if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname))
+    assert.equal(url.protocol, "https:");
   if (server.headers) {
     assert.equal(typeof server.headers, "object");
     for (const value of Object.values(server.headers)) assert.equal(typeof value, "string");
@@ -173,6 +181,7 @@ async function validatePlaybookRule() {
     "claude/skills/busabase/SKILL.md",
     "plugins/busabase/skills/busabase/SKILL.md",
     "workbuddy/skills/busabase/SKILL.md",
+    "doubao/skills/busabase/SKILL.md",
   ]) {
     const content = await readFile(path.join(root, skillPath), "utf8");
     assert(content.includes(heading), `${skillPath} must carry the playbook-first rule`);
@@ -196,7 +205,10 @@ async function validateWorkBuddyConnector() {
   assert.equal(meta.source, "busabase");
   assert.match(meta.version, /^\d+\.\d+\.\d+$/);
   for (const field of ["name_zh", "name_en", "description_zh", "description_en"]) {
-    assert(typeof meta[field] === "string" && meta[field].length > 0, `connector-meta.json ${field}`);
+    assert(
+      typeof meta[field] === "string" && meta[field].length > 0,
+      `connector-meta.json ${field}`,
+    );
   }
   for (const field of ["examples_zh", "examples_en"]) {
     assert(Array.isArray(meta[field]) && meta[field].length > 0, `connector-meta.json ${field}`);
@@ -206,7 +218,10 @@ async function validateWorkBuddyConnector() {
   const oauth = meta.server_auth?.data?.mcp_oauth;
   assert.equal(oauth?.server_url, "https://busabase.com/api/mcp");
   for (const reserved of ["client_id", "client_secret", "redirect_uri"]) {
-    assert(!(reserved in (oauth ?? {})), `server_auth must not set ${reserved}; WorkBuddy writes it`);
+    assert(
+      !(reserved in (oauth ?? {})),
+      `server_auth must not set ${reserved}; WorkBuddy writes it`,
+    );
   }
   // server_auth takes effect from WorkBuddy 4.24.0.
   const [major, minor] = String(meta.minWorkbuddyVersion).split(".").map(Number);
@@ -221,9 +236,44 @@ async function validateWorkBuddyConnector() {
   await stat(path.join(root, "workbuddy/icon.svg"));
 }
 
+async function validateDoubaoPlugin() {
+  const plugin = await readJson("doubao/plugin.json");
+  assert.equal(plugin.name, "busabase");
+  assert.match(plugin.version, /^\d+\.\d+\.\d+$/);
+  assertOnlyKeys(
+    plugin,
+    new Set(["name", "version", "description", "extensions"]),
+    "Doubao plugin",
+  );
+  const display = plugin.extensions["com.doubao"];
+  const mcp = await readJson("doubao/mcp.json");
+  assert.deepEqual(Object.keys(mcp.mcpServers), ["busabase"]);
+  assert.deepEqual(Object.keys(display.mcpServers), ["busabase"]);
+  assert.deepEqual(mcp.mcpServers.busabase, {
+    type: "streamable-http",
+    url: "https://busabase.com/api/mcp",
+  });
+  for (const item of [display, display.mcpServers.busabase]) {
+    assert(item.displayName.zh.trim());
+    assert(item.displayDescription.zh.trim());
+    assert.equal(item.icon, "./com.doubao/assets/plugin-icon.png");
+  }
+  const source = await readFile(path.join(root, "doubao/skills/busabase/SKILL.md"), "utf8");
+  const description = JSON.parse(source.match(/^description: (".*")$/m)[1]);
+  assert([...description].length <= 300, "Doubao discovery description exceeds 300 code points");
+  for (const file of ["com.doubao/assets/plugin-icon.png", "skills/busabase/assets/icon.png"]) {
+    const png = await readFile(path.join(root, "doubao", file));
+    assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert.equal(png.readUInt32BE(16), 512);
+    assert.equal(png.readUInt32BE(20), 512);
+    assert(png.length <= 500 * 1024);
+  }
+}
+
 await validateSkills();
 await validatePlaybookRule();
 await validateClientCompatibility();
 await validateWorkBuddyConnector();
 
+await validateDoubaoPlugin();
 console.log("Agent Plugins v1.0.0 package and client compatibility checks passed.");

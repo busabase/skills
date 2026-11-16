@@ -68,6 +68,14 @@ codex mcp list
 
 WorkBuddy のコネクタマーケットから **Busabase** をインストールし（WorkBuddy 4.24.0 以降）、ブラウザで認可するだけです。OAuth は WorkBuddy のクラウドが実行してトークンを保管するため、ローカルの設定は不要です。パッケージのソースは [`workbuddy/`](./workbuddy/) にあり、このリポジトリからではなく WorkBuddy の審査を経て公開されます。
 
+### Doubao Work ネイティブプラグイン
+
+[`doubao/`](./doubao/) は Busabase MCP 接続と共通の `busabase` Skill をまとめたパッケージです。
+標準 MCP OAuth を使用します。Doubao Work アカウントで利用できるプラグイン入口からインストールし、
+ブラウザーで認可してください。インストールと認可は別の手順です。
+[パッケージガイド](./doubao/README.md)に ZIP の構成と確認項目を記載しています。
+パッケージ検証と、実際のクライアントへの導入・プラットフォーム審査は分けて確認します。
+
 ### MCP（MCP 対応の任意のエージェント）
 
 エージェントをワークスペースの Streamable HTTP エンドポイントに接続します。
