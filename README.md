@@ -84,6 +84,27 @@ are separate steps. See the [package guide](./doubao/README.md) for the ZIP layo
 acceptance checklist. Package validation is complete; native-client installation and
 platform approval must be recorded separately.
 
+### More native platforms
+
+Each package has its own installation and update instructions. Installing a
+package does not complete OAuth or submit it to a marketplace.
+
+| Platform | Package / instructions | Distribution note |
+| --- | --- | --- |
+| Gemini CLI | [gemini/](gemini/) | Code Assist enterprise/API audiences; root extension archive or dedicated repository |
+| Antigravity CLI | [antigravity/](antigravity/) | Separate native manifest and MCP configuration |
+| Cursor | [cursor/](cursor/) | Native Agent Plugin; public Marketplace review is separate |
+| Grok Build | [grok/](grok/) | Native Grok plugin; external marketplace contribution |
+| Kimi Code / Work | [kimi/](kimi/) | One native plugin format; Work import needs account verification |
+| Kiro | [kiro/](kiro/) | Agent Plugins format; registry review is separate |
+| Copilot CLI | [copilot/](copilot/) | Use the included marketplace for durable updates |
+| Perplexity Computer | [perplexity/](perplexity/) | Custom plugin ZIP/GitHub import; paid-plan permissions may apply |
+| MiniMax Code | [minimax/](minimax/) | Full CLI Skill; authenticated MCP requires provider onboarding |
+
+Existing integrations also cover [Junie](junie/), [Pi](pi/), [Paseo](paseo/)
+and portions of [Hermes](hermes/). See [OpenHands](openhands/) and
+[Agent Zero](agent-zero/) for catalog drafts and remaining requirements.
+
 ### MCP (any MCP-capable agent)
 
 Point your agent at your workspace's Streamable-HTTP endpoint:

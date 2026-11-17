@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "busabase",
+  "owner": {
+    "name": "Busabase"
+  },
+  "metadata": {
+    "description": "Official Busabase plugin for GitHub Copilot CLI.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "busabase",
+      "source": "./copilot",
+      "description": "Use shared team records, docs and skills with permission-aware changes.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Busabase",
+        "url": "https://busabase.com"
+      },
+      "homepage": "https://busabase.com",
+      "repository": "https://github.com/busabase/skills",
+      "license": "MIT",
+      "keywords": ["busabase", "database", "workspace", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}
