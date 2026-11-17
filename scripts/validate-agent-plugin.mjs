@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { parseStrictJson } from "./lib/strict-json.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const pluginSchema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -11,7 +12,7 @@ const pluginNamePattern = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9]
 const skillNamePattern = /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 async function readJson(relativePath) {
-  return JSON.parse(await readFile(path.join(root, relativePath), "utf8"));
+  return parseStrictJson(await readFile(path.join(root, relativePath)), relativePath);
 }
 
 function assertOnlyKeys(value, allowedKeys, label) {

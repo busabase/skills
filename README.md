@@ -193,6 +193,20 @@ scripts/validate-agent-plugin.mjs     portable and client-package conformance gu
 > `plugin:busabase:busabase`, while Codex uses `busabase`. The shared `busabase-app-creator` skill
 > delegates connection, API, and ChangeRequest behavior to the host-specific MCP-first dependency.
 
+## Validate release metadata
+
+Maintainer validation uses Node.js 22+ and Python 3:
+
+```bash
+node --test scripts/strict-json.test.mjs
+node scripts/validate-agent-plugin.mjs
+```
+
+The release guard checks original JSON text for duplicate object keys, including escaped and
+nested names that `JSON.parse` would silently overwrite. Missing Python fails validation closed.
+Python is needed only by these publishing checks; it is not bundled into a plugin or required
+to run one.
+
 ## Publish to the OpenAI Plugin Directory
 
 The OpenAI Plugin Directory and the MCP Registry are separate release channels. Use

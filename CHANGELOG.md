@@ -2,14 +2,16 @@
 
 ## Unreleased
 
+- Reject duplicate keys in original manifest/MCP JSON, including escaped and nested names that
+  could otherwise conceal overwritten credential bytes. Maintainer validation requires Python 3
+  and fails closed if it is unavailable; plugin packages and their runtime dependencies are unchanged.
+
 - Add native Busabase packages for Gemini CLI, Antigravity, Cursor, Grok Build,
   Kimi, Kiro, GitHub Copilot CLI and Perplexity Computer, sharing one generated MCP Skill.
 - Add a MiniMax Skill-only package with all canonical connection references.
 - Document reuse for Junie, Pi, Paseo and Hermes, plus OpenHands and Agent Zero
   catalog drafts; keep package, authorization and marketplace verification separate.
 - Validate all new packages and canonical MiniMax reference parity in CI.
-
-## Unreleased
 
 - Add the Doubao Work native plugin 1.0.0 under `doubao/`: standard OAuth MCP connection,
   a Chinese discovery description, shared Skill instructions, display metadata and bundled
