@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reject duplicate keys in original manifest/MCP JSON, including escaped and nested names that
+  could otherwise conceal overwritten credential bytes. Maintainer validation requires Python 3
+  and fails closed if it is unavailable; plugin packages and their runtime dependencies are unchanged.
+
 - Add the Doubao Work native plugin 1.0.0 under `doubao/`: standard OAuth MCP connection,
   a Chinese discovery description, shared Skill instructions, display metadata and bundled
   512 by 512 PNG icons. Native-client installation and platform approval remain separate
