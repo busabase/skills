@@ -127,6 +127,13 @@ npx --yes busabase-cli@latest bases create-field --base-id <base-id> --slug docs
 # {"docs":[{"assetId":"...","attachmentId":"...","url":"...","fileName":"main.pdf","mimeType":"application/pdf","size":1234,"path":"contracts/2026/main.pdf"}]}
 # Moving a file = rewriting its "path" in a record update; send the whole array back.
 
+# appUser fields (Busabase Cloud) hold ONE app user id ("apu_…") — an end user who signed in to an
+# AirApp of this space, not a member. The value is a plain string; the UI shows their email. An app's
+# server can pass this field as `ownerField` to `app-users records/query`. Template export drops the
+# values (ids belong to this space). text <-> appUser converts with values kept as-is:
+npx --yes busabase-cli@latest bases create-field --base-id <base-id> --slug buyer --name "Buyer" --field-type appUser
+# {"buyer":"apu_7f3c…"}
+
 # clean up a bad proposal without merging:
 npx --yes busabase-cli@latest change-requests close --change-request-id <id> --reason "Wrong folder"
 ```
@@ -240,14 +247,124 @@ is the `node_create` tool's `agentPrompts` argument, or the `nodes.updateAgentPr
 
 ### Preview a write before you send it
 
-Any write command takes `--dry-run`: it prints the exact request it would send and sends nothing.
-Reads still run, so what you see is the fully-resolved plan, not a template. Read-only commands do
-not offer the flag — there would be nothing to suppress.
+`--dry-run` suppresses and prints the first attempted write; earlier reads may still run.
+JSON output includes `serverValidated:false`: the server has not checked permissions, upload
+safety, or concurrent changes. For a multi-step command, this is the first suppressed request,
+not a preview or validation of every later step. A successful dry-run does not mean the real
+submission will pass. Read-only commands do not offer the flag.
 
 ```bash
 npx --yes busabase-cli@latest bases create-change-request --base-id <id> --fields-json @fields.json --dry-run
 npx --yes busabase-cli@latest api --method post --path /api/v1/nodes --body-json '{...}' --dry-run
 ```
+
+### Diagnose a failed write before deciding to retry
+
+With `--output json`, the CLI writes an error receipt to stdout and human guidance to stderr,
+then exits nonzero. A subprocess wrapper must read the failure branch too. After installing
+the current CLI once for the session as above:
+
+```js
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+async function invokeBusabase(args) {
+  try {
+    const { stdout, stderr } = await execFileAsync("busabase-cli", [
+      ...args, "--output", "json",
+    ]);
+    return { exitCode: 0, result: JSON.parse(stdout), stderr };
+  } catch (error) {
+    let result;
+    try {
+      result = JSON.parse(error.stdout);
+    } catch {
+      throw error; // Preserve the process failure when there is no CLI receipt.
+    }
+    if (result?.ok !== false) throw error;
+    return { exitCode: error.code, result, stderr: error.stderr };
+  }
+}
+```
+
+Keep the stable CLI `code` and HTTP `status`; use optional `serverCode` for a specific refusal
+such as `SECRET_DETECTED`. Scanner `findings` contain file `path` and `ruleName`, not matched
+credentials or source excerpts. Explain those safe fields to the user; do not fetch or print
+suspected values. A finding counts a file/rule hit, not necessarily one real secret.
+`requestId` is available only when the CLI can associate the server's `x-request-id` with
+the failure; it can be absent, including with concurrent requests.
+
+`retryable` means a failure may be temporary, not that a POST can safely be repeated. Check
+`safeToRetry` and, when present, `writeOutcome`:
+
+- `rejected`: the request was explicitly refused. For 422, correct the flagged file or input;
+  do not submit the same payload again. Treat conflicts and permission refusals according to
+  their own error rather than bypassing the checks.
+- `unknown`: a write may have landed before a timeout, disconnect, or server error. Inspect
+  the specific target and relevant CRs before another write. An empty history page does not
+  prove nothing landed; status filters, pagination, and concurrent changes can hide the result.
+- `not_sent`: this write was not sent. Fix the local problem before trying again; this is not
+  a claim that every earlier step of a multi-step command had no effects.
+
+The CLI does not automatically repeat writes after a disconnect or 5xx. If recovery fields
+are absent, retain the error and reconcile any possibly sent write rather than assuming it
+is safe to replay. Older CLIs and handwritten commands failing before their first HTTP request
+can omit `writeOutcome`; absence does not establish `not_sent`.
+A read failing after an earlier write is also not a reason
+to rerun the whole command. A recovered `in_review` CR still waits for a human decision;
+do not approve it yourself.
+
+### Compare file content without downloading every file
+
+Use this only when the task requires a local/remote comparison or file verification:
+
+```bash
+npx --yes busabase-cli@latest nodes files --kind skill --node-id <node-id> --limit 100 --output json
+```
+
+This uses the existing `GET /api/v1/file-trees/{nodeId}/files` endpoint, which lists files
+inside one Skill, Drive, or AirApp. It is not the workspace node listing, and no separate
+manifest endpoint or automatic directory-sync command is implied. The response is an array:
+pass its last file's `path` as `--after` for the next page until a page has fewer than `--limit`
+items (including an empty page). Use the corresponding kind for the target.
+
+When supported by the server, each file can include its upload/write-time recorded
+`contentHash`. The list reads the database and normalizes valid bare SHA-256 values to
+`sha256:<64 lowercase hex characters>` without downloading Blob content or calculating
+missing hashes. Direct file-tree content writes compute the hash server-side; S3/R2 direct
+uploads may record an uploader-supplied hash without server-side byte verification. Matching
+recorded hashes can avoid downloads for ordinary comparisons of trusted uploads, but are not
+proof that the server verified the bytes. For an untrusted upload or a task requiring verified
+content equality, read and hash the actual bytes. Missing or null means unknown, not unchanged;
+read only bodies needed for comparison or editing. Do not add full downloads or hash verification
+to ordinary successful writes.
+
+For update/delete operations, preserve optimistic concurrency using the observed baseline
+as `baseContentHash`, formatted exactly `sha256:<64 lowercase hex characters>`. Updated
+servers normalize both the returned and comparison values, including historical bare digests.
+If an older server returns a bare digest, do not assume adding the prefix client-side fixes its
+comparison: use an updated server for a guarded update/delete rather than dropping the baseline
+to bypass a conflict. Never invent an unknown baseline or replace it with the new local hash.
+Content verification and the observed concurrency baseline are separate: the conflict check
+compares recorded values and does not establish byte integrity. The server still performs
+the final conflict and permission checks.
+
+### Update node metadata with typed or raw commands
+
+The typed flag accepts a flat metadata object. Raw PATCH sends the HTTP body directly,
+so the same fields belong inside the endpoint's `metadata` wrapper:
+
+```bash
+npx --yes busabase-cli@latest nodes update-metadata --node-id <node-id> \
+  --metadata-json '{"sourceSnapshotSha256":"<snapshot>","automaticSync":false}'
+npx --yes busabase-cli@latest api --method patch --path /nodes/<node-id>/metadata \
+  --body-json '{"metadata":{"sourceSnapshotSha256":"<snapshot>","automaticSync":false}}'
+```
+
+Do not add another `metadata` wrapper to the typed flag. Use the installed CLI's help/schema
+and the live server contract to check support; an updated skill alone does not upgrade either.
 
 ### When a 403 says you lack permission
 
@@ -264,8 +381,9 @@ additional pages.
 ### Checking whether unfinished CRs affect one resource
 
 First inspect the live `/api/v1/openapi.json`. If `GET /change-requests` advertises
-`affectsNodeId`, use the exact `--affects-node-id ... --limit 1` query above; an empty result is
-conclusive and avoids hydrating unrelated CRs. Do not infer support from the installed CLI or
+`affectsNodeId`, use the exact `--affects-node-id ... --limit 1` query above; an empty result
+means no matching unfinished CR was found at read time, not that an uncertain write never
+landed. This avoids hydrating unrelated CRs. Do not infer support from the installed CLI or
 trust an unknown query parameter: older deployments may ignore it. When the live API lacks the
 filter, fall back to the bounded `change-requests list --status-json ... --limit 20` form and
 filter locally. `list` is cursor-paginated via `nextCursor`; follow at most five pages, then

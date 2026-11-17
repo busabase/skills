@@ -18,6 +18,7 @@ Use this reference to turn a product story into native Busabase resources and to
 | HTML | A static or generated presentation artifact | The main interactive application shell |
 | AirApp | A focused interactive projection and command surface | A hidden database or credential store |
 | Vault | User-, Space-, or API-key-scoped variables and secrets | Folder navigation or browser-readable config |
+| App users (Cloud, `site` apps) | End-user accounts: a shop's buyers, a members-only page's readers — email-code sign-in, each sees only rows whose owner column (a text column the app's server names as `ownerField`) holds their verified id (`references/runtime-and-sdk.md` § Sites with signed-in customers) | Space members, or a hand-made users/passwords Base |
 
 Every generated app has a new Folder, at least one workflow Base, and one AirApp. Add the other resources only when the user story requires them. Prefer a native View when table, gallery, kanban, calendar, or gantt already expresses the operation; use the AirApp for cross-resource synthesis, focused decisions, and actions.
 

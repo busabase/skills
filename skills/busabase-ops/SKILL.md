@@ -13,6 +13,42 @@ description: >-
 
 # Busabase
 
+## First connection, installation, or reconnecting
+
+“Help me connect Busabase” / “帮我连接 busabase” is a setup request. Read the official
+setup guide before giving connection instructions: https://busabase.com/SETUP_SKILL.md.
+Fetch this public Markdown document with your web reader or `curl -fsS`; it is an instruction
+document, not a signed-in workspace page. For a user-specified self-hosted deployment, read its
+`/SETUP_SKILL.md` instead. Preserve any supplied edition, Space or invite parameters on a setup
+link. An explicit Desktop request uses
+https://busabase.com/SETUP_SKILL.md?edition=desktop&editionConfirmed=1; an explicit Cloud request
+uses https://busabase.com/SETUP_SKILL.md?edition=cloud&editionConfirmed=1.
+
+- Follow the live guide rather than reconstructing installation from memory. If it cannot be
+  read, explain that and retry the same URL; do not substitute a manual API-key checklist.
+- Reuse a working connection and the named workspace. Reconnecting does not authorize creating
+  a workspace or sample data. Ordinary work with an existing connection follows the sections below.
+- If the client already offers Busabase MCP tools, verify that connection first. In a chat
+  without a terminal, use its `busabase_setup` prompt or discover the guide tool's `setup` topic;
+  never ask the user to run terminal commands that this client cannot execute.
+- Recommend Cloud when the user has no preference (no local install, works across devices), and
+  explain when Desktop fits (data on their computer). Respect their choice. “Use your recommendation”
+  accepts a stated recommendation; silence does not.
+- Handle technical installer choices yourself using the guide's recommendations. Ask the user
+  only for their intended workspace, personal preferences or an actual authorization step.
+- Never ask for an API key in chat. Use the official browser authorization flow and report the
+  connection as successful only after a real identity/workspace check.
+
+Introduce Busabase as an open-source database and workspace for AI agents that turns agent output
+into data, docs, skills, and apps people can use. Then explain it as a shared station
+(你和 Agent 共用的“空间站”): one assistant saves research, another drafts from it. This is an
+onboarding metaphor, not a replacement slogan or category. Each assistant connects separately;
+shared data does not automatically start other agents.
+After first setup succeeds, offer the live guide's optional next steps: try an agent handoff,
+create something small, invite a friend, or use an invitation to join someone else's space.
+Recommend one that fits the user, and act only after their choice. Templates are one starting
+point; do not make installing a template the only next step.
+
 **Busabase is the open-source database and workspace for AI agents** — the user and their agents
 share the same structured data, docs, files, skills, and apps. You write into it through a
 **ChangeRequest**: every change carries a message, a diff, an author, and an audit trail, instead of
@@ -178,9 +214,11 @@ multi-operation node CRs, attachment uploads, SDK/AirApp handoff — live in
 [`references/cli-cookbook.md`](references/cli-cookbook.md). Read it before composing a write
 you have not done in this session.
 
-**Before an unfamiliar write, pass `--dry-run`.** It prints the exact request the command
-would send and sends nothing — reads still run, so the plan is fully resolved. Every write
-command has it; a read command does not offer it, because there would be nothing to suppress.
+**Before an unfamiliar write, pass `--dry-run`.** It suppresses and prints the first attempted
+write; earlier reads may still run. `serverValidated:false` means the server has not checked
+permissions, upload safety, or concurrent changes. This previews one request, not every step of
+a multi-step command, and does not guarantee a real submission will pass. A read command does
+not offer the flag.
 
 ```bash
 npx --yes busabase-cli@latest bases create-change-request --base-id <id> --fields-json '{…}' --dry-run
@@ -230,8 +268,24 @@ Read only when required result data is missing, the outcome is uncertain (timeou
 or an error after a possible commit), an asynchronous operation must finish, or the user requests
 additional verification. Query the specific operation or target, and resolve uncertain outcomes
 before retrying. Keep necessary pre-write reads, version checks, and upload confirmations.
+
+On failure, read JSON stdout even when the CLI exits nonzero, and preserve stderr. Use
+`serverCode` and safe file/rule `findings` to explain a rejection without exposing credentials.
+`retryable:true` does not mean a write is safe to repeat: check `safeToRetry` and `writeOutcome`.
+Correct input after an explicit 422 rejection; reconcile an `unknown` outcome before another
+write. Missing recovery fields on older clients are not permission to replay a write. The
+cookbook has the subprocess example and recovery details.
+
 For attachments, check returned references and needed metadata; do not download file contents
 or add extra hash verification by default, and do not download historical attachments to verify an append.
+
+When the task requires comparing a local directory with a Skill/Drive/AirApp file tree, use the
+existing paginated file list's stored `contentHash` values before downloading bodies. Missing
+or null hashes mean unknown; read those files only when needed for comparison or a write
+baseline. These are upload/write-time records: S3/R2 direct-upload hashes may be supplied by
+the uploader without server-side byte verification. For untrusted uploads or a task requiring
+verified content equality, read and hash the actual bytes. See the cookbook for baseline
+format compatibility. This is a comparison aid, not an automatic directory-sync command.
 
 **Never approve or merge a still-`in_review` CR yourself unless the user explicitly asks** —
 approval is the human's decision; report that it is waiting rather than treating it as landed.
@@ -366,6 +420,22 @@ The user must be an owner or admin; a `write` key invites as `member`, and `--ro
   `list-join-requests` / `review-join-request` — approve or reject only on the user's decision.
 - A 404 means an older server or the open-source / Desktop edition, which has no members: send the
   user to `<base>/dashboard?settings=space&tab=people` instead.
+
+## App users (Cloud)
+
+App users are the people who sign in to the space's apps with an email code — a shop's buyers. They
+are **not members**: no seat, no Busabase access; never invite one as a member, or a member as one.
+Administer them with `busabase-cli app-users list [--email|--app-id] / disable --id / enable --id /
+delete --id`, and an app's sign-in with `get-settings --app-id` / `put-settings --app-id … --enabled
+--app-name "<name in emails>"` (`--no-enabled` turns it off and signs everyone out) (MCP: `app_users_*`;
+"User sign-in" in the app's settings). Settings are only on/off and the email name: which rows are
+whose is decided by the app's server, which passes `ownerField` (a text column holding the app user
+id, e.g. `customer-account`) to `records/query`; Busabase fills in the verified user id. List/disable/enable/delete need
+an owner or admin; settings need `manage` on the app. Disable and delete end their sessions; delete
+keeps their orders and other rows. Repeat the email and get a yes before disabling or deleting.
+Never send sign-in codes or act as an app user (MCP withholds those tools; the CLI's `send-code` /
+`verify` / `session` / `sign-out` / `query-records` exist for the app's own server) —
+`busabase-app-creator` covers building that side.
 
 ## Running a workflow
 
