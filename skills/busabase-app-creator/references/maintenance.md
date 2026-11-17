@@ -120,6 +120,25 @@ deployment, or accepted remote-only work; back-port accepted remote-only work in
 before the next deployment. Inspect the existing deployment config,
 Folder/Base/View/resource ids, procedure allowlists, per-Base budgets, SDK version, and Run command.
 
+For that file comparison, reuse the file list from `nodes get` when it is already complete;
+otherwise use `nodes files --kind airapp --node-id <id> --limit 100 --output json`.
+This command returns an array: pass the last file's `path` as `--after` for the next page
+until a page has fewer than 100 files (or is empty). Compare local
+SHA-256 hashes of the deployable bytes with each file's upload/write-time recorded `contentHash`
+(`sha256:<64 lowercase hex characters>`). This is the existing file-list endpoint, not a new
+directory-sync command; the server returns stored hashes without downloading file bodies or
+calculating hashes during the list request. S3/R2 direct uploads may contain uploader-supplied
+hashes without server-side byte verification; for an untrusted source or a task requiring
+verified content equality, read and hash the actual bytes. A matching recorded hash alone
+does not prove integrity. A missing field on an older server, or `null` on a
+historical file, means unknown, not unchanged: read that file when its content or concurrency
+baseline is needed. Read source bodies as needed for actual maintenance, rather than downloading
+every unchanged file just to compare it. Reuse an update/delete file's observed hash as its
+`baseContentHash`; an intervening edit must still produce a conflict. Updated servers normalize
+historical bare SHA-256 digests on both read and comparison. Follow the `busabase` cookbook's
+older-server guidance if a bare digest is returned; do not remove a baseline to bypass a
+conflict. Concurrency checks compare recorded hashes and do not verify file integrity.
+
 If the existing `dev`/`start` script runs Vite, check the pinned version before touching it: only
 `vite@7.3.1` is verified runnable in this Nodepod runtime (see "Why 'no Vite' is not a style
 preference" in `references/runtime-and-sdk.md`). A working `7.3.1` pin is not tech debt to migrate
@@ -204,8 +223,13 @@ credential was not allowed to merge, and approving it yourself would defeat the 
 produced it. Maintenance-blueprint approval, prior authorization, or a general request to maintain
 the AirApp is not authorization to merge such a CR — only the user asking for that specific CR is.
 
-Afterwards, read changed resources, records, and AirApp files back and compare them
-with the accepted maintenance blueprint and local manifest. Respect ordering dependencies before
+Afterwards, read changed resources and records back and compare them with the accepted
+maintenance blueprint. For AirApp files, compare the complete merged file-path/hash list with the
+local deployment manifest using the method above; read bodies where a hash is unavailable or the
+task requires content inspection. This preserves file verification without downloading every
+unchanged body. Follow the `busabase` skill's write-failure recovery guidance before retrying an
+uncertain deployment; a dry-run is a request preview, not server validation.
+Respect ordering dependencies before
 submitting or merging dependent CRs. Ask the user to Run merged HEAD in the target Busabase, then
 verify the ambient session, configured resources, bounded requests, and browser console. A pending
 CR cannot be Run, and a local key-backed preview is not a substitute.

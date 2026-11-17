@@ -105,6 +105,9 @@ offline; deleting it for good removes it.
 
 A live site can have custom domains (`airapps site-bind-domain --hostname shop.company.com`): the person
 adds the returned DNS records at their DNS provider, and `site-domains` shows when it is connected.
+With several domains, one is primary and the others redirect to it (308, path kept); the first bound is
+primary, and `airapps site-set-primary-domain --hostname www.company.com` changes it when the person asks
+(`--clear-hostname` instead lets every domain serve the site directly).
 
 ### A site that reads and writes workspace data: `site.access`
 
@@ -237,6 +240,72 @@ export default {
 The page in `public/` calls `/api/products` and `/api/orders` on its own origin, makes one `orderId`
 (`crypto.randomUUID()`) when the form loads and keeps it until the order succeeds, and says plainly when an
 order did not go through. Every HTML page still needs `<meta charset="utf-8">`.
+
+### Sites with signed-in customers: App users
+
+When the site needs end-user accounts — buyers who come back for "my orders", a members-only page,
+anything where a visitor must see their own rows and nobody else's — use **App users** (Busabase
+Cloud). Never make visitors space members (members take seats and open Busabase), and never build a
+`users` Base with passwords or your own session table. An app user has no seat and no password: one
+pool per Space, identity = a verified email, sign-in = a 6-digit emailed code (10 minutes, 5 tries),
+session 30 days. User-facing reference: `/docs/app-users`.
+
+**Turn it on** for the app (needs `manage` on the AirApp node):
+
+```bash
+busabase-cli app-users put-settings --app-id <airapp node id> --enabled --app-name "<name shown in the email>"
+```
+
+The same is MCP `app_users_put_settings`, or the person does it in the app's **Settings → User
+sign-in**. `get-settings` reads it back. Settings are only on/off and the email name. Sign-in is off
+until someone turns it on, and turning it off signs everyone out of that app.
+
+**Owner columns** belong in the blueprint — they are the app's own decision, not a platform setting.
+Busabase stores the accounts, so never add a users table. For each Base a signed-in user reads, add
+one `appUser` owner column (e.g. `customer-account`, field type `appUser`) that holds the app user
+id — Busabase Cloud shows it to the team as the buyer's email, so it is for matching AND for people.
+(A plain `text` owner column still works for `ownerField`; if an older app uses one, keep a separate
+`text` email column next to it, or convert it to `appUser` — values are kept.) Empty = a guest row
+that belongs to nobody. Template exports drop `appUser` values (ids belong to one space). The
+Worker writes the owner id **at create time, server-side, from the session's `user.id`** —
+never from a value the browser sent, and never by a later update a visitor can trigger. When reading,
+the Worker passes the owner column as `ownerField`; Busabase supplies the value from the verified
+session.
+
+**The Worker does all of it** with the site's own key; the browser only calls the site's own routes
+(`/account/send-code`, `/account/verify`, `/account`, `/account/sign-out`):
+
+```js
+import { Busabase, appUserSessionCookie, clearAppUserSessionCookie, getAppUserSessionToken } from "busabase-sdk";
+
+const bb = new Busabase({ baseUrl: env.BUSABASE_BASE_URL, apiKey: env.BUSABASE_API_KEY, spaceId: env.BUSABASE_SPACE_ID });
+
+await bb.appUsers.sendCode({ appId, email, locale: siteLanguage, ip: request.headers.get("CF-Connecting-IP") ?? undefined });
+const { sessionToken, user } = await bb.appUsers.verify({ appId, email, code }); // then Set-Cookie: appUserSessionCookie(sessionToken)
+const me = await bb.appUsers.getUser({ appId, sessionToken: getAppUserSessionToken(request) }); // null = signed out
+const { records, nextCursor } = await bb.appUsers.queryRecords({ appId, sessionToken, baseId: ORDERS, ownerField: "customer-account", limit: 20 });
+await bb.appUsers.signOut({ appId, sessionToken }); // then Set-Cookie: clearAppUserSessionCookie()
+```
+
+- Keep the token only in the HttpOnly cookie the SDK helpers build (`appUserSessionCookie`,
+  `getAppUserSessionToken`, `clearAppUserSessionCookie`; pass `cookieName` to rename it).
+- Forward `locale` (the email is sent in that language; unsupported → English) and the client IP
+  (`CF-Connecting-IP`, else the first `X-Forwarded-For` hop). Without `ip` the per-IP limits are skipped.
+- `send-code` can answer 429 `RATE_LIMITED` with `data.reason` (`cooldown`, `ip_hourly_limit`,
+  `ip_daily_limit`, `email_daily_limit`, `space_daily_limit`) and `data.retryAfterSeconds`; show a
+  plain message per reason. Other codes: `INVALID_EMAIL`, `INVALID_CODE` (`data.attemptsLeft`),
+  `CODE_EXPIRED`, `APP_USER_DISABLED`, `APP_LOGIN_DISABLED`, `INVALID_OWNER_FIELD` (the
+  `ownerField` is missing or neither an `appUser` nor a text column — a bug in the app's code).
+- **Read a user's own rows only through `bb.appUsers.queryRecords`** (`POST /api/v1/app-users/records/query`),
+  with `ownerField`, where Busabase forces `ownerField = verified session user id`. **Never** read the Base with the site key and
+  filter by owner in JavaScript: the site key reads every row, so one bug leaks one customer's orders
+  to another.
+- **Guest flows must keep working.** Read `getSettings({ appId })`; when it says `enabled: false` or
+  answers 404 (an older server), hide all account UI and leave guest checkout and public pages exactly
+  as they were. Sign-in is an addition to the site, never a requirement for it.
+
+Agents administer app users (`busabase-cli app-users list|disable|enable|delete|get-settings|put-settings`,
+MCP `app_users_*`) but never send codes or act as one; those routes are the site's alone.
 
 ### Why the `browser` engine pins Vite so tightly
 

@@ -157,11 +157,11 @@ Read each selected reference completely before acting:
 | --- | --- |
 | Interview order, stopping rule, blueprint shape | `references/interview-and-blueprint.md` |
 | Resource placement, native Views, Vault and execution security | `references/resource-model-and-security.md` |
-| SDK, same-origin `/api/v1` access, browser loading, local development against real data | `references/runtime-and-sdk.md` |
+| SDK, same-origin `/api/v1` access, browser loading, local development against real data, website Workers and App users sign-in | `references/runtime-and-sdk.md` |
 | Frontend architecture, responsive UX, states and test matrix | `references/app-engineering.md` |
 | Structure creation, AirApp deployment, seed CRs, approval rules | `references/deployment-and-review.md` |
 | Shared shell, domain customization, local and target verification | `references/ui-and-validation.md` |
-| Existing AirApp identity, continuous resource/UI evolution, and canonical readback | `references/maintenance.md` |
+| Existing AirApp identity, resource/UI evolution, stored file-hash comparison, and canonical readback | `references/maintenance.md` |
 | Package layout, `busabase.json`, SKILL.md frontmatter, validation — **required before writing any file package-first** | `references/template-format.md` |
 
 Always read the `busabase` skill before connecting or writing. It is normally installed beside this one (`../busabase/SKILL.md`); if it is not, install it with `npx skills add busabase/skills --skill busabase`, or read it at https://github.com/busabase/skills/blob/main/skills/busabase/SKILL.md. Treat live OpenAPI as authoritative when an endpoint shape is uncertain.
@@ -330,6 +330,7 @@ Create a machine-readable `blueprint.json` and show the user a concise human vie
    the question the user is actually approving.
 6. Procedure capability matrix, per-screen data budgets, and action allowlist.
 7. Vault requirement names and trusted execution owner, never secret values.
+7a. End-user accounts, if the site has them: App users, the owner column per table (a text column holding the app user id, passed as `ownerField`) plus a separate human-readable email column, and what guests can still do.
 8. Product onboarding version, required fields, Busabase completion resource, validation, and unlocked capabilities; or an explicit empty contract with rationale.
 9. Explicit exclusions and risks.
 
@@ -389,6 +390,20 @@ Bases and field slugs, and its provider disables edits. Review which fields may 
 before going live. Never add a generic authenticated API proxy. Follow
 `references/runtime-and-sdk.md` for custom write routes and explicit site access. Python remains
 Local/Remote only: choose the Node/Worker starter for a website.
+
+**End-user accounts are App users.** When a site's visitors need accounts (buyers who see their own
+orders, members-only pages), use Busabase App users — never Space members, never a hand-made
+users/passwords Base — Busabase stores the accounts. Whose rows are whose is the app's own decision,
+not a setting: give each Base a signed-in user reads a plain text owner column (e.g.
+`customer-account`) holding the app user id, written server-side from the session at create time,
+plus a separate email column for people to read; the Worker passes that column as `ownerField` to
+`records/query` and Busabase fills in the verified user id. Turn sign-in on with `busabase-cli
+app-users put-settings --enabled --app-name …` (MCP `app_users_put_settings`, or the app's Settings →
+User sign-in) — settings are only on/off and the email name. The Worker sends
+and verifies codes with its own key, keeps the token in an HttpOnly cookie, forwards locale and
+client IP, reads a user's rows only through `bb.appUsers.queryRecords` — never site-key reads
+filtered in JavaScript — and keeps guest flows working when sign-in is off or unavailable. Read
+`references/runtime-and-sdk.md` § Sites with signed-in customers before writing any of it.
 
 Keep the providers separate:
 
