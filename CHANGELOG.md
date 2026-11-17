@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Connecting Busabase: the `busabase` and `busabase-ops` skills and the plugin `busabase` skills (Claude Code,
+  Codex, WorkBuddy) treat "connect / set up / install Busabase" (including 帮我连接 busabase) as a setup
+  request. They read the official guide at https://busabase.com/SETUP_SKILL.md, or the plugin's MCP setup
+  prompt, before giving instructions; reuse a working connection and the space the user named; recommend
+  Cloud when the user has no preference; never ask for an API key in chat; and after setup offer an agent
+  handoff, making something small, inviting a friend, or joining an invitation. Claude Code plugin 0.4.12,
+  Codex plugin 0.3.15; the WorkBuddy connector is 1.1.3 (resubmit it on the WorkBuddy open platform).
+
+- `busabase-app-creator` and its package, skill and app-package entries: App users (email-code sign-in for
+  an app's end users, an owner column passed as `ownerField`, and the App user field), several custom
+  domains per site, and comparing stored file hashes before re-uploading an AirApp's files.
+
+- `busabase` and `busabase-ops` CLI cookbook: diagnose a failed write before retrying, compare file content
+  by hash without downloading it, update node metadata, and App user field values.
+
 - Reject duplicate keys in original manifest/MCP JSON, including escaped and nested names that
   could otherwise conceal overwritten credential bytes. Maintainer validation requires Python 3
   and fails closed if it is unavailable; plugin packages and their runtime dependencies are unchanged.
