@@ -75,6 +75,15 @@ authorize it in the browser. WorkBuddy runs the OAuth flow in its cloud and keep
 there is nothing to configure locally. The package source lives in [`workbuddy/`](./workbuddy/);
 it is submitted to WorkBuddy for review rather than installed from this repo.
 
+### Doubao Work native plugin
+
+The [`doubao/`](./doubao/) package bundles the Busabase MCP connection and the shared
+`busabase` skill. It uses standard MCP OAuth: install through the plugin entry available
+in your Doubao Work account and complete browser consent. Installation and authorization
+are separate steps. See the [package guide](./doubao/README.md) for the ZIP layout and
+acceptance checklist. Package validation is complete; native-client installation and
+platform approval must be recorded separately.
+
 ### MCP (any MCP-capable agent)
 
 Point your agent at your workspace's Streamable-HTTP endpoint:
@@ -162,6 +171,20 @@ scripts/validate-agent-plugin.mjs     portable and client-package conformance gu
 > of local shell configuration. Claude Code additionally namespaces the server as
 > `plugin:busabase:busabase`, while Codex uses `busabase`. The shared `busabase-app-creator` skill
 > delegates connection, API, and ChangeRequest behavior to the host-specific MCP-first dependency.
+
+## Validate release metadata
+
+Maintainer validation uses Node.js 22+ and Python 3:
+
+```bash
+node --test scripts/strict-json.test.mjs
+node scripts/validate-agent-plugin.mjs
+```
+
+The release guard checks original JSON text for duplicate object keys, including escaped and
+nested names that `JSON.parse` would silently overwrite. Missing Python fails validation closed.
+Python is needed only by these publishing checks; it is not bundled into a plugin or required
+to run one.
 
 ## Publish to the OpenAI Plugin Directory
 

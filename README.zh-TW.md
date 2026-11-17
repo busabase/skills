@@ -64,6 +64,12 @@ codex mcp list
 
 在 WorkBuddy 連接器市集安裝 **Busabase**（需 WorkBuddy 4.24.0 以上），在瀏覽器裡完成授權即可。OAuth 由 WorkBuddy 雲端完成並保管權杖，本機無需任何設定。連接器套件原始檔在 [`workbuddy/`](./workbuddy/)，它提交給 WorkBuddy 審核上架，不從本儲存庫安裝。
 
+### 豆包工作原生外掛
+
+[`doubao/`](./doubao/) 將 Busabase MCP 連線與共用的 `busabase` Skill 打包在一起，使用標準 MCP OAuth。
+透過目前豆包工作帳號可用的外掛入口安裝後，再完成瀏覽器授權。安裝與授權是兩個步驟。
+[打包與自測指南](./doubao/README.md)說明 ZIP 結構及驗收方法；套件結構已檢查，用戶端安裝與平台審核需要另外驗收。
+
 ### MCP（任何支援 MCP 的智慧代理）
 
 將智慧代理指向你的工作區 Streamable HTTP 端點：
