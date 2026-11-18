@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "busabase",
+  "version": "1.0.0",
+  "description": "Use the records, docs and skills your team and agents share in Busabase, with writes applied or sent for review according to your permissions.",
+  "author": {
+    "name": "Busabase",
+    "url": "https://busabase.com"
+  },
+  "homepage": "https://busabase.com",
+  "repository": "https://github.com/busabase/skills",
+  "license": "MIT",
+  "keywords": ["busabase", "database", "workspace", "records", "docs", "skills", "mcp"]
+}

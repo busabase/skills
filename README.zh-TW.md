@@ -161,3 +161,9 @@ mcp-publisher publish                            # 發佈 server.json——立�
 
 只有在發佈 MCP Registry 更新時才遞增 `server.json` 中的 `version`。發佈 GitHub 市集版本時，
 請另外遞增 Codex 外掛資訊清單中的版本號。
+
+## 更多 Agent 平台
+
+各平台原生套件、安裝與更新步驟見 [README → More native platforms](README.md#more-native-platforms)。
+
+套件安裝、OAuth 驗收與市場上架分別記錄；MiniMax 目前提供完整 CLI Skill，MCP 須另行完成平台接入。

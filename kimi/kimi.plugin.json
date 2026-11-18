@@ -1,0 +1,21 @@
+{
+  "name": "busabase",
+  "version": "1.0.0",
+  "description": "Work with the records, docs, files and skills your team shares in Busabase.",
+  "author": "Busabase",
+  "homepage": "https://busabase.com",
+  "license": "MIT",
+  "keywords": ["busabase"],
+  "interface": {
+    "displayName": "Busabase",
+    "shortDescription": "The workspace your team and agents share",
+    "developerName": "Busabase",
+    "websiteURL": "https://busabase.com"
+  },
+  "skills": "./skills/",
+  "mcpServers": {
+    "busabase": {
+      "url": "https://busabase.com/api/mcp"
+    }
+  }
+}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add privacy and support links required by the Kiro registry submission checklist.
+
 - Connecting Busabase: the `busabase` and `busabase-ops` skills and the plugin `busabase` skills (Claude Code,
   Codex, WorkBuddy) treat "connect / set up / install Busabase" (including 帮我连接 busabase) as a setup
   request. They read the official guide at https://busabase.com/SETUP_SKILL.md, or the plugin's MCP setup
@@ -20,6 +22,19 @@
 - Reject duplicate keys in original manifest/MCP JSON, including escaped and nested names that
   could otherwise conceal overwritten credential bytes. Maintainer validation requires Python 3
   and fails closed if it is unavailable; plugin packages and their runtime dependencies are unchanged.
+
+- Add native Busabase packages for Gemini CLI, Antigravity, Cursor, Grok Build,
+  Kimi, Kiro, GitHub Copilot CLI and Perplexity Computer, sharing one generated MCP Skill.
+- Add a MiniMax Skill-only package with all canonical connection references.
+- Document reuse for Junie, Pi, Paseo and Hermes, plus OpenHands and Agent Zero
+  catalog drafts; keep package, authorization and marketplace verification separate.
+- Validate all new packages and canonical MiniMax reference parity in CI.
+
+- Connecting Busabase in the native packages: the generated `busabase` skill in every client (Gemini CLI,
+  Antigravity, Cursor, Grok Build, Kimi, Kiro, GitHub Copilot CLI, Perplexity Computer, Doubao Work) and the
+  MiniMax CLI skill now carry the same connection guidance as the Claude Code, Codex and WorkBuddy plugins:
+  "connect / set up Busabase" is a setup request, read the official guide, never ask for an API key in chat.
+  Doubao Work plugin 1.0.1.
 
 - Add the Doubao Work native plugin 1.0.0 under `doubao/`: standard OAuth MCP connection,
   a Chinese discovery description, shared Skill instructions, display metadata and bundled

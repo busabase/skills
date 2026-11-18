@@ -1,0 +1,26 @@
+{
+  "status": "draft-blocked-on-dedicated-repository-and-runtime",
+  "destination": "agent0ai/a0-plugins/plugins/busabase/index.yaml",
+  "runtimeManifest": {
+    "name": "busabase",
+    "title": "Busabase",
+    "description": "Use shared team records, docs and skills through the Busabase CLI skill.",
+    "version": "1.0.0",
+    "settings_sections": [],
+    "per_project_config": false,
+    "per_agent_config": false
+  },
+  "indexEntry": {
+    "title": "Busabase",
+    "description": "Shared team records, docs and skills for Agent Zero, with permission-aware changes.",
+    "tags": ["productivity", "integration"]
+  },
+  "requiredBeforeSubmission": [
+    "Create or identify the dedicated public GitHub repository; its root must contain plugin.yaml, README.md and LICENSE.",
+    "Bundle the canonical Busabase CLI skill and all referenced resources without copying credentials.",
+    "Implement documented plugin discovery only; do not write core Agent Zero settings from an install hook.",
+    "Verify real plugin skill discovery, CLI/device authorization, workspace operations, update and removal in Agent Zero.",
+    "Run the official a0-review-plugin workflow and resolve blockers.",
+    "Set indexEntry.github to that actual repository URL; submit exactly one index folder after its runtime is public."
+  ]
+}

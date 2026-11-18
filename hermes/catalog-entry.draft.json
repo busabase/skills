@@ -1,0 +1,30 @@
+{
+  "status": "draft-not-submitted",
+  "destination": "NousResearch/hermes-agent/plugin-catalog/busabase.yaml",
+  "entry": {
+    "name": "busabase",
+    "repo": "https://github.com/busabase/skills",
+    "subdir": "",
+    "description": "Shared records, docs and skills for teams and AI agents, with permission-aware changes.",
+    "maintainer": "busabase",
+    "tier": "community",
+    "category": "tools",
+    "docs_url": "https://github.com/busabase/skills#readme",
+    "version": "0.4.0",
+    "readme": true,
+    "capabilities": {
+      "provides_tools": [],
+      "provides_hooks": [],
+      "provides_middleware": [],
+      "requires_env": []
+    }
+  },
+  "requiredBeforeSubmission": [
+    "Pin sha to the full 40-character commit that was actually validated; do not use a mutable branch.",
+    "Run current hermes plugins validate <pinned-checkout> --install-deps; record native load and the minimum supported Hermes version.",
+    "Resolve catalog plugin.yaml prerequisite versus documented portable plugin.json support.",
+    "Verify OAuth: portable transport translation supplies URL but not native auth: oauth; use the documented explicit native configuration if required.",
+    "Verify capability declarations against current validation and disclose any remote-MCP behavior.",
+    "Raise a reviewed SHA-bump PR for future catalog updates; do not add self-updating plugin code."
+  ]
+}

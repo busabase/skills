@@ -17,7 +17,7 @@ skills/busabase/assets/icon.png
 only these files:
 
 ```sh
-zip ../busabase-doubao-plugin-1.0.0.zip plugin.json mcp.json \
+zip ../busabase-doubao-plugin-1.0.1.zip plugin.json mcp.json \
   com.doubao/assets/plugin-icon.png skills/busabase/SKILL.md skills/busabase/assets/icon.png
 ```
 

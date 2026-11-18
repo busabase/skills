@@ -1,0 +1,31 @@
+{
+  "id": "busabase",
+  "name": "Busabase",
+  "description": "Read and update the records, docs and skills your team and agents share, with writes applied or sent for review according to the connection permissions.",
+  "categories": ["Database", "Knowledge base"],
+  "appUrl": "https://busabase.com",
+  "docsUrl": "https://github.com/busabase/skills#readme",
+  "connectionOptions": [
+    {
+      "id": "oauth",
+      "provider": "mcp",
+      "transport": {
+        "kind": "shttp",
+        "url": "https://busabase.com/api/mcp"
+      },
+      "auth": {
+        "strategy": "oauth2",
+        "oauth": {
+          "authorizationUrl": "https://busabase.com/api/oauth/authorize",
+          "tokenUrl": "https://busabase.com/api/oauth/token",
+          "registrationUrl": "https://busabase.com/api/oauth/register",
+          "scopes": ["mcp"],
+          "pkce": true,
+          "clientAuthentication": "none"
+        }
+      }
+    }
+  ],
+  "keywords": ["workspace", "database", "docs", "skills", "change requests"],
+  "installHint": "Connect with OAuth, then call auth_verify and confirm the intended workspace. Permissions determine whether a write applies immediately or waits for review."
+}
