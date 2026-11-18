@@ -17,3 +17,20 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/validate-agent-plugin.mjs
+
+  base44-kit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: base44
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test

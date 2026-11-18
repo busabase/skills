@@ -1,0 +1,31 @@
+{
+  // One row per synced Base44 record: the link to its Busabase record, the content hash of the
+  // last sync (the idempotency + loop guard), and the last error. Only backend functions touch
+  // it (service role), so row-level security locks everyone else out.
+  "name": "BusabaseSyncState",
+  "type": "object",
+  "title": "Busabase sync state",
+  "description": "Sync bookkeeping for the Busabase integration. Do not edit by hand.",
+  "properties": {
+    "entity": { "type": "string", "description": "Base44 entity name, e.g. Order" },
+    "entity_id": { "type": "string", "description": "Base44 record id" },
+    "busabase_record_id": { "type": "string" },
+    "content_hash": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["synced", "pending_review", "failed"],
+      "default": "failed"
+    },
+    "direction": { "type": "string", "enum": ["to_busabase", "from_busabase"] },
+    "attempts": { "type": "integer", "default": 0 },
+    "last_error": { "type": "string" },
+    "last_synced_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["entity", "entity_id"],
+  "rls": {
+    "create": false,
+    "read": { "user_condition": { "role": "admin" } },
+    "update": false,
+    "delete": false
+  }
+}

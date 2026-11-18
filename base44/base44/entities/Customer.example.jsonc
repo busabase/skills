@@ -1,0 +1,14 @@
+{
+  // EXAMPLE ONLY, see Order.example.jsonc.
+  "name": "Customer",
+  "type": "object",
+  "title": "Customer",
+  "properties": {
+    "name": { "type": "string" },
+    "email": { "type": "string", "format": "email" },
+    "company": { "type": "string" },
+    "phone": { "type": "string" },
+    "notes": { "type": "string" }
+  },
+  "required": ["name"]
+}

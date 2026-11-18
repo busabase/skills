@@ -1,0 +1,21 @@
+{
+  // EXAMPLE ONLY. Skip this if your app already has an Order entity, and edit shared/mappings.ts
+  // to match the fields you have. (The ".example" suffix keeps `base44 deploy` from pushing it:
+  // entity push is a full sync, see README "Deploy safely".)
+  "name": "Order",
+  "type": "object",
+  "title": "Order",
+  "properties": {
+    "order_number": { "type": "string" },
+    "customer_name": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["new", "paid", "shipped", "cancelled"],
+      "default": "new"
+    },
+    "total": { "type": "number" },
+    "currency": { "type": "string", "default": "USD" },
+    "notes": { "type": "string" }
+  },
+  "required": ["order_number"]
+}
