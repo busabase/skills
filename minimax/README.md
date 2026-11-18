@@ -31,10 +31,10 @@ provider onboarding.
 
 ## Maintainers and publication
 
-Generate `skills/busabase/` by copying the COMPLETE canonical `skills/busabase/` directory from the
-same public Busabase skills release, including every reference and its LICENSE. Its upstream
-source is `.agents/skills/busabase/` in kapps. Do not maintain a separate MiniMax Skill body or
-render the MCP-only template into this package. `icon.png` is the existing Busabase plugin icon.
+Keep `skills/busabase/` a copy of the COMPLETE canonical `skills/busabase/` directory from the
+same Busabase skills release, including every reference and its LICENSE. Do not maintain a
+separate MiniMax Skill body or render the MCP-only template into this package. `icon.png` is the
+existing Busabase plugin icon.
 
 Submit a ZIP or public GitHub repository/subdirectory through MiniMax's documented third-party
 form. Choose Desktop/Cloud and CN/US in the form, then retain the submission id for status queries.

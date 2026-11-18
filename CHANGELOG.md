@@ -28,6 +28,12 @@
   catalog drafts; keep package, authorization and marketplace verification separate.
 - Validate all new packages and canonical MiniMax reference parity in CI.
 
+- Connecting Busabase in the native packages: the generated `busabase` skill in every client (Gemini CLI,
+  Antigravity, Cursor, Grok Build, Kimi, Kiro, GitHub Copilot CLI, Perplexity Computer, Doubao Work) and the
+  MiniMax CLI skill now carry the same connection guidance as the Claude Code, Codex and WorkBuddy plugins:
+  "connect / set up Busabase" is a setup request, read the official guide, never ask for an API key in chat.
+  Doubao Work plugin 1.0.1.
+
 - Add the Doubao Work native plugin 1.0.0 under `doubao/`: standard OAuth MCP connection,
   a Chinese discovery description, shared Skill instructions, display metadata and bundled
   512 by 512 PNG icons. Native-client installation and platform approval remain separate

@@ -1,6 +1,6 @@
 {
   "name": "busabase",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "在豆包工作中读取和更新 Busabase 团队工作区中的记录、文档与技能，明确每次变更的生效或待审状态。",
   "extensions": {
     "com.doubao": {

@@ -14,11 +14,33 @@ This Kimi plugin declares the Busabase MCP connection and supplies its workspace
 Use the Busabase MCP tools after Kimi completes browser OAuth authorization. Do not request an
 API key in chat, read local credential files, or construct a separate HTTP connection.
 
+## When asked to connect or set up Busabase
+
+Treat “帮我连接 busabase” / “connect Busabase” as a connection request. Verify the bundled
+connection with `auth_verify`; if disconnected, follow **Connection recovery** below. Never
+replace the plugin's OAuth flow with an API key pasted into chat.
+
+For a setup walkthrough, read the **busabase_setup** prompt or call the discovered Busabase guide
+tool with topic `setup`. It is the official flow for a chat without a terminal. If neither is
+available, read https://busabase.com/SETUP_SKILL.md for the supported connection options and
+explain the client's limitation. Do not pretend a local installer ran. Reconnecting alone does
+not authorize creating starter data. Offer a recommendation and a short reason when a user
+choice is needed; leave workspace selection and authorization to the user.
+
+In the welcome, lead with Busabase's open-source database and workspace for AI agents, turning
+agent output into usable data, docs, skills, and apps. Explain that workspace as a shared station
+(你和 Agent 共用的“空间站”), where one assistant saves research and another writes from it.
+Keep this as an onboarding metaphor, not a replacement slogan. Each connects separately; it does not automatically run
+agents. After verified setup, offer the guide's optional paths: an agent handoff, creating notes
+or a tool, inviting friends, or accepting an existing invitation. Recommend a fitting choice and
+wait for it; installing a template is only one option.
+
 ## Start every task
 
 1. Call `auth_verify` before any other Busabase tool.
 2. If it returns one space, use that space's id as `targetSpaceId` where supported.
-3. If it returns multiple spaces, show their names and ask the user which one to use. Never guess.
+3. Reuse an accessible space the user named or already confirmed. Otherwise, if it returns multiple
+   spaces, show their names and ask the user which one to use. Never guess.
 4. Keep the selected `targetSpaceId` consistent for the rest of the task.
 5. Call `space_instructions_get` for that space to read its latest global instructions.
 6. Then call `playbooks_search` with the user's intent (see below).
