@@ -22,3 +22,12 @@ References: [authoring](https://kiro.dev/docs/powers/create/),
 [installation and updates](https://kiro.dev/docs/powers/installation/),
 [power OAuth](https://kiro.dev/docs/web/sandbox/mcp/),
 [registry submission](https://kiro.dev/registry/submit/).
+
+## Privacy and support
+
+The hosted MCP service processes the Busabase workspace data that the connected user authorizes.
+See the [Busabase Privacy Policy](https://busabase.com/privacy-policy) for its data practices.
+The plugin does not bundle credentials; the host manages the OAuth connection.
+
+For installation, package or connection problems, [open a support issue](https://github.com/busabase/skills/issues).
+Do not include credentials or private workspace data in a public issue.

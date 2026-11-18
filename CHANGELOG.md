@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add privacy and support links required by the Kiro registry submission checklist.
+
 - Connecting Busabase: the `busabase` and `busabase-ops` skills and the plugin `busabase` skills (Claude Code,
   Codex, WorkBuddy) treat "connect / set up / install Busabase" (including 帮我连接 busabase) as a setup
   request. They read the official guide at https://busabase.com/SETUP_SKILL.md, or the plugin's MCP setup
