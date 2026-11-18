@@ -1,0 +1,36 @@
+{
+  "name": "Busabase Sync - Retry",
+  "description": "Every 30 minutes, retry failed syncs and catch records that were written in bulk",
+  "trigger": {
+    "config": { "trigger_type": "scheduled", "cron_expression": "*/30 * * * *", "timezone": "UTC" }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "busabase_sync_retry",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "retry_failed": {
+          "call": "invoke_backend_function",
+          "with": { "function_name": "sync-to-busabase", "args": { "mode": "retry" } },
+          "then": "reconcile_recent",
+          "x-base44": { "title": "Retry failed syncs" }
+        }
+      },
+      {
+        "reconcile_recent": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sync-to-busabase",
+            "args": { "mode": "reconcile", "since_minutes": 90 }
+          },
+          "then": "end",
+          "x-base44": { "title": "Catch bulk writes", "description": "Last 90 minutes" }
+        }
+      }
+    ]
+  }
+}

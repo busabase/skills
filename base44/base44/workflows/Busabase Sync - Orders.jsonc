@@ -1,0 +1,34 @@
+{
+  "name": "Busabase Sync - Orders",
+  "description": "When an Order is created or updated, push it to Busabase",
+  "trigger": {
+    // entity_name must be your entity's name. If your entity is not called Order, change it here
+    // and in "entity" below (the second one must match `entity` in shared/mappings.ts).
+    "config": { "trigger_type": "entity", "entity_name": "Order", "events": ["create", "update"] }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "busabase_sync_orders",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "push_to_busabase": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sync-to-busabase",
+            "args": {
+              "entity": "Order",
+              "entity_id": "${ .trigger.entity_id }",
+              "event_type": "${ .trigger.event_type }"
+            }
+          },
+          "then": "end",
+          "x-base44": { "title": "Push order to Busabase" }
+        }
+      }
+    ]
+  }
+}

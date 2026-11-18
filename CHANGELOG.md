@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add `base44/`: a Busabase kit for Base44 apps. A 11-operation OpenAPI subset for Base44 custom integrations
+  with an import guide, `sync-to-busabase` and `receive-busabase-webhook` (backend functions, plus TanStack
+  Start server-route adapters and the matching workflows), and a build-time-only MCP guide. Verified by
+  32 unit tests and against a real Busabase 1.5.0; not yet run inside a real Base44 app (see
+  `base44/docs/test-record.md`).
+
 - Add privacy and support links required by the Kiro registry submission checklist.
 
 - Connecting Busabase: the `busabase` and `busabase-ops` skills and the plugin `busabase` skills (Claude Code,

@@ -1,0 +1,24 @@
+{
+  "name": "base44-busabase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Busabase integration kit for Base44: a trimmed OpenAPI spec for Custom integrations, backend functions that sync entities both ways, and a guide for the builder-time MCP connection.",
+  "license": "MIT",
+  "homepage": "https://github.com/busabase/skills/tree/main/base44",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/busabase/skills.git", "directory": "base44"
+  },
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test tests/*.test.ts",
+    "build:spec": "node scripts/build-openapi-subset.ts",
+    "verify:local": "node scripts/verify-local-busabase.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.0"
+  }
+}

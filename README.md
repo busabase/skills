@@ -100,6 +100,7 @@ package does not complete OAuth or submit it to a marketplace.
 | Copilot CLI | [copilot/](copilot/) | Use the included marketplace for durable updates |
 | Perplexity Computer | [perplexity/](perplexity/) | Custom plugin ZIP/GitHub import; paid-plan permissions may apply |
 | MiniMax Code | [minimax/](minimax/) | Full CLI Skill; authenticated MCP requires provider onboarding |
+| Base44 | [base44/](base44/) | Not a marketplace package: a kit you copy into your Base44 project (custom-integration OpenAPI, two-way sync functions and workflows, MCP guide). No Base44 catalog exists; live-app verification is still pending |
 
 Existing integrations also cover [Junie](junie/), [Pi](pi/), [Paseo](paseo/)
 and portions of [Hermes](hermes/). See [OpenHands](openhands/) and
