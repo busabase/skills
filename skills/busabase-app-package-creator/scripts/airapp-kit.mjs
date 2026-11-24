@@ -326,8 +326,11 @@ export function validateBlueprint(blueprint) {
       error(`${prefix}.key must be lowercase kebab-case.`);
     if (!String(integration?.name || "").trim()) error(`${prefix}.name is required.`);
     if (!String(integration?.purpose || "").trim()) error(`${prefix}.purpose is required.`);
-    if (!["agent", "trusted_workflow"].includes(integration?.execution))
-      error(`${prefix}.execution must be agent or trusted_workflow.`);
+    // This declares the approved execution owner; it does not configure or dispatch it.
+    if (!["agent", "trusted_workflow", "site", "remote"].includes(integration?.execution))
+      error(
+        `${prefix}.execution must be agent, trusted_workflow, site, or remote; browser execution cannot consume Secrets.`,
+      );
     const allowedKeys = new Set(["key", "name", "purpose", "execution", "vault_refs"]);
     const unknownKeys = Object.keys(integration).filter((name) => !allowedKeys.has(name));
     if (unknownKeys.length)
@@ -661,6 +664,16 @@ export async function scaffoldProject({
   const blueprint = await readBlueprint(blueprintPath);
   const result = validateBlueprint(blueprint);
   if (result.errors.length) throw new Error(`Blueprint invalid:\n- ${result.errors.join("\n- ")}`);
+  if (
+    runtime === "python" &&
+    asArray(blueprint.workspace.integrations).some(
+      (integration) => integration.execution === "site",
+    )
+  ) {
+    throw new Error(
+      "A site integration requires the Node/Worker runtime; Python AirApps cannot run on the Website engine. Use remote for an approved Python server integration.",
+    );
+  }
   const unmaterialized = [
     ...(!String(blueprint.workspace.folder.node_id || "").trim()
       ? ["workspace.folder.node_id"]

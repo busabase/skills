@@ -385,6 +385,103 @@ test("rejects Vault values and unknown resource references", () => {
   assert.ok(result.errors.some((message) => message.includes("unknown resource missing-resource")));
 });
 
+test("accepts Site and remote integration owners while rejecting browser secret execution", () => {
+  for (const execution of ["site", "remote"]) {
+    const blueprint = validBlueprint();
+    blueprint.workspace.integrations[0].execution = execution;
+    assert.deepEqual(validateBlueprint(blueprint).errors, []);
+  }
+  const blueprint = validBlueprint();
+  blueprint.workspace.integrations[0].execution = "browser";
+  assert.ok(
+    validateBlueprint(blueprint).errors.some((message) =>
+      message.includes("browser execution cannot consume Secrets"),
+    ),
+  );
+});
+
+test("scaffolds Site and remote requirement metadata without embedding credential values or a Vault reader", async () => {
+  for (const [execution, runtime] of [
+    ["site", "node"],
+    ["remote", "node"],
+    ["remote", "python"],
+  ]) {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), "airapp-server-integration-"));
+    const blueprint = validBlueprint();
+    blueprint.workspace.integrations[0].execution = execution;
+    const blueprintPath = path.join(temporary, "blueprint.json");
+    const outputPath = path.join(temporary, "generated");
+    await writeFile(blueprintPath, JSON.stringify(blueprint));
+    await scaffoldProject({
+      blueprintPath,
+      outputPath,
+      runtime,
+      sdkVersion: "0.99.0",
+      skipInstall: true,
+    });
+    const configSource = await readFile(path.join(outputPath, "app/js/config.js"), "utf8");
+    const config = JSON.parse(
+      configSource.replace(/^export const appConfig = /, "").replace(/;\s*$/, ""),
+    );
+    assert.deepEqual(config.schema.integrations, blueprint.workspace.integrations);
+    assert.deepEqual(config.schema.vaultRequirements, blueprint.workspace.vault_requirements);
+    assert.equal("value" in config.schema.vaultRequirements[0], false);
+    assert.equal("secret_value" in config.schema.vaultRequirements[0], false);
+    const provider = await readFile(
+      path.join(outputPath, "app/js/providers/busabase-provider.js"),
+      "utf8",
+    );
+    const host = await readFile(
+      path.join(outputPath, runtime === "python" ? "server.py" : "server.js"),
+      "utf8",
+    );
+    assert.doesNotMatch(provider + host, /vault\/runtime|vault_runtime/);
+    if (execution === "site") {
+      const worker = await readFile(path.join(outputPath, "site-worker.js"), "utf8");
+      assert.doesNotMatch(worker, /vault\/runtime|vault_runtime|PUBLISH_API_KEY/);
+      assert.match(worker, /READ_ONLY_SITE/);
+    }
+    assert.equal((await checkGeneratedProject(outputPath, { requireBundle: false })).ok, true);
+  }
+});
+
+test("rejects Python Site execution before producing an incompatible scaffold", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "airapp-python-site-"));
+  const blueprint = validBlueprint();
+  blueprint.workspace.integrations[0].execution = "site";
+  const blueprintPath = path.join(temporary, "blueprint.json");
+  const outputPath = path.join(temporary, "generated");
+  await writeFile(blueprintPath, JSON.stringify(blueprint));
+  await assert.rejects(
+    scaffoldProject({
+      blueprintPath,
+      outputPath,
+      runtime: "python",
+      sdkVersion: "0.99.0",
+      skipInstall: true,
+    }),
+    /site integration requires the Node\/Worker runtime/,
+  );
+  await assert.rejects(readFile(path.join(outputPath, "app/js/config.js")), { code: "ENOENT" });
+});
+
+test("a server integration declaration never permits a Vault value into generated files", async () => {
+  for (const execution of ["site", "remote"]) {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), "airapp-server-value-"));
+    const blueprint = validBlueprint();
+    blueprint.workspace.integrations[0].execution = execution;
+    blueprint.workspace.vault_requirements[0].value = "must-not-be-stored";
+    const blueprintPath = path.join(temporary, "blueprint.json");
+    const outputPath = path.join(temporary, "generated");
+    await writeFile(blueprintPath, JSON.stringify(blueprint));
+    await assert.rejects(
+      scaffoldProject({ blueprintPath, outputPath, sdkVersion: "0.99.0", skipInstall: true }),
+      /must never contain a Vault value/,
+    );
+    await assert.rejects(readFile(path.join(outputPath, "app/js/config.js")), { code: "ENOENT" });
+  }
+});
+
 test("rejects malformed resource, Drive file, Vault, and integration entries", () => {
   const blueprint = validBlueprint();
   blueprint.workspace.docs.push("not-an-object");

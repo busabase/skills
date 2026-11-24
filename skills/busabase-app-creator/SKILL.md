@@ -90,7 +90,7 @@ copies are generated from this one on every publish, so only their name and desc
   override, not the user onboarding path.
 - In `create`, keep the first version read-only unless the user explicitly requests a small action. In either mode, any requested write goes through a ChangeRequest made by the SDK's record helpers, with `autoMerge` left unset: Busabase merges it for a viewer with write access and queues it for review for one without, and the app says which happened. The AirApp never calls review or merge, and never forces review on its own.
 - In `create`, access only resources created during this run. In `maintain`, use exact existing resource ids and explicitly materialize ids for newly approved resources; never discover or repurpose unrelated resources by a matching name or slug. Model new concerns with native Busabase resources.
-- Declare third-party integrations and Vault requirements in the blueprint without values. Browser AirApps cannot read Vault. Secret-consuming work must run through a trusted Busabase Workflow or explicitly configured Agent path.
+- Declare third-party integrations and Vault requirements in the blueprint without values. Browser AirApps cannot receive Secret plaintext. Secret-consuming work belongs in an approved server runtime: a Site Worker using explicitly configured environment bindings, an authorized remote AirApp startup environment, or a trusted Workflow/Agent integration. Follow `references/runtime-and-sdk.md` § Site secrets and environment bindings; declaring a requirement alone does not configure a binding.
 - Load persistent application configuration and workflow/domain state from Busabase through
   `busabase-sdk`, choosing native nodes by capability: Folder/Node for hierarchy and identity, Base
   and View for structured operational state, Doc for durable narrative configuration, Drive/File for
@@ -308,7 +308,7 @@ Follow the choice-first interaction contract in `references/interview-and-bluepr
   and touch one or two fields, `split` when the view is a queue worked one record at a time;
 - human-attention states;
 - whether any small ChangeRequest-producing action is required;
-- whether an external integration needs a trusted Workflow/Agent and named Vault requirements;
+- which approved server runtime owns an external integration and which named Vault requirements or Site bindings it needs;
 - brand constraints or permission to infer a quiet operational style.
 
 Do not ask the user to design tables. Translate their story into a minimal coherent model, warn when the model is large, and preserve the user's choice if they confirm the larger scope.
