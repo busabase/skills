@@ -10,7 +10,7 @@ below before judging one:
 
 - Hono server with `@hono/node-server`.
 - Vanilla HTML/CSS/JavaScript browser code.
-- No runtime build step, React, Vite, JSX, SWC, native binary, subprocess, browser automation, or server-side secret.
+- No runtime build step, React, Vite, JSX, SWC, native binary, subprocess, browser automation, or secrets in browser code. The default starter does not consume third-party credentials; approved server integrations follow the engine-specific rules below.
 - `busabase-sdk` pinned to the exact latest version resolved during scaffolding (0.99.0 or newer: the
   first with the browser AirApp helpers on `busabase-sdk/airapp`, which the app imports from a
   vendored bundle).
@@ -176,6 +176,61 @@ The app's own Worker source remains checked. A
 `package.json` that only builds the bundle is fine for a site (`requiredEngine: "site"`); it needs no `dev`
 script. Never store `node_modules/`. Uploads are scanned for secrets, so a test that fakes a key must use a
 value that cannot pass for one (`"test-key"`, not a long random string after `apiKey =`).
+
+### Site secrets and environment bindings
+
+A Site's generated `BUSABASE_API_KEY` authorizes workspace data access. It cannot export Space Vault
+values through `GET /api/v1/vault/runtime` at any API key level. Do not raise `site.access`, substitute
+an owner's key, or fall back to personal Vault values to work around that denial.
+
+For an approved integration, declare the required environment names without values. In the Site's
+**Secrets & Variables** settings, its operator can bind selected Space Vault items or enter direct
+Site values. The environment name must match the name the Worker reads. A template's
+`template.secrets` or blueprint `vault_requirements` is requirement metadata only: it neither creates
+values nor binds them to the Site.
+
+Saving configuration does not alter an already running Worker. Preview deployment and Go live
+resolve the current selected values and inject Secrets as Worker environment bindings. Rebuild
+`vendor/worker.js` after changing its source, deploy a new preview, then publish that reviewed code
+when authorized. Configuration changes require deployment too; there is no periodic Vault fetch or
+five-minute refresh. A public on/off switch is not a credential refresh. Removing a Vault source does
+not revoke a value a previous deployment already holds; revoke it at its provider when revocation is
+needed.
+
+Deploying selected **Space Vault** bindings requires a Space owner/admin and a manage-capable
+request credential; direct-only Site configuration keeps ordinary Site write permissions. That is a
+deployment authorization check, separate from the runtime key's data level. It does not make the
+Site key a Vault exporter. New Cloud values are runtime-enabled by default; do not tell users to find
+an obsolete Runtime switch. An existing runtime-disabled source must be repaired before deployment.
+
+Read only the named bindings needed by the server action, preserving credential strings exactly.
+For example, in a Worker whose approved integration declares `MY_APP_SMTP_PASSWORD`:
+
+```js
+const readMailPassword = (env) => {
+  const value = env.MY_APP_SMTP_PASSWORD;
+  return typeof value === "string" && value.length > 0 ? value : null;
+};
+
+// The server-side mail action handles a missing value before calling its client.
+// When needed by the approved product, project only readiness into a response:
+const mailReadiness = (env) => Response.json(
+  { configured: readMailPassword(env) !== null },
+  { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+);
+```
+
+When the approved product needs a readiness endpoint, return only a configured/missing boolean or
+status with `Cache-Control: no-store` and `X-Robots-Tag: noindex`. Never return the value, its length,
+a fingerprint, or an encoded form in HTML, JSON, logs or errors. Do not add a public debug endpoint
+merely to prove access to a credential. Test the compiled Worker with synthetic env bindings and a
+fetch trap, then verify the real preview/live identity: a normal CLI key successfully reading Vault
+does not prove what a Site receives.
+
+Other engines have different boundaries. Browser and public-embed code receive no Secret plaintext.
+A Cloud remote AirApp receives the authorized runtime environment when a new run starts; stop then
+run to apply changed credentials. A local engine does not automatically inherit Cloud Vault values.
+These are server runtime behaviors, not browser provider capabilities.
 
 A shop that lists products and takes orders. `src/worker.js`:
 
@@ -647,8 +702,10 @@ Persistent configuration, workflow state, and domain data live in Busabase and a
 - Doc holds longer durable instructions or narrative configuration; read only the required range.
 - Drive and File hold assets or larger artifacts; list bounded directories and fetch named files on
   demand.
-- Vault holds secrets, but browser AirApps receive only requirement names/readiness. A trusted
-  Workflow or Agent resolves values and exposes only sanitized results.
+- Vault holds secrets, but browser AirApps receive only requirement names/readiness. Approved server
+  runtimes consume values through their supported path: selected Site environment bindings, an
+  authorized remote startup environment, or a trusted Workflow/Agent. Expose only sanitized results;
+  see § Site secrets and environment bindings.
 
 Do not persist product configuration in local JSON, SQLite, `app/.data/`, `localStorage`, or Demo
 records. Local shell variables are connection bootstrap only. Demo data is deterministic preview

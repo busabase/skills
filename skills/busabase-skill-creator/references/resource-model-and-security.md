@@ -102,13 +102,18 @@ A blueprint may declare what trusted execution needs:
 }
 ```
 
+`integrations[].execution` names the approved owner: `agent`, `trusted_workflow`, `site` (a
+Node/Worker Site integration), or `remote` (a remote AirApp server process, Node or Python). These
+are metadata declarations, not a dispatcher, a credential grant, or automatic binding configuration.
+The browser is not a Secret consumer. A Python scaffold cannot declare a Site integration.
+
 Rules:
 
 - Keys use uppercase environment-style names.
 - `kind` is `secret` or `variable`; `scope` is `user`, `space`, or `api_key`.
 - Include purpose and whether it is required. Never include `value`, `secret_value`, examples that look real, or screenshots containing values.
 - Do not invent a public `GET /vault`, `getSecret`, or browser SDK call. The public AirApp session and public embed runtime do not expose Vault values.
-- Direct users to Busabase Vault settings to satisfy missing requirements. Show key names and readiness only when a supported metadata API exists.
+- Direct users to the selected runtime's configuration to satisfy missing requirements. Sites use explicit **Secrets & Variables** bindings or direct Site values; Vault requirement declarations alone do not configure either. Show key names and readiness only when a supported metadata API exists. See `runtime-and-sdk.md` § Site secrets and environment bindings for deployment and permission boundaries.
 - A browser AirApp may request or display the result of trusted work, but cannot receive the credential used to perform it.
 
 Local AirApp OAuth identity tokens are connection credentials, not an ordinary blueprint Vault
@@ -122,7 +127,10 @@ make the browser responsible for token refresh.
 | Runtime | Read resources | Propose writes | Use Vault values |
 | --- | --- | --- | --- |
 | Creator Agent/CLI with selected Busabase connection | Approved workspace metadata and APIs | Yes, through ChangeRequests and explicit approval | Only when an explicitly supported trusted Agent path provides them; never print or persist them |
-| Authenticated AirApp session | Only declared SDK procedures (`/api/v1` on its own origin) and exact resource ids | Only declared ChangeRequest-producing actions | No |
+| Authenticated browser AirApp session | Only declared SDK procedures (`/api/v1` on its own origin) and exact resource ids | Only declared ChangeRequest-producing actions | No |
+| Site Worker (`site` engine) | Fixed backend routes, using its Space-bound key | Only the approved server actions at the key's level | Only explicitly configured environment bindings; the Site key cannot export Space Vault at any level |
+| Cloud remote AirApp server process | The approved app's server capabilities | According to its approved contract | Authorized runtime values captured at new-run startup; no automatic refresh of a live run |
+| Local engine server process | The approved local app's capabilities | According to its approved contract | No automatic Cloud Vault injection; use explicitly configured local server credentials |
 | Public embed | Explicit read-only allowlist | No | No |
 | Trusted Busabase Workflow/server context | Resources granted to the workflow | According to the workflow's reviewed contract | Yes, for declared requirements only |
 
@@ -130,11 +138,11 @@ Treat capability availability as a product constraint. Do not render an action t
 
 ## External Side Effects
 
-Creating a ChangeRequest is not the same as sending email, publishing content, charging money, or writing to a third-party system. For an external side effect:
+Creating a ChangeRequest or configuring a Secret is not the same as sending email, publishing content, charging money, or writing to a third-party system. For an external side effect:
 
 1. Record the proposed work and approval state in a Base.
 2. Let the user review or opt out through a native View or AirApp.
-3. Execute through a declared trusted Workflow or Agent integration.
+3. Execute through the declared trusted Workflow, Agent integration, or approved Site/backend action. Keep credentials in that server runtime.
 4. Store the result, timestamp, external reference, and failure message back through the approved workflow.
 5. Keep retries idempotent and visible.
 

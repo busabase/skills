@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `busabase-app-creator` and its package, skill and app-package entries: consume Site credentials
+  through explicitly selected Worker environment bindings; explain deployment refresh and status-only
+  diagnostics. Site keys cannot export Space Vault at any key level. The blueprint validator accepts
+  approved `site` and `remote` integration metadata, rejects browser secret consumers and incompatible
+  Python Site scaffolds, and continues to reject credential values. Codex plugin 0.3.16.
+
 - Add `base44/`: a Busabase kit for Base44 apps. A 11-operation OpenAPI subset for Base44 custom integrations
   with an import guide, `sync-to-busabase` and `receive-busabase-webhook` (backend functions, plus TanStack
   Start server-route adapters and the matching workflows), and a build-time-only MCP guide. Verified by

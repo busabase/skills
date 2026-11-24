@@ -127,6 +127,13 @@ charge, merge its own proposals). An agent follows what is written here.
 }
 ```
 
+`template.secrets` declares requirement names and descriptions only; installing the template does not
+create values, grant an app Vault export access, or configure Site environment bindings. A Site's
+setup instructions must name the exact Worker env bindings, explain how the operator selects Space
+sources or direct Site values in **Secrets & Variables**, and require preview/publish to apply them.
+The Worker consumes those bindings server-side; browser code receives only readiness or sanitized
+results. See `runtime-and-sdk.md` § Site secrets and environment bindings.
+
 `screenshots` and `video` are always the English/default set. Older servers read
 only those two, and every language without its own entry falls back to them. A
 language that has its own media goes under `locales.<locale>`: its `screenshots`
